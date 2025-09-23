@@ -157,12 +157,6 @@ impl<'a>
 impl AssignmentOverwriteFileService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
-    }
-
     pub fn full_directory_path(module_id: i64, assignment_id: i64, task_number: i64) -> PathBuf {
         Self::storage_root()
             .join(format!("module_{module_id}"))

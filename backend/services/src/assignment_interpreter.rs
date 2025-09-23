@@ -1,13 +1,14 @@
 use crate::service::{AppError, Service, ToActiveModel};
 use chrono::Utc;
 use db::{
-    models::assignment_interpreter::{ActiveModel, Column, Entity, Model},
+    models::assignment_interpreter::{ActiveModel, Column, Entity},
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
+use std::fs;
 use std::path::PathBuf;
-use std::{env, fs};
 use util::filters::FilterParam;
+use util::paths::{interpreter_dir, storage_root};
 
 pub use db::models::assignment_interpreter::Model as AssignmentInterpreter;
 
@@ -79,32 +80,22 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
     > {
         Box::pin(async move {
             // Remove any existing interpreter for this assignment
-            let existing = AssignmentInterpreter::find()
-                .filter(Column::AssignmentId.eq(assignment_id))
-                .all(db)
-                .await?;
+            let existing = Repository::<Entity, Column>::find_all(
+                &vec![FilterParam::eq("assignment_id", params.assignment_id)],
+                &vec![],
+                None,
+            )
+            .await?;
 
             for record in existing {
-                let existing_path = storage_root().join(&record.path);
+                let existing_path = Self::storage_root().join(&record.path);
                 let _ = fs::remove_file(existing_path);
-                record.delete(db).await?;
+                Repository::delete_by_id(&record.id).await?;
             }
 
-            let now = Utc::now();
+            let inserted = Repository::<Entity, Column>::create(&params).await?;
 
-            let partial = ActiveModel {
-                assignment_id: Set(assignment_id),
-                filename: Set(filename.to_string()),
-                path: Set(String::new()),
-                command: Set(command.to_string()),
-                created_at: Set(now),
-                updated_at: Set(now),
-                ..Default::default()
-            };
-
-            let inserted: Model = partial.insert(db).await?;
-
-            let ext = PathBuf::from(filename)
+            let ext = PathBuf::from(params.filename)
                 .extension()
                 .map(|e| e.to_string_lossy().to_string());
 
@@ -113,16 +104,16 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
                 None => inserted.id.to_string(),
             };
 
-            let dir_path = interpreter_dir(module_id, assignment_id);
+            let dir_path = interpreter_dir(params.module_id, params.assignment_id);
             fs::create_dir_all(&dir_path)
                 .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
             let file_path = dir_path.join(&stored_filename);
-            fs::write(&file_path, bytes)
+            fs::write(&file_path, params.bytes)
                 .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {e}")))?;
 
             let relative_path = file_path
-                .strip_prefix(storage_root())
+                .strip_prefix(Self::storage_root())
                 .unwrap()
                 .to_string_lossy()
                 .to_string();
@@ -131,26 +122,13 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            model.update(db).await
+            Repository::<Entity, Column>::update(&model).await
         })
     }
 }
 
 impl AssignmentInterpreterService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
-
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/interpreters"))
-    }
-
-    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{}", module_id))
-            .join(format!("assignment_{}", assignment_id))
-            .join("interpreter")
-    }
 
     pub async fn load_file(id: i64) -> Result<Vec<u8>, std::io::Error> {
         let interpreter = Repository::<Entity, Column>::find_by_id(id)
@@ -162,7 +140,7 @@ impl AssignmentInterpreterService {
                     format!("Interpreter ID {} not found", id),
                 )
             })?;
-        let full_path = Self::storage_root().join(interpreter.path);
+        let full_path = storage_root().join(interpreter.path);
         fs::read(full_path)
     }
 
@@ -176,7 +154,7 @@ impl AssignmentInterpreterService {
                     format!("Interpreter ID {} not found", id),
                 )
             })?;
-        let full_path = Self::storage_root().join(interpreter.path);
+        let full_path = storage_root().join(interpreter.path);
         fs::remove_file(full_path)
     }
 }

@@ -13,8 +13,9 @@ use db::{
 };
 use sea_orm::{DbErr, RuntimeErr, Set};
 use std::path::PathBuf;
-use std::{env, fs};
+use std::fs;
 use util::filters::FilterParam;
+use util::paths::{ensure_dir, storage_root, submission_output_dir};
 
 pub use db::models::assignment_submission_output::Model as AssignmentSubmissionOutput;
 
@@ -165,40 +166,10 @@ impl<'a>
 impl AssignmentSubmissionOutputService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub fn storage_root() -> PathBuf {
-        let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-            .unwrap_or_else(|_| "data/assignment_files".to_string());
-
-        let mut dir = std::env::current_dir().expect("Failed to get current dir");
-
-        while let Some(parent) = dir.parent() {
-            if dir.ends_with("backend") {
-                return dir.join(relative_root);
-            }
-            dir = parent.to_path_buf();
-        }
-
-        PathBuf::from(relative_root)
-    }
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-        user_id: i64,
-        attempt_number: i64,
-    ) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt_number}"))
-            .join("submission_output")
-    }
-
     pub async fn full_path(id: i64) -> Result<PathBuf, DbErr> {
         let output = Repository::<AssignmentSubmissionOutputEntity, AssignmentSubmissionOutputColumn>::find_by_id(id).await?
             .ok_or_else(|| DbErr::RecordNotFound(format!("Submission Output ID {} not found", id)))?;
-        Ok(Self::storage_root().join(output.path))
+        Ok(storage_root().join(output.path))
     }
 
     pub async fn delete_for_submission(id: i64) -> Result<(), DbErr> {
@@ -241,13 +212,12 @@ impl AssignmentSubmissionOutputService {
                 DbErr::RecordNotFound(format!("Submission ID {} not found", submission_id))
             })?;
 
-        let base_dir_path = Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{}", submission.user_id))
-            .join(format!("attempt_{}", submission.attempt))
-            .join("submission_output");
+        let base_dir_path = submission_output_dir(
+            module_id,
+            assignment_id,
+            submission.user_id,
+            submission.attempt,
+        );
 
         if !base_dir_path.exists() {
             return Err(DbErr::Exec(RuntimeErr::Internal(format!(
@@ -257,20 +227,13 @@ impl AssignmentSubmissionOutputService {
         }
 
         let mut results = Vec::new();
-
-        let read_dir = fs::read_dir(&base_dir_path)
-            .map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
-
-        for entry_res in read_dir {
-            let entry = entry_res.map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
-            let file_type = entry
-                .file_type()
-                .map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
-            if file_type.is_file() {
+        for entry in fs::read_dir(&base_dir_path).map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))? {
+            let entry = entry.map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
+            if entry.file_type().is_file() {
                 let file_path = entry.path();
-                if let Some(file_name) = file_path.file_stem().and_then(|n| n.to_str()) {
-                    if let Ok(output_id) = file_name.parse::<i64>() {
-                        let output = Repository::<
+                if let Some(stem) = file_path.file_stem().and_then(|n| n.to_str()) {
+                    if let Ok(output_id) = stem.parse::<i64>() {
+                        if let Some(output) = Repository::<
                             AssignmentSubmissionOutputEntity,
                             AssignmentSubmissionOutputColumn,
                         >::find_by_id(output_id)
@@ -280,11 +243,11 @@ impl AssignmentSubmissionOutputService {
                                 "Submission Output ID {} not found",
                                 output_id
                             ))
-                        })?;
-
-                        let content = fs::read_to_string(&file_path)
-                            .map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
-                        results.push((output.task_id, content));
+                        })
+                        {
+                            let content = fs::read_to_string(&file_path).map_err(|e| DbErr::Exec(RuntimeErr::Internal(e.to_string())))?;
+                            results.push((output.task_id, content));
+                        }
                     }
                 }
             }

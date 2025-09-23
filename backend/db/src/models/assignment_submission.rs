@@ -1,7 +1,7 @@
 use crate::models::user;
 use chrono::{DateTime, Utc};
-use sea_orm::entity::prelude::*;
 use sea_orm::EntityTrait;
+use sea_orm::entity::prelude::*;
 
 /// Represents the status of a submission throughout its lifecycle
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]

@@ -5,9 +5,13 @@ use db::{
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
-use std::{env, fs, path::PathBuf};
+use std::ffi::OsStr;
+use std::{fs, path::PathBuf};
 use util::execution_config::ExecutionConfig;
 use util::filters::FilterParam;
+use util::paths::{
+    config_dir, main_dir, makefile_dir, mark_allocator_dir, memo_dir, spec_dir, storage_root,
+};
 
 pub use db::models::assignment_file::FileType;
 pub use db::models::assignment_file::Model as AssignmentFile;
@@ -98,7 +102,7 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
             )
             .await?
             {
-                let tracked_full = Self::storage_root().join(&existing.path);
+                let tracked_full = storage_root().join(&existing.path);
                 if let Some(parent) = tracked_full.parent() {
                     fs::create_dir_all(parent)
                         .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
@@ -108,9 +112,12 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
 
                 // Mirror to canonical config.json if needed
                 if params.file_type == FileType::Config {
-                    let canonical =
-                        Self::full_directory_path(params.module_id, params.assignment_id, &FileType::Config)
-                            .join("config.json");
+                    let canonical = Self::full_directory_path(
+                        params.module_id,
+                        params.assignment_id,
+                        &FileType::Config,
+                    )
+                    .join("config.json");
                     if canonical != tracked_full {
                         if let Some(parent) = canonical.parent() {
                             fs::create_dir_all(parent).map_err(|e| {
@@ -126,12 +133,16 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
                 let mut am: ActiveModel = existing.into();
                 am.filename = Set(params.filename.to_string());
                 am.updated_at = Set(now);
-                
+
                 Repository::<Entity, Column>::update(am).await
             }
 
             // No existing row: create directory and choose a canonical stored filename
-            let dir_path = Self::full_directory_path(params.module_id, params.assignment_id, &params.file_type);
+            let dir_path = Self::full_directory_path(
+                params.module_id,
+                params.assignment_id,
+                &params.file_type,
+            );
             fs::create_dir_all(&dir_path)
                 .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
@@ -166,7 +177,7 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
                 ..Default::default()
             };
 
-            partial.insert(db).await
+            Repository::<Entity, Column>::insert(partial).await
         })
     }
 }
@@ -193,12 +204,6 @@ impl AssignmentFileService {
         ExecutionConfig::get_execution_config(module_id, assignment_id)
     }
 
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
-    }
-
     pub fn full_directory_path(
         module_id: i64,
         assignment_id: i64,
@@ -215,7 +220,7 @@ impl AssignmentFileService {
     }
 
     pub fn full_path(path: &str) -> PathBuf {
-        Self::storage_root().join(path)
+        storage_root().join(path)
     }
 
     pub async fn load_file(id: i64) -> Result<Vec<u8>, std::io::Error> {
@@ -228,7 +233,7 @@ impl AssignmentFileService {
                     format!("File ID {} not found", id),
                 )
             })?;
-        let full_path = Self::storage_root().join(file.path);
+        let full_path = storage_root().join(file.path);
         fs::read(full_path)
     }
 
@@ -242,20 +247,20 @@ impl AssignmentFileService {
                     format!("File ID {} not found", id),
                 )
             })?;
-        let full_path = Self::storage_root().join(file.path);
+        let full_path = storage_root().join(file.path);
         fs::remove_file(full_path)
     }
 
-    pub async fn get_base_files(
-        db: &DatabaseConnection,
-        assignment_id: i64,
-    ) -> Result<Vec<Self>, DbErr> {
-        use crate::models::assignment_file::Column;
-        Entity::find()
-            .filter(Column::AssignmentId.eq(assignment_id))
-            .filter(Column::FileType.eq(FileType::Spec))
-            .all(db)
-            .await
+    pub async fn get_base_files(assignment_id: i64) -> Result<Vec<Model>, DbErr> {
+        Repository::<Entity, Column>::find_all(
+            &vec![
+                FilterParam::eq("assignment_id", assignment_id),
+                FilterParam::eq("file_type", FileType::Spec.to_string()),
+            ],
+            &vec![],
+            None,
+        )
+        .await
     }
 }
 

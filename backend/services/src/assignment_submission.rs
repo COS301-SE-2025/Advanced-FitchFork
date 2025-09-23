@@ -1,19 +1,22 @@
 use crate::service::{AppError, Service, ToActiveModel};
 use chrono::Utc;
 use db::{
-    models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    models::assignment_submission::{
-        ActiveModel, Column as AssignmentSubmissionColumn, Entity as AssignmentSubmissionEntity,
-        Model,
+    models::{
+        assignment::{self, Column as AssignmentColumn, Entity as AssignmentEntity},
+        assignment_submission::{
+            ActiveModel, Column as AssignmentSubmissionColumn,
+            Entity as AssignmentSubmissionEntity, Model,
+        },
     },
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
 use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
-use std::{env, fs};
-use util::execution_config::{GradingPolicy, ExecutionConfig};
+use util::execution_config::{ExecutionConfig, GradingPolicy};
 use util::filters::FilterParam;
+use util::paths::{ensure_parent_dir, storage_root};
 
 pub use db::models::assignment_submission::Model as AssignmentSubmission;
 pub use db::models::assignment_submission::SubmissionStatus;
@@ -46,13 +49,14 @@ impl ToActiveModel<AssignmentSubmissionEntity> for CreateAssignmentSubmission {
             assignment_id: Set(self.assignment_id),
             user_id: Set(self.user_id),
             attempt: Set(self.attempt),
-            is_practice: Set(self.is_practice),
-            ignored: Set(false),
             earned: Set(self.earned),
             total: Set(self.total),
             filename: Set(self.filename.to_string()),
             file_hash: Set(self.file_hash.to_string()),
             path: Set("".to_string()),
+            is_practice: Set(self.is_practice),
+            ignored: Set(false),
+            status: Set(SubmissionStatus::Queued),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -116,59 +120,42 @@ impl<'a>
         >,
     > {
         Box::pin(async move {
-            if earned > total {
+            if params.earned > params.total {
                 return Err(DbErr::Custom(
                     "Earned score cannot be greater than total score".into(),
                 ));
             }
 
-            let now = Utc::now();
-
-            // Step 1: Insert placeholder model
-            let partial = ActiveModel {
-                assignment_id: Set(assignment_id),
-                user_id: Set(user_id),
-                attempt: Set(attempt),
-                is_practice: Set(is_practice),
-                ignored: Set(false),
-                earned: Set(earned),
-                total: Set(total),
-                filename: Set(filename.to_string()),
-                file_hash: Set(file_hash.to_string()),
-                path: Set(String::new()),
-                status: Set(SubmissionStatus::Queued),
-                created_at: Set(now),
-                updated_at: Set(now),
-                ..Default::default()
-            };
-
-            let inserted: Model = partial.insert(db).await?;
+            let inserted =
+                Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::create(
+                    &params,
+                )
+                .await?;
 
             // Step 2: Lookup module_id
-            let assignment = assignment::Entity::find_by_id(assignment_id)
-                .one(db)
-                .await?
-                .ok_or_else(|| DbErr::Custom("Assignment not found".into()))?;
-            let module_id = assignment.module_id;
+            let assignment =
+                Repository::<AssignmentEntity, AssignmentColumn>::find_by_id(params.assignment_id)
+                    .await?
+                    .ok_or_else(|| DbErr::Custom("Assignment not found".into()))?;
 
             // Step 3: Derive extension from the *uploaded filename* (no content sniffing)
-            let ext = PathBuf::from(filename)
+            let ext = PathBuf::from(params.filename)
                 .extension()
                 .map(|e| e.to_string_lossy().to_string());
 
             // Step 4: Build target path via utilities and write file
             let file_path = util::paths::submission_file_path(
-                module_id,
-                assignment_id,
-                user_id,
-                attempt,
+                assignment.module_id,
+                params.assignment_id,
+                params.user_id,
+                params.attempt,
                 inserted.id,
                 ext.as_deref(),
             );
             ensure_parent_dir(&file_path)
                 .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
-            fs::write(&file_path, bytes)
+            fs::write(&file_path, params.bytes)
                 .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
             // Compute relative path from STORAGE_ROOT and persist
@@ -183,7 +170,8 @@ impl<'a>
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            model.update(db).await
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::update(model)
+                .await
         })
     }
 }
@@ -191,32 +179,12 @@ impl<'a>
 impl AssignmentSubmissionService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub fn storage_root() -> PathBuf {
-        env::var("ASSIGNMENT_STORAGE_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("data/assignment_files"))
-    }
-
-    pub fn full_directory_path(
-        module_id: i64,
-        assignment_id: i64,
-        user_id: i64,
-        attempt: i64,
-    ) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join("assignment_submissions")
-            .join(format!("user_{user_id}"))
-            .join(format!("attempt_{attempt}"))
-    }
-
     pub async fn full_path(id: i64) -> Result<PathBuf, DbErr> {
         let submission =
             Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_by_id(id)
                 .await?
                 .ok_or_else(|| DbErr::RecordNotFound(format!("Submission ID {} not found", id)))?;
-        Ok(Self::storage_root().join(submission.path))
+        Ok(storage_root().join(submission.path))
     }
 
     pub async fn load_file(id: i64) -> Result<Vec<u8>, std::io::Error> {
@@ -294,8 +262,7 @@ impl AssignmentSubmissionService {
                 .ok_or_else(|| {
                     DbErr::RecordNotFound(format!("Assignment ID {} not found", assignment_id))
                 })?;
-        let cfg = assignment
-            .config()
+        let cfg = AssignmentService::config(module_id, assignment_id)
             .unwrap_or_else(ExecutionConfig::default_config);
 
         match cfg.marking.grading_policy {
@@ -311,30 +278,30 @@ impl AssignmentSubmissionService {
     }
 
     /// Set the `ignored` flag for a submission by id and return the updated model.
-    pub async fn set_ignored(
-        db: &DatabaseConnection,
-        submission_id: i64,
-        ignored: bool,
-    ) -> Result<Self, DbErr> {
+    pub async fn set_ignored(submission_id: i64, ignored: bool) -> Result<Model, DbErr> {
         // Load existing
-        let existing = Entity::find_by_id(submission_id)
-            .one(db)
+        let existing =
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_by_id(
+                submission_id,
+            )
             .await?
             .ok_or_else(|| DbErr::Custom(format!("Submission {submission_id} not found")))?;
 
         let mut am: ActiveModel = existing.into();
         am.ignored = Set(ignored);
         am.updated_at = Set(Utc::now());
-        am.update(db).await
+        Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::update(am).await
     }
 
     pub async fn get_selected_submissions_for_assignment(
-        db: &DatabaseConnection,
-        assignment: &AssignmentModel,
-    ) -> Result<Vec<Self>, DbErr> {
-        let all_for_assignment = Entity::find()
-            .filter(Column::AssignmentId.eq(assignment.id))
-            .all(db)
+        assignment_id: i64,
+    ) -> Result<Vec<Model>, DbErr> {
+        let all_for_assignment =
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_all(
+                &vec![FilterParam::eq("assignment_id", assignment_id)],
+                &vec![],
+                None,
+            )
             .await?;
 
         let mut user_ids = HashSet::<i64>::new();
@@ -344,7 +311,7 @@ impl AssignmentSubmissionService {
 
         let mut chosen = Vec::with_capacity(user_ids.len());
         for uid in user_ids {
-            if let Ok(Some(s)) = Model::get_best_for_user(db, assignment, uid).await {
+            if let Ok(Some(s)) = Self::get_best_for_user(assignment_id, uid).await {
                 chosen.push(s);
             }
         }
@@ -353,13 +320,14 @@ impl AssignmentSubmissionService {
 
     /// Update the status of a submission and persist to database
     pub async fn update_status(
-        db: &DatabaseConnection,
         submission_id: i64,
         new_status: SubmissionStatus,
-    ) -> Result<Self, DbErr> {
+    ) -> Result<Model, DbErr> {
         // Load existing submission
-        let existing = Entity::find_by_id(submission_id)
-            .one(db)
+        let existing =
+            Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::find_by_id(
+                submission_id,
+            )
             .await?
             .ok_or_else(|| DbErr::Custom(format!("Submission {submission_id} not found")))?;
 
@@ -367,30 +335,30 @@ impl AssignmentSubmissionService {
         active_model.status = Set(new_status);
         active_model.updated_at = Set(Utc::now());
 
-        active_model.update(db).await
+        Repository::<AssignmentSubmissionEntity, AssignmentSubmissionColumn>::update(active_model)
+            .await
     }
 
     /// Set the status to running
-    pub async fn set_running(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
-        Self::update_status(db, submission_id, SubmissionStatus::Running).await
+    pub async fn set_running(submission_id: i64) -> Result<Model, DbErr> {
+        Self::update_status(submission_id, SubmissionStatus::Running).await
     }
 
     /// Set the status to grading
-    pub async fn set_grading(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
-        Self::update_status(db, submission_id, SubmissionStatus::Grading).await
+    pub async fn set_grading(submission_id: i64) -> Result<Model, DbErr> {
+        Self::update_status(submission_id, SubmissionStatus::Grading).await
     }
 
     /// Set the status to graded (successful completion)
-    pub async fn set_graded(db: &DatabaseConnection, submission_id: i64) -> Result<Self, DbErr> {
-        Self::update_status(db, submission_id, SubmissionStatus::Graded).await
+    pub async fn set_graded(submission_id: i64) -> Result<Model, DbErr> {
+        Self::update_status(submission_id, SubmissionStatus::Graded).await
     }
 
     /// Set the status to failed with the appropriate failure type
     pub async fn set_failed(
-        db: &DatabaseConnection,
         submission_id: i64,
         failure_type: SubmissionStatus,
-    ) -> Result<Self, DbErr> {
+    ) -> Result<Model, DbErr> {
         // Validate that the provided status is a failure status
         match failure_type {
             SubmissionStatus::FailedUpload
@@ -399,7 +367,7 @@ impl AssignmentSubmissionService {
             | SubmissionStatus::FailedGrading
             | SubmissionStatus::FailedInternal
             | SubmissionStatus::FailedDisallowedCode => {
-                Self::update_status(db, submission_id, failure_type).await
+                Self::update_status(submission_id, failure_type).await
             }
             _ => Err(DbErr::Custom(format!(
                 "Invalid failure type: {:?}. Use a failed_* status.",

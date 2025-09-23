@@ -113,18 +113,4 @@ impl Model {
 
         model.update(db).await
     }
-
-    /// Reads the contents of a memo output file from disk,
-    /// given the module_id, assignment_id, and the file id (filename base).
-    ///
-    /// NOTE: Preserves the original behavior of joining only `{file_id}` without a forced extension.
-    pub fn read_memo_output_file(
-        module_id: i64,
-        assignment_id: i64,
-        file_id: i64,
-    ) -> Result<Vec<u8>, std::io::Error> {
-        let dir_path = memo_output_dir(module_id, assignment_id);
-        let file_path = dir_path.join(file_id.to_string());
-        std::fs::read(file_path)
-    }
 }

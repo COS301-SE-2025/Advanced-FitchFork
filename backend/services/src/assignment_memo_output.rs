@@ -9,8 +9,8 @@ use db::{
     repository::Repository,
 };
 use sea_orm::{DbErr, Set};
+use std::fs;
 use std::path::PathBuf;
-use std::{env, fs};
 
 pub use db::models::assignment_memo_output::Model as AssignmentMemoOutput;
 
@@ -148,44 +148,13 @@ impl<'a>
 impl AssignmentMemoOutputService {
     // ↓↓↓ CUSTOM METHODS CAN BE DEFINED HERE ↓↓↓
 
-    pub fn storage_root() -> PathBuf {
-        let relative_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-            .unwrap_or_else(|_| "data/assignment_files".to_string());
-
-        let project_root = env::current_dir().expect("Failed to get current dir");
-
-        project_root.join(relative_root)
-    }
-
-    pub fn full_directory_path(module_id: i64, assignment_id: i64) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join(format!("memo_output"))
-    }
-
-    pub async fn full_path(id: i64) -> Result<PathBuf, DbErr> {
-        let memo_output =
-            Repository::<AssignmentMemoOutputEntity, AssignmentMemoOutputColumn>::find_by_id(id)
-                .await?
-                .ok_or_else(|| DbErr::RecordNotFound(format!("Memo Output ID {} not found", id)))?;
-        Ok(Self::storage_root().join(&memo_output.path))
-    }
-
     // pub fn read_memo_output_file(
     //     module_id: i64,
     //     assignment_id: i64,
     //     file_id: i64,
     // ) -> Result<Vec<u8>, std::io::Error> {
-    //     let storage_root = Self::storage_root();
-
-    //     let dir_path = storage_root
-    //         .join(format!("module_{module_id}"))
-    //         .join(format!("assignment_{assignment_id}"))
-    //         .join("memo_output");
-
+    //     let dir_path = memo_output_dir(module_id, assignment_id);
     //     let file_path = dir_path.join(file_id.to_string());
-
     //     std::fs::read(file_path)
     // }
 }
