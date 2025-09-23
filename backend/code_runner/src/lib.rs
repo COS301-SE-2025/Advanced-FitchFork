@@ -22,6 +22,11 @@ use util::config;
 use util::execution_config::ExecutionConfig;
 pub mod validate_files;
 
+/// Returns true if the provided filename is a Makefile artifact (plain or archived).
+fn is_makefile_artifact(name: &str) -> bool {
+    return name.to_ascii_lowercase().contains("makefile");
+}
+
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
 /// Returns an error if the directory does not exist or if no supported archive file is found.
 fn first_archive_in<P: AsRef<Path>>(dir: P) -> Result<PathBuf, String> {
@@ -93,6 +98,14 @@ pub async fn create_memo_outputs_for_all_tasks(
         first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
+    // Determine the base Makefile archive name so we can avoid overriding it
+    let base_makefile_archive_name: String = archive_paths
+        .get(1)
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
     let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
         .await
         .map_err(|e| format!("DB error loading tasks: {}", e))?;
@@ -151,6 +164,7 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
         let db_cloned = db.clone();
         let sem = semaphore.clone();
+        let base_makefile_archive_name_cloned = base_makefile_archive_name.clone();
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Apply overwrites for this task
@@ -167,8 +181,15 @@ pub async fn create_memo_outputs_for_all_tasks(
                                     .and_then(|s| s.to_str())
                                     .map(|s| s.to_string())
                                 {
-                                    files.retain(|(name, _)| name != &file_name);
-                                    files.push((file_name, content));
+                                    // Allow overriding only if it's the base makefile archive; block other Makefile artifacts
+                                    let is_make_art = is_makefile_artifact(&file_name);
+                                    let is_base_archive = file_name == base_makefile_archive_name_cloned;
+                                    if is_make_art && !is_base_archive {
+                                        // ignore attempting to override Makefile outside the base archive
+                                    } else {
+                                        files.retain(|(name, _)| name != &file_name);
+                                        files.push((file_name, content));
+                                    }
                                 }
                             }
                         }
@@ -348,6 +369,14 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
         first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
+    // Determine the base Makefile archive name so we can avoid overriding it
+    let base_makefile_archive_name: String = archive_paths
+        .get(1)
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
     let mut files = Vec::new();
     for path in &archive_paths {
         let content = read(path)
@@ -412,6 +441,7 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
         let submission_path_cloned = submission_path.clone();
+        let base_makefile_archive_name_cloned = base_makefile_archive_name.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -431,8 +461,15 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
                                     .and_then(|s| s.to_str())
                                     .map(|s| s.to_string())
                                 {
-                                    task_files.retain(|(name, _)| name != &file_name);
-                                    task_files.push((file_name, content));
+                                    // Allow overriding only if it's the base makefile archive; block other Makefile artifacts
+                                    let is_make_art = is_makefile_artifact(&file_name);
+                                    let is_base_archive = file_name == base_makefile_archive_name_cloned;
+                                    if is_make_art && !is_base_archive {
+                                        // ignore attempting to override Makefile outside the base archive
+                                    } else {
+                                        task_files.retain(|(name, _)| name != &file_name);
+                                        task_files.push((file_name, content));
+                                    }
                                 }
                             }
                         }
@@ -637,6 +674,14 @@ pub async fn create_submission_outputs_for_all_tasks(
         first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
+    // Determine the base Makefile archive name so we can avoid overriding it
+    let base_makefile_archive_name: String = archive_paths
+        .get(1)
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
     let mut files = Vec::new();
     for path in &archive_paths {
         let content = read(path)
@@ -700,6 +745,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
         let submission_path_cloned = submission_path.clone();
+        let base_makefile_archive_name_cloned = base_makefile_archive_name.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -719,8 +765,15 @@ pub async fn create_submission_outputs_for_all_tasks(
                                     .and_then(|s| s.to_str())
                                     .map(|s| s.to_string())
                                 {
-                                    task_files.retain(|(name, _)| name != &file_name);
-                                    task_files.push((file_name, content));
+                                    // Allow overriding only if it's the base makefile archive; block other Makefile artifacts
+                                    let is_make_art = is_makefile_artifact(&file_name);
+                                    let is_base_archive = file_name == base_makefile_archive_name_cloned;
+                                    if is_make_art && !is_base_archive {
+                                        // ignore attempting to override Makefile outside the base archive
+                                    } else {
+                                        task_files.retain(|(name, _)| name != &file_name);
+                                        task_files.push((file_name, content));
+                                    }
                                 }
                             }
                         }
