@@ -60,7 +60,7 @@ mod tests {
                 "pass_mark": pass_mark
             },
             "project": {"language": "cpp", "submission_mode": "manual"},
-            "output": {"stdout": true, "stderr": false, "retcode": false},
+            "output": {"stdout": true, "stderr": false},
             "gatlam": {}
         });
 
@@ -333,18 +333,39 @@ mod tests {
         // assignment_tasks (task_number → name). IDs are auto; we capture them.
         let mut t_ids_by_num = HashMap::new();
 
-        let t1 =
-            AssignmentTaskModel::create(db, assignment_last.id, 1, "FizzBuzz", "run fizz", false)
-                .await
-                .unwrap();
-        let t2 =
-            AssignmentTaskModel::create(db, assignment_last.id, 2, "Palindrome", "run pal", false)
-                .await
-                .unwrap();
-        let t3 =
-            AssignmentTaskModel::create(db, assignment_last.id, 3, "Sorting", "run sort", false)
-                .await
-                .unwrap();
+        let t1 = AssignmentTaskModel::create(
+            db,
+            assignment_last.id,
+            1,
+            "FizzBuzz",
+            "run fizz",
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+        let t2 = AssignmentTaskModel::create(
+            db,
+            assignment_last.id,
+            2,
+            "Palindrome",
+            "run pal",
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+        let t3 = AssignmentTaskModel::create(
+            db,
+            assignment_last.id,
+            3,
+            "Sorting",
+            "run sort",
+            false,
+            false,
+        )
+        .await
+        .unwrap();
         t_ids_by_num.insert(1, t1.id);
         t_ids_by_num.insert(2, t2.id);
         t_ids_by_num.insert(3, t3.id);

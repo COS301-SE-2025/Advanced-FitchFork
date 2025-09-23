@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { Typography, Card, Alert, Space, Collapse, Table, Descriptions, Tag } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -13,7 +14,7 @@ const toc = [
   { key: 'create', href: '#create', title: 'Create a Task' },
   { key: 'edit', href: '#edit', title: 'Manage Tasks' },
   { key: 'labels', href: '#labels', title: 'Subsections (labels)' },
-  { key: 'overwrite', href: '#overwrite', title: 'Overwrite files (per‑task)' },
+  { key: 'overwrite', href: '#overwrite', title: 'Overwrite files (per-task)' },
   { key: 'coverage', href: '#coverage', title: 'Code Coverage flag' },
   { key: 'tips', href: '#tips', title: 'Tips' },
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
@@ -59,6 +60,16 @@ const fieldRows = [
 export default function TasksHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Tasks
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/tasks', 'Tasks');
@@ -72,7 +83,10 @@ export default function TasksHelp() {
         <ul className="list-disc pl-5">
           <li>Tasks are the runnable units that produce memo and student output for comparison.</li>
           <li>Set them up after uploading Makefile/Main (or Interpreter) and Memo files.</li>
-          <li>Commands must print labeled sections using your delimiter (default <Text code>&-=-&</Text>).</li>
+          <li>
+            Commands must print labeled sections using your delimiter (default{' '}
+            <Text code>&-=-&</Text>).
+          </li>
           <li>Each task stores its own memo output text file and optional overwrite archive.</li>
         </ul>
       </Card>
@@ -89,41 +103,76 @@ export default function TasksHelp() {
       <section id="overview" className="scroll-mt-24" />
       <Title level={3}>Why Tasks Matter</Title>
       <Paragraph className="mb-0">
-        Tasks are the execution units that produce both Memo Output and student output. Each task shells out to your
-        configured command (often a Make target) and logs labeled sections that your Mark Allocator scores. Keeping tasks
-        tidy ensures memo generation, student grading, and plagiarism overlays all line up.
+        Tasks are the execution units that produce both Memo Output and student output. Each task
+        shells out to your configured command (often a Make target) and logs labeled sections that
+        your Mark Allocator scores. Keeping tasks tidy ensures memo generation, student grading, and
+        plagiarism overlays all line up.
       </Paragraph>
 
       <section id="lifecycle" className="scroll-mt-24" />
       <Title level={3}>How Fitchfork Runs Tasks</Title>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="Navigation">
-          Open the assignment and select <b>Tasks</b>. Choose a task to view its command, subsections, memo output, and
-          any overwrite files.
+          Open the assignment and select <b>Tasks</b>. Choose a task to view its command,
+          subsections, memo output, and any overwrite files.
         </Descriptions.Item>
         <Descriptions.Item label="Pipeline">
           <ul className="list-disc pl-5">
-            <li>During memo generation, each task command runs with Main + Memo (plus any per-task overwrite files) to
-              produce reference output.</li>
-            <li>For student attempts, the same command runs in a fresh workspace with Main + student submission + optional
-              overwrite files.</li>
-            <li>Outputs per task are diffed against memo output; subsections map to the labels you print in Main.</li>
+            <li>
+              During memo generation, each task command runs with Main + Memo (plus any per-task
+              overwrite files) to produce reference output.
+            </li>
+            <li>
+              For student attempts, the same command runs in a fresh workspace with Main + student
+              submission + optional overwrite files.
+            </li>
+            <li>
+              Outputs per task are diffed against memo output; subsections map to the labels you
+              print in Main.
+            </li>
           </ul>
         </Descriptions.Item>
         <Descriptions.Item label="Prerequisites">
-          Upload Makefile/Main (or Interpreter) and Memo files first so task commands have everything they need.
+          Upload Makefile/Main (or Interpreter) and Memo files first so task commands have
+          everything they need.
         </Descriptions.Item>
       </Descriptions>
 
       <section id="fields" className="scroll-mt-24" />
-      <Title level={3}>Fields & defaults</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={fieldCols}
-        dataSource={fieldRows}
-        pagination={false}
-      />
+      <Title level={3}>Fields &amp; defaults</Title>
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={fieldCols}
+          dataSource={fieldRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* Mobile card alternative */}
+      <div className="block md:hidden !space-y-3">
+        {fieldRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="text-base font-semibold truncate">{r.setting}</div>}
+          >
+            <div className="text-sm text-gray-900 dark:text-gray-100">{r.meaning}</div>
+            {r.notes && (
+              <div className="mt-2">
+                <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mr-2">
+                  Notes
+                </span>
+                <span className="text-sm text-gray-900 dark:text-gray-100">{r.notes}</span>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+
       <Alert
         className="mt-2"
         type="info"
@@ -179,8 +228,8 @@ export default function TasksHelp() {
         </li>
       </ul>
 
-  <section id="labels" className="scroll-mt-24" />
-  <Title level={3}>Subsections (labels)</Title>
+      <section id="labels" className="scroll-mt-24" />
+      <Title level={3}>Subsections (labels)</Title>
       <Paragraph className="mb-0">
         Inside a task, create subsections that mirror the labels your program prints. In your{' '}
         <b>Main</b> (or <b>Interpreter</b> for GATLAM), print the delimiter <Text code>&-=-&</Text>{' '}
@@ -188,28 +237,38 @@ export default function TasksHelp() {
         These labeled blocks are what get compared to the task’s Memo Output. See{' '}
         <a href="/help/assignments/memo-output">Memo Output</a> for examples and{' '}
         <a href="/help/assignments/mark-allocator">Mark Allocation</a> to assign marks per label.
-  </Paragraph>
+      </Paragraph>
 
       <section id="overwrite" className="scroll-mt-24" />
-      <Title level={3}>Overwrite files (per‑task)</Title>
+      <Title level={3}>Overwrite files (per-task)</Title>
       <Paragraph className="mb-0">
-        Each task can host an “overlay” archive. When the task command runs, Fitchfork extracts the archive into the
-        workspace after the student’s submission and before the command executes. Matching paths overwrite the student’s
-        files; new paths are added for that task only.
+        Each task can host an “overlay” archive. When the task command runs, Fitchfork extracts the
+        archive into the workspace after the student’s submission and before the command executes.
+        Matching paths overwrite the student’s files; new paths are added for that task only.
       </Paragraph>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="Why use it?">
           <ul className="list-disc pl-5">
-            <li>Add fixed inputs, datasets, or golden answers that shouldn’t live in student repos.</li>
+            <li>
+              Add fixed inputs, datasets, or golden answers that shouldn’t live in student repos.
+            </li>
             <li>Ship small configuration files or scripts to standardize execution per task.</li>
             <li>Patch known issues or provide shim binaries the grader requires.</li>
           </ul>
         </Descriptions.Item>
         <Descriptions.Item label="How it works">
           <ul className="list-disc pl-5">
-            <li>Upload a <Text code>.zip</Text> under the desired task. Fitchfork stores it in <Text code>overwrite_files/task_X/</Text>.</li>
-            <li>When memo generation or student runs execute the task, the archive is merged after extracting Main/Memo or Main/student files.</li>
-            <li>Later uploads replace earlier ones; you can download or delete the current overlay.</li>
+            <li>
+              Upload a <Text code>.zip</Text> under the desired task. Fitchfork stores it in{' '}
+              <Text code>overwrite_files/task_X/</Text>.
+            </li>
+            <li>
+              When memo generation or student runs execute the task, the archive is merged after
+              extracting Main/Memo or Main/student files.
+            </li>
+            <li>
+              Later uploads replace earlier ones; you can download or delete the current overlay.
+            </li>
             <li>Overlays are scoped per task and never leak into other tasks.</li>
           </ul>
         </Descriptions.Item>

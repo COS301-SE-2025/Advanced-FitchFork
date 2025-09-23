@@ -2,7 +2,7 @@ use axum::{Router, middleware::from_fn};
 use util::state::AppState;
 
 use crate::{
-    auth::guards::require_authenticated,
+    auth::guards::allow_authenticated,
     ws::{
         attendance::ws_attendance_routes, modules::ws_module_routes, system::ws_system_routes,
         tickets::ws_ticket_routes,
@@ -20,6 +20,6 @@ pub fn ws_routes(app_state: AppState) -> Router<AppState> {
         .nest("/tickets", ws_ticket_routes(app_state.clone()))
         .nest("/attendance", ws_attendance_routes(app_state.clone()))
         .nest("/system", ws_system_routes(app_state.clone()))
-        .route_layer(from_fn(require_authenticated))
+        .route_layer(from_fn(allow_authenticated))
         .with_state(app_state)
 }

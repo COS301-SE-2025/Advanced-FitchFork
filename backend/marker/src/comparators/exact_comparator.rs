@@ -4,7 +4,8 @@
 //! specific pattern appears in the student's output at the same position as in the memo (solution) output. **Lines are compared in order; only lines at the same position are considered a match.**
 
 use crate::traits::comparator::OutputComparator;
-use crate::types::{Subsection, TaskResult};
+use crate::types::TaskResult;
+use util::mark_allocator::Subsection;
 
 /// A comparator that awards full marks if the student's output matches the memo output exactly, line by line and in order.
 ///
@@ -35,19 +36,26 @@ impl OutputComparator for ExactComparator {
     ) -> TaskResult {
         let mut matched_patterns = Vec::new();
         let mut missed_patterns = Vec::new();
+
+        // Different lengths => immediate fail. Record memo lines that are missing.
         if memo_lines.len() != student_lines.len() {
             for i in student_lines.len()..memo_lines.len() {
                 missed_patterns.push(memo_lines[i].clone());
             }
-
             return TaskResult {
                 name: section.name.clone(),
                 awarded: 0,
                 possible: section.value,
                 matched_patterns,
                 missed_patterns,
+                student_output: student_lines.to_vec(),
+                memo_output: memo_lines.to_vec(),
+                stderr: None,
+                return_code: None,
+                manual_feedback: section.feedback.clone(),
             };
         }
+
         let mut all_match = true;
         for (i, memo_line) in memo_lines.iter().enumerate() {
             if student_lines[i] == *memo_line {
@@ -57,13 +65,20 @@ impl OutputComparator for ExactComparator {
                 all_match = false;
             }
         }
+
         let awarded = if all_match { section.value } else { 0 };
+
         TaskResult {
             name: section.name.clone(),
             awarded,
             possible: section.value,
             matched_patterns,
             missed_patterns,
+            student_output: student_lines.to_vec(),
+            memo_output: memo_lines.to_vec(),
+            stderr: None,
+            return_code: None,
+            manual_feedback: section.feedback.clone(),
         }
     }
 }
@@ -71,9 +86,9 @@ impl OutputComparator for ExactComparator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Subsection;
+    use util::mark_allocator::Subsection;
 
-    /// Helper function to create a vector of strings from a slice of string literals.
+    /// Helper: make Vec<String> from &str slice.
     fn to_string_vec(lines: &[&str]) -> Vec<String> {
         lines.iter().map(|s| s.to_string()).collect()
     }
@@ -82,6 +97,8 @@ mod tests {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
+            regex: None,
+            feedback: None,
         }
     }
 
@@ -157,7 +174,6 @@ mod tests {
         let memo_lines = to_string_vec(&["a", "b"]);
         let student_lines = to_string_vec(&["a", "b", "extra"]);
         let section = mock_subsection(10);
-        // Extra line should result in 0 marks.
         let result = comparator.compare(&section, &memo_lines, &student_lines);
         assert_eq!(result.awarded, 0);
     }

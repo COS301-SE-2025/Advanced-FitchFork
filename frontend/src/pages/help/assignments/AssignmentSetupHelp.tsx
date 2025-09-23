@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { Typography, Card, Alert, Space, Collapse, Table, Descriptions, Tag, Steps } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -16,7 +17,7 @@ const toc = [
   { key: 'weights', href: '#weights', title: 'Set Mark Allocation' },
   { key: 'ready', href: '#ready', title: 'Ready → Open → Closed' },
   { key: 'tips', href: '#tips', title: 'Tips' },
-  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' }, // keep last
+  { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
 ];
 
 type Row = { key: string; item: string; purpose: string; required: string; where: string };
@@ -78,9 +79,61 @@ const filesRows: Row[] = [
   },
 ];
 
+type ReadinessRow = { key: string; item: string; why: string; how: string };
+
+const readinessCols = [
+  { title: 'Item', dataIndex: 'item', key: 'item', width: 220 },
+  { title: 'Why it matters', dataIndex: 'why', key: 'why' },
+  { title: 'How to satisfy', dataIndex: 'how', key: 'how', width: 360 },
+];
+
+const readinessRows: ReadinessRow[] = [
+  {
+    key: 'cfg',
+    item: 'Config (config.json)',
+    why: 'Defines language, submission mode, marking, execution limits, output, and security.',
+    how: 'Assignments → Config. A default exists; review and save to confirm settings.',
+  },
+  {
+    key: 'files',
+    item: 'Files',
+    why: 'Grader needs a Makefile plus either Main (manual) or Interpreter (GATLAM), and your memo archive.',
+    how: 'Assignments → Files. Upload Makefile (+ Main) or Interpreter, and Memo files. Optional: flat Specification.',
+  },
+  {
+    key: 'tasks',
+    item: 'Tasks',
+    why: 'Each task corresponds to one execution/marking unit and stores outputs.',
+    how: 'Assignments → Tasks. Add tasks, then add subsections that match printed labels.',
+  },
+  {
+    key: 'memo',
+    item: 'Memo Output',
+    why: 'Ground truth used to mark student outputs per task/subsection.',
+    how: 'Use “Generate Memo Output” on the assignment page after uploading files.',
+  },
+  {
+    key: 'alloc',
+    item: 'Mark Allocator',
+    why: 'Defines points per subsection; needed to compute totals.',
+    how: 'Assignments → Tasks → pick task → pick subsection → set Marks. Or generate allocator from memo.',
+  },
+];
+
 export default function AssignmentSetupHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Assignment Setup Guide
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
+
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/setup', 'Full Setup Guide');
   }, []);
@@ -91,10 +144,22 @@ export default function AssignmentSetupHelp() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>Status flow: <b>Setup → Ready → Open → Closed</b>. The Setup panel tells you what’s missing.</li>
-          <li>Ready means you’ve saved Config, uploaded required files, created Tasks/Subsections, generated Memo Output, and set Mark Allocation.</li>
-          <li>Manual submissions need a <b>Main</b>; <Tag color="purple">gatlam</Tag> needs an <b>Interpreter</b> instead.</li>
-          <li>Specification ZIPs must be flat (no nested folders); memo generation and MOSS rely on that layout.</li>
+          <li>
+            Status flow: <b>Setup → Ready → Open → Closed</b>. The Setup panel tells you what’s
+            missing.
+          </li>
+          <li>
+            Ready means you’ve saved Config, uploaded required files, created Tasks/Subsections,
+            generated Memo Output, and set Mark Allocation.
+          </li>
+          <li>
+            Manual submissions need a <b>Main</b>; <Tag color="purple">gatlam</Tag> needs an{' '}
+            <b>Interpreter</b> instead.
+          </li>
+          <li>
+            Specification ZIPs must be flat (no nested folders); memo generation and MOSS rely on
+            that layout.
+          </li>
         </ul>
       </Card>
     ),
@@ -110,9 +175,11 @@ export default function AssignmentSetupHelp() {
       <section id="overview" className="scroll-mt-24" />
       <Title level={3}>What “setup” means</Title>
       <Paragraph className="mb-0">
-        “Setup” is the stage where you assemble everything the grader needs: configuration, build/run files, memo
-        references, tasks, and marks. When each piece is present and memo output has been generated, the status flips to
-        <b>Ready</b>; from there the assignment can open and close on schedule without further intervention.
+        “Setup” is the stage where you assemble everything the grader needs: configuration,
+        build/run files, memo references, tasks, and marks. When each piece is present and memo
+        output has been generated, the status flips to
+        <b>Ready</b>; from there the assignment can open and close on schedule without further
+        intervention.
       </Paragraph>
 
       <section id="workflow" className="scroll-mt-24" />
@@ -156,52 +223,42 @@ export default function AssignmentSetupHelp() {
       <section id="readiness" className="scroll-mt-24" />
       <Title level={3}>Readiness Checklist</Title>
       <Paragraph className="mb-2">
-        The “Setup incomplete” panel in the assignment layout checks these exact items. Use the list below as a quick map
-        to the problem: if the panel highlights something in red, fix the matching row here and re-run Memo Output if
-        necessary.
+        The “Setup incomplete” panel in the assignment layout checks these exact items. Use the list
+        below as a quick map to the problem: if the panel highlights something in red, fix the
+        matching row here and re-run Memo Output if necessary.
       </Paragraph>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={[
-          { title: 'Item', dataIndex: 'item', key: 'item', width: 220 },
-          { title: 'Why it matters', dataIndex: 'why', key: 'why' },
-          { title: 'How to satisfy', dataIndex: 'how', key: 'how', width: 360 },
-        ]}
-        dataSource={[
-          {
-            key: 'cfg',
-            item: 'Config (config.json)',
-            why: 'Defines language, submission mode, marking, execution limits, output, and security.',
-            how: 'Assignments → Config. A default exists; review and save to confirm settings.',
-          },
-          {
-            key: 'files',
-            item: 'Files',
-            why: 'Grader needs a Makefile plus either Main (manual) or Interpreter (GATLAM), and your memo archive.',
-            how: 'Assignments → Files. Upload Makefile (+ Main) or Interpreter, and Memo files. Optional: flat Specification.',
-          },
-          {
-            key: 'tasks',
-            item: 'Tasks',
-            why: 'Each task corresponds to one execution/marking unit and stores outputs.',
-            how: 'Assignments → Tasks. Add tasks, then add subsections that match printed labels.',
-          },
-          {
-            key: 'memo',
-            item: 'Memo Output',
-            why: 'Ground truth used to mark student outputs per task/subsection.',
-            how: 'Use “Generate Memo Output” on the assignment page after uploading files.',
-          },
-          {
-            key: 'alloc',
-            item: 'Mark Allocator',
-            why: 'Defines points per subsection; needed to compute totals.',
-            how: 'Assignments → Tasks → pick task → pick subsection → set Marks. Or generate allocator from memo.',
-          },
-        ]}
-        pagination={false}
-      />
+      {/* md+ : normal table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={readinessCols}
+          dataSource={readinessRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* <md : cards (no extra shadows) */}
+      <div className="block md:hidden !space-y-3">
+        {readinessRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="text-base font-semibold truncate">{r.item}</div>}
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Why it matters
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.why}</div>
+
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              How to satisfy
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100">{r.how}</div>
+          </Card>
+        ))}
+      </div>
+
       <Alert
         className="mt-2"
         type="info"
@@ -210,10 +267,12 @@ export default function AssignmentSetupHelp() {
         description={
           <>
             <div className="mb-1">
-              <Tag>manual</Tag>: requires <b>Main</b>. <Tag>gatlam</Tag>: requires <b>Interpreter</b> (no Main required).
+              <Tag>manual</Tag>: requires <b>Main</b>. <Tag>gatlam</Tag>: requires{' '}
+              <b>Interpreter</b> (no Main required).
             </div>
             <div>
-              Other modes like <Tag>rng</Tag> or <Tag>codecoverage</Tag> don’t require Main/Interpreter.
+              Other modes like <Tag>rng</Tag> or <Tag>codecoverage</Tag> don’t require
+              Main/Interpreter.
             </div>
           </>
         }
@@ -222,16 +281,47 @@ export default function AssignmentSetupHelp() {
       <section id="files" className="scroll-mt-24" />
       <Title level={3}>Files you need</Title>
       <Paragraph className="mb-2">
-        Upload these under <b>Assignments → Files</b>. Manual mode needs Makefile + Main + Memo; GATLAM replaces Main with an
-        Interpreter. The Specification archive is optional but strongly recommended as the starter pack and plagiarism base files.
+        Upload these under <b>Assignments → Files</b>. Manual mode needs Makefile + Main + Memo;
+        GATLAM replaces Main with an Interpreter. The Specification archive is optional but strongly
+        recommended as the starter pack and plagiarism base files.
       </Paragraph>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={filesCols}
-        dataSource={filesRows}
-        pagination={false}
-      />
+      {/* md+ : normal table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={filesCols}
+          dataSource={filesRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* <md : cards (no extra shadows) */}
+      <div className="block md:hidden !space-y-3">
+        {filesRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="text-base font-semibold truncate">{r.item}</div>}
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Purpose
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.purpose}</div>
+
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Required?
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.required}</div>
+
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Where to upload / set
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100">{r.where}</div>
+          </Card>
+        ))}
+      </div>
+
       <Alert
         className="mt-2"
         type="info"
@@ -269,7 +359,8 @@ export default function AssignmentSetupHelp() {
           <Text code>&-=-&</Text>.
         </li>
         <li>
-          Need per-task fixtures? Upload an <b>overwrite</b> archive on the task; those files are merged before the command runs.
+          Need per-task fixtures? Upload an <b>overwrite</b> archive on the task; those files are
+          merged before the command runs.
         </li>
         <li>
           You can refine subsections later, but renaming labels creates new buckets and may require
@@ -293,7 +384,8 @@ export default function AssignmentSetupHelp() {
           lines for that label.
         </Descriptions.Item>
         <Descriptions.Item label="Self-check">
-          After generating, open a few tasks to confirm outputs look correct before opening the assignment to students.
+          After generating, open a few tasks to confirm outputs look correct before opening the
+          assignment to students.
         </Descriptions.Item>
       </Descriptions>
 
@@ -313,7 +405,10 @@ export default function AssignmentSetupHelp() {
           The assignment becomes <b>Ready</b> when all of these are present:
           <ul className="list-disc pl-5 mt-1">
             <li>Config (saved)</li>
-            <li>Files uploaded: Makefile, Main <i>(manual)</i> or Interpreter <i>(gatlam)</i>, Memo files</li>
+            <li>
+              Files uploaded: Makefile, Main <i>(manual)</i> or Interpreter <i>(gatlam)</i>, Memo
+              files
+            </li>
             <li>Tasks & Subsections (labels match program output)</li>
             <li>Memo Output (generated for all tasks)</li>
             <li>Mark Allocator (points set per subsection)</li>
@@ -322,27 +417,58 @@ export default function AssignmentSetupHelp() {
         <Descriptions.Item label="Open/Close schedule">
           Set <b>Available From</b> and <b>Due Date</b>.
           <ul className="list-disc pl-5 mt-1">
-            <li><Tag color="gold">Setup</Tag>: one or more checklist items are missing.</li>
-            <li><Tag color="green">Ready</Tag>: checklist complete; waiting to open.</li>
-            <li><Tag color="blue">Open</Tag>: students can submit between the availability window.</li>
-            <li><Tag color="red">Closed</Tag>: due date passed; submission button disabled.</li>
+            <li>
+              <Tag color="gold">Setup</Tag>: one or more checklist items are missing.
+            </li>
+            <li>
+              <Tag color="green">Ready</Tag>: checklist complete; waiting to open.
+            </li>
+            <li>
+              <Tag color="blue">Open</Tag>: students can submit between the availability window.
+            </li>
+            <li>
+              <Tag color="red">Closed</Tag>: due date passed; submission button disabled.
+            </li>
           </ul>
-          The system transitions Ready → Open → Closed automatically based on dates; it never jumps directly from Ready to Closed.
+          The system transitions Ready → Open → Closed automatically based on dates; it never jumps
+          directly from Ready to Closed.
         </Descriptions.Item>
       </Descriptions>
 
       <section id="tips" className="scroll-mt-24" />
       <Title level={3}>Tips</Title>
       <ul className="list-disc pl-5">
-        <li>Start with default execution limits; only raise CPU/time/memory if a task consistently needs it.</li>
-        <li>Capture only the streams you compare in <a href="/help/assignments/config/output">Output settings</a> to keep diffs tidy.</li>
-        <li>Pick a marking comparator (
-          <a href="/help/assignments/config/marking">Exact, Percentage, Regex</a>) that matches your memo output style.</li>
-        <li>Keep subsection labels stable — renaming them creates new buckets and usually means regenerating Memo Output.</li>
-        <li>Ensure Specification ZIPs and student submissions remain flat archives (no folders); the grader expects that shape.</li>
-        <li>If you’re using GATLAM, review <a href="/help/assignments/gatlam">GATLAM & Interpreter</a> and
-          <a href="/help/assignments/config/gatlam">GATLAM Config</a> so the generated programs print the labels you need.</li>
-        <li>When Tasks auto-detect targets from the Makefile, double-check the generated commands before relying on them.</li>
+        <li>
+          Start with default execution limits; only raise CPU/time/memory if a task consistently
+          needs it.
+        </li>
+        <li>
+          Capture only the streams you compare in{' '}
+          <a href="/help/assignments/config/output">Output settings</a> to keep diffs tidy.
+        </li>
+        <li>
+          Pick a marking comparator (
+          <a href="/help/assignments/config/marking">Exact, Percentage, Regex</a>) that matches your
+          memo output style.
+        </li>
+        <li>
+          Keep subsection labels stable — renaming them creates new buckets and usually means
+          regenerating Memo Output.
+        </li>
+        <li>
+          Ensure Specification ZIPs and student submissions remain flat archives (no folders); the
+          grader expects that shape.
+        </li>
+        <li>
+          If you’re using GATLAM, review <a href="/help/assignments/gatlam">GATLAM & Interpreter</a>{' '}
+          and
+          <a href="/help/assignments/config/gatlam">GATLAM Config</a> so the generated programs
+          print the labels you need.
+        </li>
+        <li>
+          When Tasks auto-detect targets from the Makefile, double-check the generated commands
+          before relying on them.
+        </li>
       </ul>
 
       {/* Troubleshooting LAST */}
@@ -356,13 +482,15 @@ export default function AssignmentSetupHelp() {
             children: (
               <ul className="list-disc pl-5">
                 <li>
-                  Open the Setup panel and verify each checklist item: Config saved, required files uploaded, tasks/subsections defined, memo output generated, marks set.
+                  Open the Setup panel and verify each checklist item: Config saved, required files
+                  uploaded, tasks/subsections defined, memo output generated, marks set.
                 </li>
                 <li>
                   In GATLAM mode, ensure the <b>Interpreter</b> is uploaded (Main is not required).
                 </li>
                 <li>
-                  If using <b>rng</b> or <b>codecoverage</b> modes, Main/Interpreter are not required — focus on other items.
+                  If using <b>rng</b> or <b>codecoverage</b> modes, Main/Interpreter are not
+                  required — focus on other items.
                 </li>
               </ul>
             ),
@@ -380,7 +508,8 @@ export default function AssignmentSetupHelp() {
                   Re-run <b>Generate Memo Output</b> after changing code, labels, or config.
                 </li>
                 <li>
-                  Ensure the task commands actually produce the expected stdout/stderr captured in config.
+                  Ensure the task commands actually produce the expected stdout/stderr captured in
+                  config.
                 </li>
               </ul>
             ),
@@ -408,7 +537,8 @@ export default function AssignmentSetupHelp() {
                 </li>
                 <li>Assignment total is the sum of all task totals.</li>
                 <li>
-                  Coverage-only tasks don’t contribute to allocator points (visible in reports only).
+                  Coverage-only tasks don’t contribute to allocator points (visible in reports
+                  only).
                 </li>
               </ul>
             ),

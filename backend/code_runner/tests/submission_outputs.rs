@@ -147,6 +147,7 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
             "Untitled Task",
             command,
             false,
+            false,
         )
         .await
         .expect("Failed to create assignment task");

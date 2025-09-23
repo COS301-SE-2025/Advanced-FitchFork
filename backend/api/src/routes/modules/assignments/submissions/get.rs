@@ -4,11 +4,12 @@
 //!
 //! Users can retrieve their own submissions or, if authorized (lecturers, tutors, admins),
 //! retrieve all submissions for a given assignment. The endpoints support filtering, sorting,
-//! and pagination. Submission details include marks, late status, practice status, tasks,
-//! code coverage, and code complexity analysis.
+//! and pagination. Submission details include marks, late status, practice status, tasks and
+//! code coverage.
 
 use super::common::{
-    ListSubmissionsQuery, SubmissionListItem, SubmissionsListResponse, UserResponse,
+    CodeCoverage, ListSubmissionsQuery, MarkSummary, SubmissionDetailResponse, SubmissionListItem,
+    SubmissionsListResponse, UserResponse,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
@@ -211,6 +212,7 @@ async fn get_user_submissions(
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
                 ignored: s.ignored,
+                status: s.status.to_string(),
             }
         })
         .collect();
@@ -286,7 +288,7 @@ async fn get_user_submissions(
 /// - If `username` is provided, restricts to that user.
 ///
 /// ### Output
-/// - Returns paginated `SubmissionsListResponse` for all students, including `is_late`, `mark`, `is_practice`.
+/// - Returns paginated `SubmissionsListResponse` for all students, including `is_late`, `mark`, `is_practice`, `ignored`, `status`.
 ///
 /// ### Errors
 /// - `404`: Assignment not found.
@@ -466,6 +468,7 @@ async fn get_list_submissions(
                 is_late: is_late(s.created_at, assignment.due_date),
                 mark,
                 ignored: s.ignored,
+                status: s.status.to_string(),
             }
         })
         .collect();
@@ -599,9 +602,10 @@ pub async fn list_submissions(
 ///     },
 ///     "is_practice": false,
 ///     "is_late": false,
+///     "ignored": false,
+///     "status": "Graded",
 ///     "tasks": [...],
 ///     "code_coverage": [...],
-///     "code_complexity": {...},
 ///     "user": {
 ///       "user_id": 456,
 ///       "username": "student1",
@@ -660,7 +664,7 @@ pub async fn list_submissions(
 /// ### Notes
 /// - User metadata is only included for non-student users (lecturers, tutors, admins)
 /// - The response contains the complete grading report including marks, tasks, and optional
-///   code coverage/complexity analysis
+///   code coverage analysis
 /// - Access is restricted to users with appropriate permissions for the module
 
 pub async fn get_submission(
@@ -670,16 +674,33 @@ pub async fn get_submission(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    let submission = SubmissionEntity::find_by_id(submission_id)
-        .one(db)
-        .await
-        .unwrap()
-        .unwrap();
+    let submission = match SubmissionEntity::find_by_id(submission_id).one(db).await {
+        Ok(Some(submission)) => submission,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Submission not found",
+                )),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            eprintln!("DB error finding submission: {:?}", err);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Database error",
+                )),
+            )
+                .into_response();
+        }
+    };
 
     if submission.assignment_id != assignment_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
                 "Submission does not belong to the specified assignment",
             )),
         )
@@ -691,7 +712,9 @@ pub async fn get_submission(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Assignment not found",
+                )),
             )
                 .into_response();
         }
@@ -699,7 +722,9 @@ pub async fn get_submission(
             eprintln!("DB error checking assignment: {:?}", err);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Database error",
+                )),
             )
                 .into_response();
         }
@@ -708,7 +733,7 @@ pub async fn get_submission(
     if assignment.module_id != module_id {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::<()>::error(
+            Json(ApiResponse::<SubmissionDetailResponse>::error(
                 "Assignment does not belong to the specified module",
             )),
         )
@@ -725,18 +750,20 @@ pub async fn get_submission(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Submission report not found")),
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
+                    "Submission report not found",
+                )),
             )
                 .into_response();
         }
     };
 
-    let mut parsed: Value = match serde_json::from_str(&content) {
+    let parsed: Value = match serde_json::from_str(&content) {
         Ok(val) => val,
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error(
+                Json(ApiResponse::<SubmissionDetailResponse>::error(
                     "Failed to parse submission report",
                 )),
             )
@@ -744,10 +771,31 @@ pub async fn get_submission(
         }
     };
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Enrich task names: replace numeric task IDs or task_numbers with real names
-    // ─────────────────────────────────────────────────────────────────────────────
+    // Extract fields from the parsed JSON
+    let mark = parsed
+        .get("mark")
+        .and_then(|m| serde_json::from_value::<MarkSummary>(m.clone()).ok())
+        .unwrap_or(MarkSummary {
+            earned: 0,
+            total: 0,
+        });
 
+    let is_practice = parsed
+        .get("is_practice")
+        .and_then(|p| p.as_bool())
+        .unwrap_or(false);
+
+    let mut tasks: Vec<serde_json::Value> = parsed
+        .get("tasks")
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let code_coverage = parsed
+        .get("code_coverage")
+        .and_then(|c| serde_json::from_value::<CodeCoverage>(c.clone()).ok());
+
+    // Enrich task names: replace numeric task IDs or task_numbers with real names
     let (by_id, by_num): (HashMap<i64, String>, HashMap<i64, String>) =
         match assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
@@ -772,67 +820,84 @@ pub async fn get_submission(
             }
         };
 
-    if let Some(tasks) = parsed.get_mut("tasks").and_then(|v| v.as_array_mut()) {
-        for task_val in tasks.iter_mut() {
-            // Capture current name as owned string (may be string or number)
-            let name_str_owned: Option<String> = task_val.get("name").and_then(|v| {
-                if let Some(s) = v.as_str() {
-                    Some(s.to_string())
-                } else if let Some(n) = v.as_i64() {
-                    Some(n.to_string())
-                } else {
-                    None
-                }
-            });
+    for task_val in tasks.iter_mut() {
+        // Capture current name as owned string (may be string or number)
+        let name_str_owned: Option<String> = task_val.get("name").and_then(|v| {
+            if let Some(s) = v.as_str() {
+                Some(s.to_string())
+            } else if let Some(n) = v.as_i64() {
+                Some(n.to_string())
+            } else {
+                None
+            }
+        });
 
-            // Also capture task_number (if present)
-            let task_number_opt: Option<i64> = task_val.get("task_number").and_then(|v| v.as_i64());
+        // Also capture task_number (if present)
+        let task_number_opt: Option<i64> = task_val.get("task_number").and_then(|v| v.as_i64());
 
-            // Decide on the best replacement
-            let replacement: Option<String> = (|| {
-                // 1) If name is numeric → treat as task_id
-                if let Some(name_s) = &name_str_owned {
-                    if let Ok(task_id) = name_s.trim().parse::<i64>() {
-                        if let Some(real) = by_id.get(&task_id) {
-                            return Some(real.clone());
-                        }
-                    }
-                }
-                // 2) Fallback: use task_number if available
-                if let Some(tn) = task_number_opt {
-                    if let Some(real) = by_num.get(&tn) {
+        // Decide on the best replacement
+        let replacement: Option<String> = (|| {
+            // 1) If name is numeric → treat as task_id
+            if let Some(name_s) = &name_str_owned {
+                if let Ok(task_id) = name_s.trim().parse::<i64>() {
+                    if let Some(real) = by_id.get(&task_id) {
                         return Some(real.clone());
                     }
                 }
-                None
-            })();
-
-            // Mutate only if we have a real name
-            if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
-                obj.insert("name".to_string(), serde_json::Value::String(real_name));
             }
+            // 2) Fallback: use task_number if available
+            if let Some(tn) = task_number_opt {
+                if let Some(real) = by_num.get(&tn) {
+                    return Some(real.clone());
+                }
+            }
+            None
+        })();
+
+        // Mutate only if we have a real name
+        if let (Some(obj), Some(real_name)) = (task_val.as_object_mut(), replacement) {
+            obj.insert("name".to_string(), serde_json::Value::String(real_name));
         }
     }
 
-    // If the requester is not a student, append minimal user info
+    // Construct the structured response
+    let mut user_info = None;
+
+    // If the requester is not a student, include user info
     if !is_student(module_id, claims.sub, db).await {
         if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(db).await {
-            let user_value = serde_json::to_value(UserResponse {
-                id: u.id,
-                username: u.username,
-                email: u.email,
-            })
-            .unwrap();
-            if let Some(obj) = parsed.as_object_mut() {
-                obj.insert("user".to_string(), user_value);
-            }
+            user_info = Some(
+                serde_json::to_value(UserResponse {
+                    id: u.id,
+                    username: u.username,
+                    email: u.email,
+                })
+                .unwrap(),
+            );
         }
     }
+
+    let response = SubmissionDetailResponse {
+        id: submission.id,
+        attempt: submission.attempt,
+        filename: submission.filename.clone(),
+        hash: submission.file_hash.clone(),
+        created_at: submission.created_at.to_rfc3339(),
+        updated_at: submission.updated_at.to_rfc3339(),
+        mark,
+        is_practice,
+        is_late: is_late(submission.created_at, assignment.due_date),
+        ignored: submission.ignored,
+        status: submission.status.to_string(),
+        tasks,
+        code_coverage,
+        user: user_info,
+    };
 
     (
         StatusCode::OK,
         Json(ApiResponse::success(
-            parsed,
+            response,
             "Submission details retrieved successfully",
         )),
     )

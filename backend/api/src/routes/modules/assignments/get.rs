@@ -30,17 +30,19 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
+use db::grade::{GradeComputationError, compute_assignment_grade_for_student};
 use db::models::{
     assignment::{
         self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
         Model as AssignmentModel,
     },
-    assignment_file, assignment_submission, user,
+    assignment_file, user,
 };
 use sea_orm::{
     ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
+use util::execution_config::LatePolicy;
 use util::{
     execution_config::{ExecutionConfig, GradingPolicy, SubmissionMode},
     state::AppState,
@@ -85,6 +87,7 @@ pub struct AssignmentPolicy {
     pub grading_policy: GradingPolicy,
     pub limit_attempts: bool,
     pub pass_mark: u32,
+    pub late: LatePolicy,
 }
 
 impl From<AssignmentModel> for AssignmentFileResponse {
@@ -256,6 +259,11 @@ pub async fn get_assignment(
                         grading_policy: cfg.marking.grading_policy,
                         limit_attempts: cfg.marking.limit_attempts,
                         pass_mark: cfg.marking.pass_mark,
+                        late: LatePolicy {
+                            allow_late_submissions: cfg.marking.late.allow_late_submissions,
+                            late_window_minutes: cfg.marking.late.late_window_minutes,
+                            late_max_percent: cfg.marking.late.late_max_percent,
+                        },
                     };
                     // ---------------------------------------------------------------
 
@@ -266,15 +274,40 @@ pub async fn get_assignment(
                         .await
                         .unwrap_or(false)
                     {
-                        if let Ok(Some(sub)) =
-                            assignment_submission::Model::get_best_for_user(db, &a, user_id).await
+                        match compute_assignment_grade_for_student(
+                            db,
+                            module_id,
+                            assignment_id,
+                            user_id,
+                        )
+                        .await
                         {
-                            best_mark = Some(BestMark {
-                                earned: sub.earned,
-                                total: sub.total,
-                                attempt: sub.attempt,
-                                submission_id: sub.id,
-                            });
+                            Ok(Some(selection)) => {
+                                let submission = selection.submission;
+                                best_mark = Some(BestMark {
+                                    earned: submission.earned,
+                                    total: submission.total,
+                                    attempt: submission.attempt,
+                                    submission_id: submission.id,
+                                });
+                            }
+                            Ok(None) => { /* no submissions */ }
+                            Err(GradeComputationError::AssignmentNotFound) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: assignment {} not found in module {}",
+                                    assignment_id, module_id
+                                );
+                            }
+                            Err(GradeComputationError::ExecutionConfig(err)) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: execution config error: {err}"
+                                );
+                            }
+                            Err(GradeComputationError::Database(err)) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: database error: {err}"
+                                );
+                            }
                         }
 
                         if let Ok(summary) = a.attempts_summary_for_user(db, user_id).await {

@@ -1,4 +1,5 @@
 // ai/src/utils/evaluator.rs
+// I generally would not recommend editing this file unless you know what you're doing.
 
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
@@ -8,14 +9,14 @@ use strategy::strategy_for;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Property {
-    Safety, // G(¬unsafe)
+    Safety,            // G(~unsafe)
     ProperTermination, // G(ter => VRC)
-    SegmentationFault, // G(¬segfault)
-    Exceptions, // G(¬exception)
-    ExecutionTime, // G(ter => (r ≤ e))
-    IllegalOutput, // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
-    ExpectedExact, // ExpectedExact
-    ExpectedContains, // ExpectedContains
+    SegmentationFault, // G(~segfault)
+    Exceptions,        // G(~exception)
+    ExecutionTime,     // G(ter => (r <= e))
+    IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x =/ o))
+    ExpectedExact,     // ExpectedExact
+    ExpectedContains,  // ExpectedContains
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +24,7 @@ pub struct TaskSpec {
     pub language: Language,
     /// Valid return codes for "proper termination" (default: [0])
     pub valid_return_codes: Option<Vec<i32>>,
-    /// Execution-time bound in milliseconds (r ≤ e)
+    /// Execution-time bound in milliseconds (r <= e)
     pub max_runtime_ms: Option<u64>,
     /// For IllegalOutput: forbidden outputs X (exact line matches after trim)
     pub forbidden_outputs: Vec<String>,
@@ -99,7 +100,7 @@ impl Evaluator {
         let mut violated = Vec::new();
         let strat = strategy_for(spec.language);
 
-        // Safety: G(¬unsafe)
+        // Safety: G(~unsafe)
         if strat.violates_safety(&view.stderr) {
             violated.push(Property::Safety);
         }
@@ -112,17 +113,17 @@ impl Evaluator {
             }
         }
 
-        // Segmentation Fault: G(¬segfault)
+        // Segmentation Fault: G(~segfault)
         if strat.has_segfault(&view.stderr) {
             violated.push(Property::SegmentationFault);
         }
 
-        // Exceptions: G(¬exception)
+        // Exceptions: G(~exception)
         if strat.has_exception(&view.stderr) {
             violated.push(Property::Exceptions);
         }
 
-        // Execution Time: G(ter => (r ≤ e))
+        // Execution Time: G(ter => (r <= e))
         if view.terminated {
             if let Some(bound) = spec.max_runtime_ms {
                 if let Some(r) = view.runtime_ms {
@@ -133,7 +134,7 @@ impl Evaluator {
             }
         }
 
-        // Illegal Output: G(ter => ∀o∈Out ∀x∈X (x ≠ o))
+        // Illegal Output: G(ter => ∀o∈Out ∀x∈X (x =/ o))
         if view.terminated && !spec.forbidden_outputs.is_empty() {
             let outs = normalized_lines(&view.stdout);
             let forb = spec
@@ -166,9 +167,9 @@ impl Evaluator {
     ) -> (usize, usize) {
         let total_tasks = outs.len().max(1);
 
-        let mut ltl_checks     = 0usize;
+        let mut ltl_checks = 0usize;
         let mut ltl_violations = 0usize;
-        let mut failed_tasks   = 0usize;
+        let mut failed_tasks = 0usize;
 
         let mut memo_sections: HashMap<String, Vec<String>> = HashMap::new();
         for (_tid, memotxt) in memo {
@@ -184,17 +185,31 @@ impl Evaluator {
             let eval = self.evaluate_task(spec, &view);
 
             let mut checks = 0usize;
-            let mut viols  = 0usize;
+            let mut viols = 0usize;
 
-            // Core LTL-ish checks
-            checks += 1; if eval.violated.contains(&Property::Safety) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::ProperTermination) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::SegmentationFault) { viols += 1; }
-            checks += 1; if eval.violated.contains(&Property::Exceptions) { viols += 1; }
+            // Core LTL checks
+            checks += 1;
+            if eval.violated.contains(&Property::Safety) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::ProperTermination) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::SegmentationFault) {
+                viols += 1;
+            }
+            checks += 1;
+            if eval.violated.contains(&Property::Exceptions) {
+                viols += 1;
+            }
 
             if spec.max_runtime_ms.is_some() && view.terminated && view.runtime_ms.is_some() {
                 checks += 1;
-                if eval.violated.contains(&Property::ExecutionTime) { viols += 1; }
+                if eval.violated.contains(&Property::ExecutionTime) {
+                    viols += 1;
+                }
             }
 
             let out_sections = parse_labeled_sections_with_delim(&view.stdout, delimiter);
@@ -208,7 +223,7 @@ impl Evaluator {
                         }
                     }
                     None => {
-                        viols += 1; 
+                        viols += 1;
                     }
                 }
 
@@ -223,20 +238,22 @@ impl Evaluator {
                         }
                     }
                     None => {
-                        viols += 1; 
+                        viols += 1;
                     }
                 }
             }
 
             if !spec.forbidden_outputs.is_empty() && view.terminated {
                 checks += 1;
-                if eval.violated.contains(&Property::IllegalOutput) { viols += 1; }
+                if eval.violated.contains(&Property::IllegalOutput) {
+                    viols += 1;
+                }
             }
 
-            ltl_checks     += checks;
+            ltl_checks += checks;
             ltl_violations += viols;
- 
-            // Failure metric (separate from LTL)
+
+            // Failure metric
             let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
             let strat = strategy_for(spec.language);
             let failed = !ret_ok
@@ -244,11 +261,17 @@ impl Evaluator {
                 || (view.terminated && strat.has_exception(&view.stderr))
                 || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
 
-            if failed { failed_tasks += 1; }
+            if failed {
+                failed_tasks += 1;
+            }
         }
 
-        let ltl_milli  = if ltl_checks == 0 { 0 } else { ((ltl_violations * 1000) / ltl_checks).min(1000) };
-        let fail_milli = ((failed_tasks   * 1000) / total_tasks).min(1000);
+        let ltl_milli = if ltl_checks == 0 {
+            0
+        } else {
+            ((ltl_violations * 1000) / ltl_checks).min(1000)
+        };
+        let fail_milli = ((failed_tasks * 1000) / total_tasks).min(1000);
 
         (ltl_milli, fail_milli)
     }
@@ -278,7 +301,9 @@ fn parse_labeled_sections_with_delim(
             current = Some(label);
             continue;
         }
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         if let Some(lbl) = &current {
             map.entry(lbl.clone()).or_default().push(line.to_string());
         }
@@ -345,10 +370,8 @@ fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
         let ll = l.to_ascii_lowercase();
         if let Some(idx) = ll.find(&key_lower) {
             let after = &ll[idx + key_lower.len()..];
-            // strip separators
             let after =
                 after.trim_start_matches(|c: char| c == ':' || c == '=' || c.is_whitespace());
-            // take signed int prefix
             let mut end = 0;
             for ch in after.chars() {
                 if ch.is_ascii_digit() || ch == '-' || ch == '+' {
@@ -402,7 +425,6 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,7 +460,6 @@ mod tests {
         }
     }
 
-    // Simple out/memo tuple makers
     fn out(task_id: i64, blob: &str) -> (i64, String) {
         (task_id, blob.to_string())
     }
@@ -446,7 +467,6 @@ mod tests {
         (task_id, text.to_string())
     }
 
-    // Build a stdout with labeled sections + optional Retcode
     fn build_labeled_stdout(
         delim: &str,
         sections: &[(&str, &[&str])],
@@ -471,8 +491,6 @@ mod tests {
         s.push_str(&format!("Retcode: {retcode}\n"));
         s
     }
-
-    // ---------------- parse/utility tests ----------------
 
     #[test]
     fn extract_marker_int_retcode_and_runtime() {
@@ -525,8 +543,6 @@ mod tests {
             &vec!["x".to_string(), "y".to_string()]
         );
     }
-
-    // ---------------- language/safety/exception tests ----------------
 
     #[test]
     fn cpp_safety_detects_asan_and_uaf() {
@@ -583,8 +599,6 @@ mod tests {
         );
     }
 
-    // ---------------- termination/forbidden/runtime tests ----------------
-
     #[test]
     fn proper_termination_ok_when_zero_exit() {
         let ev = Evaluator::new();
@@ -637,8 +651,6 @@ mod tests {
         assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
         assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
     }
-
-    // ---------------- delimiter-based memo tests ----------------
 
     #[test]
     fn memo_exact_and_contains_both_pass_yield_zero_ltl() {

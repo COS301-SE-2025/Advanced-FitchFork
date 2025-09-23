@@ -1,156 +1,14 @@
 // src/pages/help/HelpPageLayout.tsx
 import { useMemo, useState, useEffect } from 'react';
 import { Layout, Menu, Anchor, Button } from 'antd';
-import {
-  InfoCircleOutlined,
-  AppstoreOutlined,
-  FileTextOutlined,
-  SettingOutlined,
-  LeftOutlined,
-  RightOutlined,
-} from '@ant-design/icons';
+import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HelpProvider, useHelp } from '@/context/HelpContext';
+import { HELP_MENU_ITEMS, HELP_LEAF_ROUTES } from '@/pages/help/menuConfig';
+import { useUI } from '@/context/UIContext';
+import MobilePageHeader from '@/components/common/MobilePageHeader';
 
 const { Sider, Content } = Layout;
-
-type MenuItem = Required<NonNullable<Parameters<typeof Menu>[0]['items']>>[number];
-
-// Flatten leaf routes in visual order
-type Leaf = { key: string; label: string };
-function flattenLeafs(items: MenuItem[] | undefined): Leaf[] {
-  const out: Leaf[] = [];
-  const walk = (arr?: any[]) => {
-    if (!arr) return;
-    for (const it of arr) {
-      if (!it) continue;
-      if (it.type === 'group') {
-        walk(it.children);
-        continue;
-      }
-      if (Array.isArray(it.children) && it.children.length) {
-        walk(it.children);
-        continue;
-      }
-      if (typeof it.key === 'string' && typeof it.label === 'string') {
-        out.push({ key: it.key, label: it.label });
-      }
-    }
-  };
-  walk(items);
-  return out;
-}
-
-// ===================== MENU =====================
-const MENU_ITEMS: MenuItem[] = [
-  {
-    key: 'getting-started',
-    icon: <InfoCircleOutlined />,
-    label: 'Getting Started',
-    children: [{ key: 'getting-started/overview', label: 'Overview' }],
-  },
-  {
-    key: 'modules',
-    icon: <AppstoreOutlined />,
-    label: 'Modules',
-    children: [
-      { key: 'modules/overview', label: 'Module Overview' },
-      { key: 'modules/announcements', label: 'Announcements' },
-      { key: 'modules/attendance', label: 'Attendance' },
-      { key: 'modules/grades', label: 'Module Grades' },
-      { key: 'modules/personnel', label: 'Personnel & Roles' },
-    ],
-  },
-  {
-    key: 'assignments',
-    icon: <FileTextOutlined />,
-    label: 'Assignments',
-    children: [
-      // --- Setup ---
-      {
-        type: 'group',
-        label: 'Setup',
-        children: [{ key: 'assignments/setup', label: 'Full Setup Guide' }],
-      },
-
-      // --- Assignment Config (collapsible) ---
-      {
-        key: 'assignments/config-sections',
-        label: 'Assignment Config',
-        children: [
-          { key: 'assignments/config/overview', label: 'Overview' },
-          { key: 'assignments/config/project', label: 'Language & Mode' },
-          { key: 'assignments/config/execution', label: 'Execution' },
-          { key: 'assignments/config/output', label: 'Output' },
-          { key: 'assignments/config/marking', label: 'Marking' },
-          { key: 'assignments/config/security', label: 'Security' },
-          { key: 'assignments/config/gatlam', label: 'GATLAM' },
-        ],
-      },
-
-      // --- Files ---
-      {
-        type: 'group',
-        label: 'Files',
-        children: [
-          { key: 'assignments/files/main-files', label: 'Main File' },
-          { key: 'assignments/files/makefile', label: 'Makefile' },
-          { key: 'assignments/files/memo-files', label: 'Memo Files' },
-          { key: 'assignments/files/specification', label: 'Specification' },
-        ],
-      },
-
-      // --- Concepts (now includes Code Coverage + GATLAM) ---
-      {
-        type: 'group',
-        label: 'Concepts',
-        children: [
-          { key: 'assignments/tasks', label: 'Tasks' },
-          { key: 'assignments/code-coverage', label: 'Code Coverage' },
-          { key: 'assignments/gatlam', label: 'GATLAM & Interpreter' },
-        ],
-      },
-
-      // --- Submissions (own group) ---
-      {
-        type: 'group',
-        label: 'Submissions',
-        children: [
-          { key: 'assignments/submissions/how-to-submit', label: 'How to Submit' },
-        ],
-      },
-
-      // --- Plagiarism ---
-      {
-        type: 'group',
-        label: 'Plagiarism',
-        children: [{ key: 'assignments/plagiarism/moss', label: 'Plagiarism & MOSS' }],
-      },
-
-      // --- Grading (own group) ---
-      {
-        type: 'group',
-        label: 'Grading',
-        children: [
-          { key: 'assignments/memo-output', label: 'Memo Output' },
-          { key: 'assignments/mark-allocator', label: 'Mark Allocation' },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'support',
-    icon: <SettingOutlined />,
-    label: 'Support',
-    children: [
-      { key: 'support/troubleshooting', label: 'Troubleshooting' },
-      { key: 'support/system-monitoring', label: 'System Monitoring' },
-      { key: 'support/contact', label: 'Contact' },
-    ],
-  },
-];
-
-const LEAF_ROUTES: Leaf[] = flattenLeafs(MENU_ITEMS);
 
 function RightOfContentAnchor() {
   const { items, activeHref, setActiveHref, getContainer, targetOffset, extra } = useHelp();
@@ -224,7 +82,7 @@ function LeftSider() {
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar !pb-24">
           <Menu
             mode="inline"
-            items={MENU_ITEMS}
+            items={HELP_MENU_ITEMS}
             selectedKeys={[selectedKey]}
             openKeys={openKeys}
             onOpenChange={(keys) => setOpenKeys(keys as string[])}
@@ -242,6 +100,7 @@ function LeftSider() {
 
 // Bottom bar rendered by the LAYOUT. Pages don't know about it.
 function PrevNextBar() {
+  const { isMobile } = useUI();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -253,12 +112,37 @@ function PrevNextBar() {
           'getting-started/overview';
   }, [location.pathname]);
 
-  const i = LEAF_ROUTES.findIndex((r) => r.key === current);
-  const prev = i > 0 ? LEAF_ROUTES[i - 1] : null;
-  const next = i >= 0 && i < LEAF_ROUTES.length - 1 ? LEAF_ROUTES[i + 1] : null;
+  const i = HELP_LEAF_ROUTES.findIndex((r) => r.key === current);
+  const prev = i > 0 ? HELP_LEAF_ROUTES[i - 1] : null;
+  const next = i >= 0 && i < HELP_LEAF_ROUTES.length - 1 ? HELP_LEAF_ROUTES[i + 1] : null;
 
   if (!prev && !next) return null;
 
+  if (isMobile) {
+    // MOBILE: vertical, full width
+    return (
+      <div className="mt-6 flex flex-col gap-3">
+        {prev ? (
+          <Button block icon={<LeftOutlined />} onClick={() => navigate(`/help/${prev.key}`)}>
+            Previous: {prev.label}
+          </Button>
+        ) : null}
+
+        {next ? (
+          <Button
+            block
+            type="primary"
+            onClick={() => navigate(`/help/${next.key}`)}
+            icon={<RightOutlined />}
+          >
+            Next: {next.label}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  // DESKTOP: existing horizontal layout
   return (
     <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
       {prev ? (
@@ -283,21 +167,34 @@ function PrevNextBar() {
 }
 
 function Shell() {
+  const { isMobile } = useUI();
+  const location = useLocation();
+
+  // true only when you're on the mobile help index (MobileHelpPageMenu)
+  const atMobileHelpIndex = isMobile && /^\/help\/?$/.test(location.pathname);
+
   return (
     <Layout className="!bg-white dark:!bg-gray-950 !h-full !min-h-0">
-      <LeftSider />
+      {!isMobile && <LeftSider />}
 
       <Layout className="!bg-white dark:!bg-gray-950 flex-1 !min-h-0">
+        {isMobile && <MobilePageHeader />}
         <Content className="!min-h-0">
           <div
             id="help-scroll-container"
             className="h-full overflow-y-auto"
-            style={{ scrollBehavior: 'auto', scrollPaddingTop: 12, scrollPaddingBottom: 120 }}
+            style={{
+              scrollBehavior: 'auto',
+              scrollPaddingTop: isMobile ? 56 : 12,
+              // optional: smaller bottom padding when the bar is hidden
+              scrollPaddingBottom: atMobileHelpIndex ? 16 : 120,
+            }}
           >
-            <div className="grid grid-cols-[minmax(0,960px)_240px]">
-              <div className="px-5 md:px-8 pt-4 pb-12">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,960px)_240px]">
+              <div className="px-4 md:px-8 pt-4 pb-12">
                 <Outlet />
-                <PrevNextBar />
+                {/* show Prev/Next everywhere EXCEPT on the MobileHelpPageMenu */}
+                {!atMobileHelpIndex && <PrevNextBar />}
               </div>
 
               <div className="hidden lg:block border-l border-gray-200 dark:border-gray-800">

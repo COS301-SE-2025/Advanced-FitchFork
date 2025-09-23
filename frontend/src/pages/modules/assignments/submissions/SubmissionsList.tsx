@@ -1,5 +1,5 @@
 import { Switch, Tag, Typography } from 'antd';
-import { DeleteOutlined, RedoOutlined, ReloadOutlined } from '@ant-design/icons';
+import { AuditOutlined, DeleteOutlined, RedoOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
@@ -28,6 +28,7 @@ import { useViewSlot } from '@/context/ViewSlotContext';
 import {
   SubmissionListItem,
   SubmissionsEmptyState,
+  SubmissionStatusTag,
   SubmitAssignmentModal,
 } from '@/components/submissions';
 import {
@@ -36,15 +37,10 @@ import {
 } from '@/services/modules/assignments/submissions/delete';
 import useApp from 'antd/es/app/useApp';
 import SubmissionStatistics from './SubmissionStatistics';
+import { PercentageTag } from '@/components/common';
 
-const getMarkColor = (mark: number): string => {
-  if (mark >= 75) return 'green';
-  if (mark >= 50) return 'orange';
-  return 'red';
-};
-
+// Extend with *extra* UI-only fields; DO NOT override `status`
 type StudentSubmission = Submission & {
-  status: 'Pending' | 'Graded';
   path: string;
   percentageMark?: number;
 };
@@ -80,14 +76,13 @@ export default function SubmissionsList() {
         Submissions
       </Typography.Text>,
     );
-  }, []);
+  }, [setValue]);
 
   useEffect(() => {
     const listener = () => {
       entityListRef.current?.refresh();
     };
     EventBus.on('submission:updated', listener);
-
     return () => {
       EventBus.off('submission:updated', listener);
     };
@@ -125,17 +120,19 @@ export default function SubmissionsList() {
 
     const { submissions, total } = res.data;
 
-    const items: StudentSubmission[] = submissions.map(
-      (s): StudentSubmission => ({
+    const items: StudentSubmission[] = submissions.map((s) => {
+      // compute percentage (only if we have a valid total)
+      const pct =
+        s.mark && typeof s.mark.total === 'number' && s.mark.total > 0
+          ? Math.round((s.mark.earned / s.mark.total) * 100)
+          : undefined;
+
+      return {
         ...s,
-        status: s.mark ? 'Graded' : 'Pending',
-        percentageMark:
-          s.mark && typeof s.mark === 'object' && 'earned' in s.mark
-            ? Math.round(((s.mark as any).earned / (s.mark as any).total) * 100)
-            : undefined,
+        percentageMark: pct,
         path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}/file`,
-      }),
-    );
+      };
+    });
 
     return { items, total };
   };
@@ -164,12 +161,14 @@ export default function SubmissionsList() {
 
   const columns: EntityColumnType<StudentSubmission>[] = [
     { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
+
     {
       title: 'Username',
       dataIndex: ['user', 'username'],
       key: 'user.username',
       sorter: { multiple: 1 },
     },
+
     {
       title: 'Attempt',
       dataIndex: 'attempt',
@@ -177,7 +176,14 @@ export default function SubmissionsList() {
       sorter: { multiple: 2 },
       render: (v) => <Tag color="blue">#{v}</Tag>,
     },
+
     { title: 'Filename', dataIndex: 'filename', key: 'filename', defaultHidden: true },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (_: unknown, record) => <SubmissionStatusTag status={record.status} />,
+    },
     {
       title: 'Is Practice',
       dataIndex: 'is_practice',
@@ -185,15 +191,20 @@ export default function SubmissionsList() {
       render: (v) => (v ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
     },
     {
-      title: 'Mark (%)',
-      key: 'percentageMark',
+      title: 'Mark',
+      key: 'mark_pct',
       sorter: { multiple: 3 },
-      render: (_, r) =>
-        r.status === 'Graded' && typeof r.percentageMark === 'number' ? (
-          <Tag color={getMarkColor(r.percentageMark)}>{r.percentageMark}%</Tag>
+      render: (_, r) => {
+        const earned = r.mark?.earned ?? 0;
+        const total = r.mark?.total ?? 0;
+        const pct = total > 0 ? Math.round((earned / total) * 100) : null;
+
+        return pct != null ? (
+          <PercentageTag value={pct} scheme="red-green" />
         ) : (
-          <Tag color="default">Not marked</Tag>
-        ),
+          <Tag>Not marked</Tag>
+        );
+      },
     },
     {
       title: 'Ignored',
@@ -201,7 +212,7 @@ export default function SubmissionsList() {
       key: 'ignored',
       // show to staff OR admin; students keep it hidden by default
       defaultHidden: !(auth.isStaff(module.id) || auth.isAdmin),
-      render: (_: boolean, record: StudentSubmission) => {
+      render: (_: boolean, record) => {
         if (canToggleIgnored) {
           return (
             <Switch
@@ -240,7 +251,6 @@ export default function SubmissionsList() {
             />
           );
         }
-
         // read-only for non-toggle roles (e.g., Tutor)
         return record.ignored ? <Tag color="red">Yes</Tag> : <Tag>No</Tag>;
       },
@@ -253,6 +263,7 @@ export default function SubmissionsList() {
       defaultHidden: true,
       render: (v) => (v ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
     },
+
     {
       title: 'Created At',
       dataIndex: 'created_at',
@@ -261,6 +272,7 @@ export default function SubmissionsList() {
       defaultHidden: true,
       render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm'),
     },
+
     {
       title: 'Updated At',
       dataIndex: 'updated_at',
@@ -274,7 +286,50 @@ export default function SubmissionsList() {
 
   const actions: EntityListProps<StudentSubmission>['actions'] = canManageSubmissions
     ? {
-        entity: (entity: StudentSubmission): EntityAction<StudentSubmission>[] => [
+        entity: (entity): EntityAction<StudentSubmission>[] => [
+          {
+            key: 'resubmit',
+            label: 'Resubmit',
+            icon: <RedoOutlined />,
+            isPrimary: true,
+            handler: async () => {
+              try {
+                const res = await resubmitSubmissions(module.id, assignment.id, {
+                  submission_ids: [entity.id],
+                });
+                if (res.success) {
+                  message.success(res.message || `Resubmitted 1/1 submissions`);
+                } else {
+                  message.error(res.message || `Failed to resubmit submission ${entity.id}`);
+                }
+                EventBus.emit('submission:updated');
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to resubmit submission ${entity.id}`);
+              }
+            },
+          },
+          {
+            key: 'remark',
+            label: 'Re-mark',
+            icon: <AuditOutlined />,
+            handler: async () => {
+              try {
+                const res = await remarkSubmissions(module.id, assignment.id, {
+                  submission_ids: [entity.id],
+                });
+                if (res.success) {
+                  message.success(res.message);
+                } else {
+                  message.error(res.message);
+                }
+                EventBus.emit('submission:updated');
+              } catch (err) {
+                console.error(err);
+                message.error(`Failed to re-mark submission ${entity.id}`);
+              }
+            },
+          },
           {
             key: 'delete',
             label: 'Delete',
@@ -295,102 +350,41 @@ export default function SubmissionsList() {
               }
             },
           },
-
-          {
-            key: 'remark',
-            label: 'Re-mark',
-            icon: <ReloadOutlined />,
-            handler: async () => {
-              try {
-                const res = await remarkSubmissions(module.id, assignment.id, {
-                  submission_ids: [entity.id],
-                });
-                if (res.success) {
-                  message.success(res.message);
-                } else {
-                  message.error(res.message);
-                }
-                EventBus.emit('submission:updated');
-              } catch (err) {
-                console.error(err);
-                message.error(`Failed to re-mark submission ${entity.id}`);
-              }
-            },
-          },
-          {
-            key: 'resubmit',
-            label: 'Resubmit',
-            icon: <RedoOutlined />,
-            handler: async () => {
-              try {
-                const res = await resubmitSubmissions(module.id, assignment.id, {
-                  submission_ids: [entity.id],
-                });
-                if (res.success) {
-                  message.success(res.message || `Resubmitted 1/1 submissions`);
-                } else {
-                  message.error(res.message || `Failed to resubmit submission ${entity.id}`);
-                }
-                EventBus.emit('submission:updated');
-              } catch (err) {
-                console.error(err);
-                message.error(`Failed to resubmit submission ${entity.id}`);
-              }
-            },
-          },
         ],
         bulk: [
           {
-            key: 'bulk-delete',
-            label: 'Bulk Delete',
-            icon: <DeleteOutlined />,
+            key: 'bulk-resubmit',
+            label: 'Bulk Resubmit',
+            icon: <RedoOutlined />,
             handler: async ({ selected, refresh }) => {
               const ids = (selected as number[]) ?? [];
-              if (!ids.length) {
-                message.warning('No submissions selected');
-                return;
-              }
-
+              if (!ids.length) return message.warning('No submissions selected');
               modal.confirm({
-                title: `Delete ${ids.length} submission${ids.length === 1 ? '' : 's'}?`,
-                icon: null, // no yellow warning icon
+                title: `Re-run ${ids.length} submission${ids.length === 1 ? '' : 's'}?`,
+                icon: null,
                 centered: true,
-                okText: `Delete ${ids.length}`,
+                okText: `Re-run ${ids.length}`,
                 cancelText: 'Cancel',
-                okButtonProps: { danger: true },
                 content: (
-                  <div style={{ marginTop: 8 }}>
-                    <Typography.Paragraph>
-                      You&apos;re about to <b>delete</b> <Tag>{ids.length}</Tag>
-                      submission
-                      {ids.length === 1 ? '' : 's'}.
-                    </Typography.Paragraph>
-                    <Typography.Paragraph type="danger" style={{ marginBottom: 0 }}>
-                      This cannot be undone.
-                    </Typography.Paragraph>
-                  </div>
+                  <Typography.Paragraph type="secondary">
+                    This will re-run the selected submission{ids.length === 1 ? '' : 's'}.
+                  </Typography.Paragraph>
                 ),
                 onOk: async () => {
                   try {
-                    const res = await bulkDeleteSubmissions(module.id, assignment.id, ids);
+                    const res = await resubmitSubmissions(module.id, assignment.id, {
+                      submission_ids: ids,
+                    });
                     if (res.success) {
-                      const { deleted, failed } = res.data || {};
-                      const failCount = failed?.length ?? 0;
-                      message.success(
-                        res.message || `Deleted ${deleted}/${ids.length} submissions`,
-                      );
-                      if (failCount > 0) {
-                        console.warn('Bulk delete failures:', failed);
-                      }
-                      EventBus.emit('submission:updated');
-                      refresh();
-                      entityListRef.current?.clearSelection();
+                      message.success(res.message || `Re-ran ${ids.length} submission(s)`);
                     } else {
-                      message.error(res.message || 'Bulk delete failed');
+                      message.error(res.message || 'Failed to re-run some submissions');
                     }
+                    EventBus.emit('submission:updated');
+                    refresh();
                   } catch (err) {
                     console.error(err);
-                    message.error('Bulk delete failed');
+                    message.error('Failed to re-run some submissions');
                   }
                 },
               });
@@ -399,14 +393,10 @@ export default function SubmissionsList() {
           {
             key: 'bulk-remark',
             label: 'Bulk Re-mark',
-            icon: <ReloadOutlined />,
+            icon: <AuditOutlined />,
             handler: async ({ selected, refresh }) => {
               const ids = (selected as number[]) ?? [];
-              if (!ids.length) {
-                message.warning('No submissions selected');
-                return;
-              }
-
+              if (!ids.length) return message.warning('No submissions selected');
               modal.confirm({
                 title: `Re-mark ${ids.length} submission${ids.length === 1 ? '' : 's'}?`,
                 icon: null,
@@ -442,42 +432,47 @@ export default function SubmissionsList() {
             },
           },
           {
-            key: 'bulk-resubmit',
-            label: 'Bulk Resubmit',
-            icon: <RedoOutlined />,
+            key: 'bulk-delete',
+            label: 'Bulk Delete',
+            icon: <DeleteOutlined />,
             handler: async ({ selected, refresh }) => {
               const ids = (selected as number[]) ?? [];
-              if (!ids.length) {
-                message.warning('No submissions selected');
-                return;
-              }
-
+              if (!ids.length) return message.warning('No submissions selected');
               modal.confirm({
-                title: `Re-run ${ids.length} submission${ids.length === 1 ? '' : 's'}?`,
+                title: `Delete ${ids.length} submission${ids.length === 1 ? '' : 's'}?`,
                 icon: null,
                 centered: true,
-                okText: `Re-run ${ids.length}`,
+                okText: `Delete ${ids.length}`,
                 cancelText: 'Cancel',
+                okButtonProps: { danger: true },
                 content: (
-                  <Typography.Paragraph type="secondary">
-                    This will re-run the selected submission{ids.length === 1 ? '' : 's'}.
-                  </Typography.Paragraph>
+                  <div style={{ marginTop: 8 }}>
+                    <Typography.Paragraph>
+                      You&apos;re about to <b>delete</b> <Tag>{ids.length}</Tag>
+                      submission{ids.length === 1 ? '' : 's'}.
+                    </Typography.Paragraph>
+                    <Typography.Paragraph type="danger" style={{ marginBottom: 0 }}>
+                      This cannot be undone.
+                    </Typography.Paragraph>
+                  </div>
                 ),
                 onOk: async () => {
                   try {
-                    const res = await resubmitSubmissions(module.id, assignment.id, {
-                      submission_ids: ids,
-                    });
+                    const res = await bulkDeleteSubmissions(module.id, assignment.id, ids);
                     if (res.success) {
-                      message.success(res.message || `Re-ran ${ids.length} submission(s)`);
+                      const { deleted } = res.data || {};
+                      message.success(
+                        res.message || `Deleted ${deleted ?? ids.length}/${ids.length} submissions`,
+                      );
+                      EventBus.emit('submission:updated');
+                      refresh();
+                      entityListRef.current?.clearSelection();
                     } else {
-                      message.error(res.message || 'Failed to re-run some submissions');
+                      message.error(res.message || 'Bulk delete failed');
                     }
-                    EventBus.emit('submission:updated');
-                    refresh();
                   } catch (err) {
                     console.error(err);
-                    message.error('Failed to re-run some submissions');
+                    message.error('Bulk delete failed');
                   }
                 },
               });
@@ -485,40 +480,6 @@ export default function SubmissionsList() {
           },
         ],
         control: [
-          {
-            key: 'remark-all',
-            label: 'Re-mark All',
-            icon: <ReloadOutlined />,
-            handler: async ({ refresh }) => {
-              modal.confirm({
-                title: 'Re-mark all submissions?',
-                icon: null,
-                centered: true,
-                okText: 'Re-mark All',
-                cancelText: 'Cancel',
-                content: (
-                  <Typography.Paragraph type="secondary">
-                    This will queue re-marking for <b>all</b> submissions in this assignment.
-                  </Typography.Paragraph>
-                ),
-                onOk: async () => {
-                  try {
-                    const res = await remarkSubmissions(module.id, assignment.id, { all: true });
-                    if (res.success) {
-                      message.success(res.message || 'All submissions queued for re-mark');
-                    } else {
-                      message.error(res.message || 'Failed to re-mark all submissions');
-                    }
-                    EventBus.emit('submission:updated');
-                    refresh();
-                  } catch (err) {
-                    console.error(err);
-                    message.error('Failed to re-mark all submissions');
-                  }
-                },
-              });
-            },
-          },
           {
             key: 'resubmit-all',
             label: 'Resubmit All',
@@ -553,20 +514,52 @@ export default function SubmissionsList() {
               });
             },
           },
+          {
+            key: 'remark-all',
+            label: 'Re-mark All',
+            icon: <AuditOutlined />,
+            handler: async ({ refresh }) => {
+              modal.confirm({
+                title: 'Re-mark all submissions?',
+                icon: null,
+                centered: true,
+                okText: 'Re-mark All',
+                cancelText: 'Cancel',
+                content: (
+                  <Typography.Paragraph type="secondary">
+                    This will queue re-marking for <b>all</b> submissions in this assignment.
+                  </Typography.Paragraph>
+                ),
+                onOk: async () => {
+                  try {
+                    const res = await remarkSubmissions(module.id, assignment.id, { all: true });
+                    if (res.success) {
+                      message.success(res.message || 'All submissions queued for re-mark');
+                    } else {
+                      message.error(res.message || 'Failed to re-mark all submissions');
+                    }
+                    EventBus.emit('submission:updated');
+                    refresh();
+                  } catch (err) {
+                    console.error(err);
+                    message.error('Failed to re-mark all submissions');
+                  }
+                },
+              });
+            },
+          },
         ],
       }
     : undefined;
 
   return (
     <div className="grid gap-6 2xl:grid-cols-5 items-stretch h-full">
-      {/* Stats: only for lecturers, assistants, or admin */}
       {hasStats && (
         <div className="order-1 2xl:order-2 2xl:col-span-2 h-full flex flex-col">
           <SubmissionStatistics stats={assignmentStats} className="flex-1 min-h-0" />
         </div>
       )}
 
-      {/* List: span full width when stats are hidden */}
       <div
         className={`order-2 2xl:order-1 ${hasStats ? '2xl:col-span-3' : '2xl:col-span-5'} min-w-0 h-full flex flex-col`}
       >

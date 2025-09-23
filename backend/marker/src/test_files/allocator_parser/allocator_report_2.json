@@ -1,23 +1,29 @@
 {
-    "generated_at": "2025-06-20T12:05:00+02:00",
-    "tasks": [
-      {
-        "task1": {
-          "name": "Parsing Stage",
-          "value": 8,
-          "subsections": [
-            { "name": "Header", "value": 3 },
-            { "name": "Body",   "value": 5 }
-          ]
+  "generated_at": "2025-06-20T12:05:00+02:00",
+  "total_value": 20,
+  "tasks": [
+    {
+      "task_number": 1,
+      "name": "Parsing Stage",
+      "value": 8,
+      "code_coverage": false,
+      "subsections": [
+        {
+          "name": "Header",
+          "value": 3
+        },
+        {
+          "name": "Body",
+          "value": 5
         }
-      },
-      {
-        "task2": {
-          "name": "Computation",
-          "value": 12,
-          "subsections": []
-        }
-      }
-    ]
-  }
-  
+      ]
+    },
+    {
+      "task_number": 2,
+      "name": "Computation",
+      "value": 12,
+      "code_coverage": false,
+      "subsections": []
+    }
+  ]
+}

@@ -1,14 +1,13 @@
+// src/pages/modules/assignments/AssignmentLayout.tsx
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Dropdown, Button, Alert, Tag, Typography, Segmented, Modal } from 'antd';
+import { Dropdown, Button, Alert, Tag, Typography, Segmented, Modal, message } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
 import { useAssignment } from '@/context/AssignmentContext';
-
-import { message } from '@/utils/message';
 
 import {
   closeAssignment,
@@ -23,22 +22,16 @@ import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
 import { useUI } from '@/context/UIContext';
 import SubmitAssignmentModal from '@/components/submissions/SubmitAssignmentModal';
 import SetupChecklist from '@/components/assignments/SetupChecklist';
-import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import Tip from '@/components/common/Tip';
+import { SubmissionProgressOverlay } from '@/components/submissions';
+import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
+
 const { Title, Paragraph } = Typography;
 
 const AssignmentLayout = () => {
   const module = useModule();
-  const {
-    assignment,
-    assignmentFiles,
-    bestMark,
-    attempts,
-    readiness,
-    policy,
-    refreshAssignment,
-    incrementAttempts,
-  } = useAssignment();
+  const { assignment, assignmentFiles, bestMark, attempts, readiness, policy, refreshAssignment } =
+    useAssignment();
   const auth = useAuth();
   const { isMobile, isXxl } = useUI();
   const navigate = useNavigate();
@@ -50,6 +43,11 @@ const AssignmentLayout = () => {
   const [loading, setLoading] = useState(false);
   const [downloadingSpec, setDownloadingSpec] = useState(false);
   const [outletNonce, setOutletNonce] = useState(0);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<number | null>(null);
+  const [deferredSubmit, setDeferredSubmit] = useState<null | (() => Promise<number | null>)>(null);
+
+  // Overlay open state (overlay only shows progress; it does not submit)
+  const [progressOpen, setProgressOpen] = useState(false);
 
   const basePath = `/modules/${module.id}/assignments/${assignment.id}`;
   const isStudentOrTutor = auth.isStudent(module.id) || auth.isTutor(module.id);
@@ -75,20 +73,10 @@ const AssignmentLayout = () => {
       show: true,
       disabled: !isAssignmentReady,
     },
-    {
-      value: `${basePath}/tickets`,
-      label: 'Tickets',
-      show: true,
-      disabled: !isAssignmentReady,
-    },
+    { value: `${basePath}/tickets`, label: 'Tickets', show: true, disabled: !isAssignmentReady },
     ...(isTeachingStaff
       ? [
-          {
-            value: `${basePath}/tasks`,
-            label: 'Tasks',
-            show: true,
-            disabled: false,
-          },
+          { value: `${basePath}/tasks`, label: 'Tasks', show: true, disabled: false },
           {
             value: `${basePath}/grades`,
             label: 'Grades',
@@ -101,22 +89,14 @@ const AssignmentLayout = () => {
             show: true,
             disabled: !isAssignmentReady,
           },
-          {
-            value: `${basePath}/config`,
-            label: 'Files & Config',
-            show: true,
-            disabled: false,
-          },
+          { value: `${basePath}/config`, label: 'Files & Config', show: true, disabled: false },
         ]
       : []),
   ];
 
   const segments = segmentsConfig.filter((seg) => seg.show).map(({ show, ...seg }) => seg);
-
   const isBasePath = location.pathname === basePath || location.pathname === `${basePath}/`;
-
   const normalizedPathname = isBasePath ? `${basePath}/submissions` : location.pathname;
-
   const shouldShowTabs = !isMobile && segments.length > 0;
 
   const candidateActiveKey =
@@ -137,12 +117,10 @@ const AssignmentLayout = () => {
       <span
         onClick={() => {
           if (seg.disabled) return;
-          navigate(seg.value); // always go to the tab’s URL
+          navigate(seg.value);
           if (activeKey === seg.value) {
-            setOutletNonce((n) => n + 1); // soft refresh: remount children
-            refreshAssignment?.(); // optional: re-fetch meta
-            // revalidator.revalidate();       // optional: revalidate loader data
-            // OR do a full-page reload instead: navigate(0)
+            setOutletNonce((n) => n + 1);
+            refreshAssignment?.();
           }
         }}
         style={{ display: 'inline-block', width: '100%' }}
@@ -217,7 +195,7 @@ const AssignmentLayout = () => {
     const hide = message.loading('Generating mark allocator...');
     try {
       const res = await generateMarkAllocator(module.id, assignment.id);
-      hide(); // close the loading message
+      hide();
       if (res.success) {
         await refreshAssignment();
         message.success('Mark allocator generated');
@@ -232,55 +210,63 @@ const AssignmentLayout = () => {
     }
   };
 
+  // Submit immediately here; overlay only shows progress
+  // Submit immediately here; overlay only shows progress
   const handleSubmitAssignment = async (
     file: File,
     isPractice: boolean,
     attestsOwnership: boolean,
   ) => {
     setModalOpen(false);
-    setLoading(true);
-    const hide = message.loading('Submitting assignment...');
-    try {
-      const res = await submitAssignment(
-        module.id,
-        assignment.id,
-        file,
-        isPractice,
-        attestsOwnership,
-      );
+    setProgressOpen(true);
 
-      if (res.success && res.data) {
-        message.success('Submission successful');
-        const submission = res.data;
-        navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${submission.id}`);
-        if (!isPractice) incrementAttempts();
-        // EventBus.emit('submission:updated');
-        // await refreshAssignment();
+    // Build a deferred thunk the overlay can call when WS is ready (or fallback fires)
+    setDeferredSubmit(() => async () => {
+      try {
+        const res = await submitAssignment(
+          module.id,
+          assignment.id,
+          file,
+          isPractice,
+          attestsOwnership,
+          true,
+        );
+
+        const newId = (res as any)?.data?.id as number | undefined;
+        if (newId) {
+          setActiveSubmissionId(newId);
+        }
+
+        if (!res.success) {
+          message.error(res.message || 'Submission failed');
+          // Close overlay because we won’t get WS updates if submission failed
+          setProgressOpen(false);
+          setActiveSubmissionId(null);
+          return null;
+        }
+
+        return newId ?? null;
+      } catch {
+        message.error('Submission failed');
+        setProgressOpen(false);
+        setActiveSubmissionId(null);
+        return null;
       }
-    } catch {
-      message.error('Submission failed');
-    } finally {
-      hide();
-      setLoading(false);
-    }
+    });
   };
 
   const handleDownloadSpec = async () => {
     const specFile = assignmentFiles?.find((f) => f.file_type === 'spec');
-
     if (!specFile) {
       message.error('No specification file found for this assignment.');
       return;
     }
-
     setDownloadingSpec(true);
     const hide = message.loading('Starting specification download...');
-
     try {
       await downloadAssignmentFile(module.id, assignment.id, specFile.id);
-      // apiDownload should trigger the browser download; nothing else to do here
       message.success('Download started');
-    } catch (e) {
+    } catch {
       message.error('Failed to download specification');
     } finally {
       hide();
@@ -310,35 +296,20 @@ const AssignmentLayout = () => {
       hasRequiredFilesForMemoOutput &&
       hasAtLeastOneTask,
   );
-
   const shouldOfferMarkAction = Boolean(
     isTeachingStaff && policy?.submission_mode === 'manual' && readiness?.memo_output_present,
   );
 
   const canGenerateMemoOutput = shouldOfferMemoAction && !readiness?.memo_output_present;
-
   const canGenerateMarkAllocator = shouldOfferMarkAction && !readiness?.mark_allocator_present;
-
   const canSubmitAssignment = assignment.status !== 'setup';
 
   const primaryAction: PrimaryAction | null = canGenerateMemoOutput
-    ? {
-        key: 'memo',
-        label: 'Generate Memo Output',
-        onClick: handleGenerateMemoOutput,
-      }
+    ? { key: 'memo', label: 'Generate Memo Output', onClick: handleGenerateMemoOutput }
     : canGenerateMarkAllocator
-      ? {
-          key: 'mark',
-          label: 'Generate Mark Allocator',
-          onClick: handleGenerateMarkAllocator,
-        }
+      ? { key: 'mark', label: 'Generate Mark Allocator', onClick: handleGenerateMarkAllocator }
       : canSubmitAssignment && (isStudentOrTutor || isTeachingStaff)
-        ? {
-            key: 'submit',
-            label: 'Submit Assignment',
-            onClick: () => setModalOpen(true),
-          }
+        ? { key: 'submit', label: 'Submit Assignment', onClick: () => setModalOpen(true) }
         : null;
 
   const submitSection: MenuProps['items'] = [];
@@ -385,17 +356,8 @@ const AssignmentLayout = () => {
   ];
 
   const archiveSection: MenuProps['items'] = [
-    {
-      key: 'archive',
-      label: 'Archive Assignment',
-      disabled: loading,
-    },
-    {
-      key: 'delete',
-      label: 'Delete Assignment',
-      danger: true,
-      disabled: loading,
-    },
+    { key: 'archive', label: 'Archive Assignment', disabled: loading },
+    { key: 'delete', label: 'Delete Assignment', danger: true, disabled: loading },
   ];
 
   const sectionsForMenu = [
@@ -408,33 +370,22 @@ const AssignmentLayout = () => {
   const menuItems: MenuProps['items'] = [];
   sectionsForMenu.forEach((section, index) => {
     menuItems.push(...section);
-    if (index < sectionsForMenu.length - 1) {
-      menuItems.push({ type: 'divider' });
-    }
+    if (index < sectionsForMenu.length - 1) menuItems.push({ type: 'divider' });
   });
 
   const isSetupIncomplete = isSetupStage && !isAssignmentReady;
 
-  const handleNavigateTo = (path: string) => {
-    navigate(path);
-  };
-
+  const handleNavigateTo = (path: string) => navigate(path);
   const handleNavigateFromModal = (path: string) => {
     setChecklistModalOpen(false);
     navigate(path);
   };
-
   const handleLaunchWizard = (fromModal?: boolean) => {
-    if (fromModal) {
-      setChecklistModalOpen(false);
-    }
+    if (fromModal) setChecklistModalOpen(false);
     setWizardOpen(true);
   };
-
   const handleOpenConfig = (fromModal?: boolean) => {
-    if (fromModal) {
-      setChecklistModalOpen(false);
-    }
+    if (fromModal) setChecklistModalOpen(false);
     navigate(`${basePath}/config`);
   };
 
@@ -462,6 +413,9 @@ const AssignmentLayout = () => {
       navigate(`/modules/${module.id}/assignments`, { replace: true });
     }
   }, [isAssignmentReady, location.pathname, basePath, isTeachingStaff, module.id, navigate]);
+
+  // Submit button disabled state (no “lock” logic now)
+  const submitDisabled = loading || attemptsExhausted || !canSubmitAssignment;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -541,7 +495,6 @@ const AssignmentLayout = () => {
                   </div>
 
                   {/* Right section: Actions */}
-
                   <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
                     {primaryAction &&
                       (isTeachingStaff ? (
@@ -563,12 +516,16 @@ const AssignmentLayout = () => {
                         <Button
                           type="primary"
                           onClick={() => {
-                            if (loading) return;
-                            primaryAction.onClick();
+                            if (submitDisabled || !primaryAction) return;
+                            if (primaryAction.key === 'submit') {
+                              setModalOpen(true);
+                            } else {
+                              void primaryAction.onClick();
+                            }
                           }}
                           loading={loading}
                           className="w-full sm:w-auto"
-                          disabled={loading}
+                          disabled={submitDisabled}
                         >
                           {primaryAction.label}
                         </Button>
@@ -590,7 +547,7 @@ const AssignmentLayout = () => {
                     <Segmented
                       options={segmentsClickable}
                       value={activeKey}
-                      onChange={(key) => navigate(key as string)} // still handles keyboard / non-label clicks
+                      onChange={(key) => navigate(key as string)}
                       size="middle"
                       block
                       className="dark:!bg-gray-950"
@@ -602,14 +559,48 @@ const AssignmentLayout = () => {
 
             {auth.isStudent(module.id) &&
               assignment.due_date &&
-              new Date() > new Date(assignment.due_date) && (
-                <Alert
-                  message="Past Due Date - Practice submissions only"
-                  description="Practice submissions won't be considered for your final mark."
-                  type="warning"
-                  showIcon
-                />
-              )}
+              (() => {
+                const now = new Date();
+                const due = new Date(assignment.due_date);
+
+                if (now <= due) return null; // still before due
+
+                const late = policy?.late;
+
+                if (!late || !late.allow_late_submissions) {
+                  return (
+                    <Alert
+                      message="Past Due Date"
+                      description="Submissions after the due date are not accepted."
+                      type="error"
+                      showIcon
+                    />
+                  );
+                }
+
+                const graceEnd = new Date(due.getTime() + late.late_window_minutes * 60 * 1000);
+
+                if (now > graceEnd) {
+                  return (
+                    <Alert
+                      message="Late Window Expired"
+                      description="The late submission window has ended. No further submissions are accepted."
+                      type="error"
+                      showIcon
+                    />
+                  );
+                }
+
+                return (
+                  <Alert
+                    message="Late Submission Window Active"
+                    description={`Submissions are still accepted until ${graceEnd.toLocaleString()}, 
+          but marks are capped at ${late.late_max_percent}% of the total.`}
+                    type="warning"
+                    showIcon
+                  />
+                );
+              })()}
 
             <div key={`${activeKey}:${outletNonce}`} className="h-full">
               <Outlet />
@@ -668,6 +659,7 @@ const AssignmentLayout = () => {
           )}
         </div>
 
+        {/* Modal to pick the file */}
         <SubmitAssignmentModal
           open={modalOpen}
           onClose={() => setModalOpen(false)}
@@ -690,6 +682,33 @@ const AssignmentLayout = () => {
             setWizardOpen(false);
           }}
         />
+
+        {progressOpen && auth.user?.id && (
+          <SubmissionProgressOverlay
+            moduleId={module.id}
+            assignmentId={assignment.id}
+            userId={auth.user.id}
+            submissionId={activeSubmissionId ?? undefined}
+            triggerSubmit={deferredSubmit ?? undefined}
+            wsConnectTimeoutMs={2500} // fallback if WS doesn’t connect quickly
+            onClose={() => {
+              setProgressOpen(false);
+              setActiveSubmissionId(null);
+              setDeferredSubmit(null);
+              refreshAssignment?.();
+            }}
+            onDone={(submissionId) => {
+              setProgressOpen(false);
+              setActiveSubmissionId(null);
+              setDeferredSubmit(null);
+              refreshAssignment?.();
+              navigate(
+                `/modules/${module.id}/assignments/${assignment.id}/submissions/${submissionId}`,
+                { replace: true },
+              );
+            }}
+          />
+        )}
 
         <Modal
           title={

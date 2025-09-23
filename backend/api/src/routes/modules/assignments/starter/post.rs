@@ -22,8 +22,10 @@ use db::models::{
     assignment_memo_output::{Column as MemoOutCol, Entity as MemoOutEntity},
     assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
 };
+use db::models::{assignment_memo_output, assignment_task};
 use util::{
     execution_config::ExecutionConfig,
+    mark_allocator::{TaskInfo, generate_allocator, save_allocator},
     paths::{
         assignment_dir, config_dir, ensure_dir, main_dir, makefile_dir, mark_allocator_dir,
         mark_allocator_path, memo_dir, memo_output_dir, spec_dir, storage_root,
@@ -46,6 +48,8 @@ struct TaskSeed {
     command: String,
     #[serde(default)]
     code_coverage: bool,
+    #[serde(default)]
+    valgrind: bool,
 }
 
 // TODO
@@ -56,21 +60,25 @@ pub async fn create(
 ) -> impl IntoResponse {
     let db = app_state.db();
 
-    // 1) Ensure assignment exists and belongs to module.
+    println!("Starting starter installation: {}", &body.id);
+
+    // 1) Ensure assignment exists
     match AssignmentEntity::find()
         .filter(AssignmentCol::Id.eq(assignment_id))
         .filter(AssignmentCol::ModuleId.eq(module_id))
         .one(db)
         .await
     {
-        Ok(Some(_)) => {}
+        Ok(Some(_)) => println!("Assignment found: {}", assignment_id),
         Ok(None) => {
+            println!("Assignment not found: {}", assignment_id);
             return (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<JsonValue>::error("Assignment not found")),
             );
         }
-        Err(_) => {
+        Err(e) => {
+            println!("Failed to fetch assignment: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<JsonValue>::error(
@@ -80,143 +88,116 @@ pub async fn create(
         }
     }
 
-    // 2) Resolve pack & ensure embedded assets exist.
+    // 2) Resolve pack & check embedded assets
     let Some(pack) = find_pack(&body.id) else {
+        println!("Unknown starter id: {}", &body.id);
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ApiResponse::<JsonValue>::error("Unknown starter id")),
         );
     };
+    println!("Pack found: {}", pack.id);
+
     if STARTERS_ROOT.get_dir(pack.id).is_none() {
+        println!("Starter assets missing for pack: {}", pack.id);
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ApiResponse::<JsonValue>::error("Starter assets missing")),
         );
     }
 
-    // 3) Full reset of starter artifacts (DB + FS).
+    // 3) Wipe starter artifacts
     if wipe_assignment_starter(module_id, assignment_id, db)
         .await
         .is_err()
     {
+        println!(
+            "Failed to reset starter artifacts for assignment {}",
+            assignment_id
+        );
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<JsonValue>::error(
-                "Failed to reset existing starter artifacts for this assignment.",
+                "Failed to reset existing starter artifacts",
             )),
         );
     }
+    println!("Starter artifacts wiped for assignment {}", assignment_id);
 
-    // 4) Write config (language from pack).
+    // 4) Write config
     let mut cfg = ExecutionConfig::default_config();
     cfg.project.language = pack.language;
     if cfg.save(module_id, assignment_id).is_err() {
+        println!(
+            "Failed to save execution config for assignment {}",
+            assignment_id
+        );
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse::<JsonValue>::error(
-                "Failed to save execution configuration.",
+                "Failed to save execution configuration",
             )),
         );
     }
+    println!("Execution config saved");
 
-    // 5) Save asset subfolders as flat zips (lookup via ROOT using pack.id + subfolder).
-    if install_zip_if_present_root(
-        &pack.id,
-        "main",
-        module_id,
-        assignment_id,
-        FileType::Main,
-        "main.zip",
-        db,
-    )
-    .await
-    .is_err()
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<JsonValue>::error(
-                "Failed to install the 'main' starter files.",
-            )),
-        );
-    }
-    if install_zip_if_present_root(
-        &pack.id,
-        "makefile",
-        module_id,
-        assignment_id,
-        FileType::Makefile,
-        "makefile.zip",
-        db,
-    )
-    .await
-    .is_err()
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<JsonValue>::error(
-                "Failed to install the 'makefile' starter files.",
-            )),
-        );
-    }
-    if install_zip_if_present_root(
-        &pack.id,
-        "memo",
-        module_id,
-        assignment_id,
-        FileType::Memo,
-        "memo.zip",
-        db,
-    )
-    .await
-    .is_err()
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<JsonValue>::error(
-                "Failed to install the 'memo' starter files.",
-            )),
-        );
-    }
-    if install_zip_if_present_root(
-        &pack.id,
-        "spec",
-        module_id,
-        assignment_id,
-        FileType::Spec,
-        "spec.zip",
-        db,
-    )
-    .await
-    .is_err()
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<JsonValue>::error(
-                "Failed to install the 'spec' starter files.",
-            )),
-        );
-    }
-
-    // 6) Seed tasks (tasks.json under pack root, also via ROOT).
-    if create_tasks_from_assets_root(&pack.id, db, assignment_id)
+    // 5) Install zips
+    let zip_steps = ["main", "makefile", "memo", "spec"];
+    for subdir in zip_steps {
+        if let Err(e) = install_zip_if_present_root(
+            pack.id,
+            subdir,
+            module_id,
+            assignment_id,
+            match subdir {
+                "main" => FileType::Main,
+                "makefile" => FileType::Makefile,
+                "memo" => FileType::Memo,
+                "spec" => FileType::Spec,
+                _ => FileType::Main,
+            },
+            &format!("{}.zip", subdir),
+            db,
+        )
         .await
-        .is_err()
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<JsonValue>::error(
-                "Failed to create tasks from assets.",
-            )),
-        );
+        {
+            println!("Failed to install {} starter files: {}", subdir, e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<JsonValue>::error(&format!(
+                    "Failed to install the '{}' starter files",
+                    subdir
+                ))),
+            );
+        }
+        println!("Installed {} starter files", subdir);
     }
 
-    // 7) Best-effort generators (don’t fail request).
+    // 6) Create tasks
+    match create_tasks_from_assets_root(&pack.id, db, assignment_id).await {
+        Ok(n) => println!("Created {} tasks", n),
+        Err(e) => {
+            println!("Failed to create tasks: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<JsonValue>::error(
+                    "Failed to create tasks from assets",
+                )),
+            );
+        }
+    }
+
+    // 7) Best-effort generators
     let _ = code_runner::create_memo_outputs_for_all_tasks(db, assignment_id).await;
     let _ = try_generate_allocator(module_id, assignment_id, db).await;
 
-    // 8) Flip to ready (ignore result).
+    // 8) Flip to ready
     let _ = AssignmentModel::try_transition_to_ready(db, module_id, assignment_id).await;
 
+    println!(
+        "Starter installation complete for assignment {}",
+        assignment_id
+    );
     (
         StatusCode::CREATED,
         Json(ApiResponse::<JsonValue>::success_without_data(
@@ -373,6 +354,7 @@ async fn create_tasks_from_assets_root(
             &t.name,
             &t.command,
             t.code_coverage,
+            t.valgrind,
         )
         .await
         .map_err(|e| format!("Failed to create task {}: {}", t.task_number, e))?;
@@ -386,9 +368,6 @@ async fn try_generate_allocator(
     assignment_id: i64,
     db: &sea_orm::DatabaseConnection,
 ) -> Result<(), String> {
-    use db::models::{assignment_memo_output, assignment_task};
-    use util::mark_allocator::{SaveError, TaskInfo, generate_allocator};
-
     let tasks = assignment_task::Entity::find()
         .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
         .all(db)
@@ -409,6 +388,7 @@ async fn try_generate_allocator(
             id: t.id,
             task_number: t.task_number,
             code_coverage: t.code_coverage,
+            valgrind: t.valgrind,
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {
@@ -425,12 +405,14 @@ async fn try_generate_allocator(
         pairs.push((info, memo_path));
     }
 
-    match generate_allocator(module_id, assignment_id, &pairs).await {
-        Ok(_) => Ok(()),
-        Err(SaveError::DirectoryNotFound) => Err(
-            "Mark allocator directory not found. Ensure the assignment storage folder exists and memo outputs were generated."
-                .to_string(),
-        ),
-        Err(_) => Err("Failed to generate the mark allocator configuration.".to_string()),
-    }
+    // Generate normalized allocator (this pads regex if scheme == Regex)
+    let alloc = generate_allocator(module_id, assignment_id, &pairs)
+        .await
+        .map_err(|e| format!("Failed to generate allocator: {e}"))?;
+
+    // Persist normalized JSON (no legacy wire shape)
+    save_allocator(module_id, assignment_id, &alloc)
+        .map_err(|e| format!("Failed to save allocator: {e}"))?;
+
+    Ok(())
 }

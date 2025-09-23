@@ -74,6 +74,7 @@ mod tests {
             "echo 'Task to Delete'",
             "Task To Delete Name",
             false,
+            false,
         )
         .await
         .expect("Failed to create task to delete");

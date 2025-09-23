@@ -1,5 +1,5 @@
 import type { ApiResponse } from "@/types/common";
-import type { PlagiarismCase, MossFilterMode } from "@/types/modules/assignments/plagiarism";
+import type { PlagiarismCase, MossFilterMode, HashScanData } from "@/types/modules/assignments/plagiarism";
 import { api } from "@/utils/api";
 
 export const createPlagiarismCase = async (
@@ -11,8 +11,8 @@ export const createPlagiarismCase = async (
     description: string;
     similarity: number;
   }
-): Promise<ApiResponse<PlagiarismCase>> => {
-  return api.post(
+) => {
+  return api.post<PlagiarismCase>(
     `/modules/${moduleId}/assignments/${assignmentId}/plagiarism`,
     payload
   );
@@ -38,8 +38,8 @@ export const runMossCheck = async (
   moduleId: number,
   assignmentId: number,
   payload?: RunMossPayload
-): Promise<RunMossJobResponse> => {
-  return api.post(
+) => {
+  return api.post<RunMossJobResponse>(
     `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss`,
     payload ?? {}
   );
@@ -52,5 +52,20 @@ export const archiveMossReport = async (
 ): Promise<ApiResponse<{}>> => {
   return api.post(
     `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/moss/archive`
+  );
+};
+
+export interface HashScanPayload {
+  create_cases?: boolean;
+}
+
+export const runHashScan = async (
+  moduleId: number,
+  assignmentId: number,
+  payload?: HashScanPayload
+) => {
+  return api.post<HashScanData>(
+    `/modules/${moduleId}/assignments/${assignmentId}/plagiarism/hash-scan`,
+    payload ?? {}
   );
 };

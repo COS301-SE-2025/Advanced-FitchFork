@@ -113,7 +113,7 @@ mod tests {
         .await
         .unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false)
+        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
             .await
             .unwrap();
 

@@ -3,6 +3,7 @@ import { Typography, Card, Alert, Space, Collapse, Table } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { CodeEditor } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import { useViewSlot } from '@/context/ViewSlotContext';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -30,7 +31,6 @@ const CAPTURE_ALL_JSON = `{
   }
 }`;
 
-// ✅ Added "Options" column
 const optionCols = [
   { title: 'Setting', dataIndex: 'setting', key: 'setting', width: 260 },
   { title: 'What it does', dataIndex: 'meaning', key: 'meaning' },
@@ -68,6 +68,16 @@ const optionRows = [
 export default function OutputHelp() {
   const { setBreadcrumbLabel } = useBreadcrumbContext();
   const ids = useMemo(() => toc.map((t) => t.href.slice(1)), []);
+  const { setValue, setBackTo } = useViewSlot();
+
+  useEffect(() => {
+    setValue(
+      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+        Output Config
+      </Typography.Text>,
+    );
+    setBackTo('/help');
+  }, []);
 
   useEffect(() => {
     setBreadcrumbLabel('help/assignments/config/output', 'Output');
@@ -108,13 +118,43 @@ export default function OutputHelp() {
 
       <section id="options" className="scroll-mt-24" />
       <Title level={3}>Options & defaults</Title>
-      <Table
-        className="mt-2"
-        size="small"
-        columns={optionCols}
-        dataSource={optionRows}
-        pagination={false}
-      />
+
+      {/* md+ : normal table */}
+      <div className="hidden md:block">
+        <Table
+          size="small"
+          columns={optionCols}
+          dataSource={optionRows}
+          pagination={false}
+          scroll={{ x: true }}
+        />
+      </div>
+
+      {/* <md : cards (no extra shadows) */}
+      <div className="block md:hidden !space-y-3">
+        {optionRows.map((r) => (
+          <Card
+            key={r.key}
+            size="small"
+            title={<div className="text-base font-semibold truncate">{r.setting}</div>}
+          >
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              What it does
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.meaning}</div>
+
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Options
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">{r.options}</div>
+
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
+              Default
+            </div>
+            <div className="text-sm text-gray-900 dark:text-gray-100">{r.def}</div>
+          </Card>
+        ))}
+      </div>
 
       <section id="tips" className="scroll-mt-24" />
       <Title level={3}>Tips</Title>

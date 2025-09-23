@@ -274,7 +274,7 @@ export default function AssignmentFilePage() {
   }, [accept]);
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8">
+    <div className="w-full max-w-4xl space-y-8">
       <div className="space-y-2">
         <div className="flex items-center gap-3">
           <Title level={4} className="!m-0 !text-gray-900 dark:!text-gray-100">

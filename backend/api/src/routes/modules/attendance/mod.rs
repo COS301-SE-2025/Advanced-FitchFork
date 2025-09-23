@@ -19,7 +19,7 @@ pub use post::{create_session, mark_attendance};
 pub use put::edit_session;
 
 use crate::{
-    auth::guards::require_lecturer_or_assistant_lecturer,
+    auth::guards::allow_assistant_lecturer,
     routes::modules::attendance::post::mark_attendance_by_username,
 };
 
@@ -29,42 +29,42 @@ pub fn attendance_routes(app_state: AppState) -> Router<AppState> {
             "/sessions",
             get(list_sessions).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions",
             post(create_session).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}",
             get(get_session).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}",
             put(edit_session).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}",
             delete(delete_session).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}/code",
             get(get_session_code).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route("/sessions/{session_id}/mark", post(mark_attendance))
@@ -72,21 +72,21 @@ pub fn attendance_routes(app_state: AppState) -> Router<AppState> {
             "/sessions/{session_id}/mark/by-username",
             post(mark_attendance_by_username).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}/records",
             get(list_session_records).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .route(
             "/sessions/{session_id}/records/export",
             get(export_session_records_csv).route_layer(from_fn_with_state(
                 app_state.clone(),
-                require_lecturer_or_assistant_lecturer,
+                allow_assistant_lecturer,
             )),
         )
         .with_state(app_state)

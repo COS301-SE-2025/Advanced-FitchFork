@@ -4,7 +4,7 @@ use serde_json::Value;
 /// Pass the **object under "data"** from the /config response: `assert_default_config(&json["data"])`.
 pub fn assert_default_config(d: &Value) {
     // ---------- execution ----------
-    assert_eq!(d["execution"]["timeout_secs"], 10);
+    assert_eq!(d["execution"]["timeout_secs"], 30);
     assert_eq!(d["execution"]["max_memory"], 8_589_934_592u64);
     assert_eq!(d["execution"]["max_cpus"], 2);
     assert_eq!(d["execution"]["max_uncompressed_size"], 100_000_000u64);
@@ -25,6 +25,11 @@ pub fn assert_default_config(d: &Value) {
             .unwrap()
             .is_empty()
     );
+
+    // NEW: late policy defaults
+    assert_eq!(d["marking"]["late"]["allow_late_submissions"], false);
+    assert_eq!(d["marking"]["late"]["late_window_minutes"], 0);
+    assert_eq!(d["marking"]["late"]["late_max_percent"], 100);
 
     // ---------- project ----------
     assert_eq!(d["project"]["language"], "cpp"); // serde rename_all = "lowercase"
@@ -101,9 +106,15 @@ pub fn assert_default_config(d: &Value) {
     );
 
     // ---------- code_coverage ----------
-    assert_eq!(d["code_coverage"]["code_coverage_required"], 80);
+    assert_eq!(d["code_coverage"]["code_coverage_weight"], 10f32);
+    assert!(
+        d["code_coverage"]["whitelist"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "code_coverage.whitelist should default to an empty array"
+    );
 }
-
 fn approx(v: &Value, expected: f64, path: &str) {
     let got = v.as_f64().unwrap();
     assert!(

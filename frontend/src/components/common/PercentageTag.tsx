@@ -1,15 +1,17 @@
+// src/components/common/PercentageTag.tsx
 import React from 'react';
 import { Tag } from 'antd';
 import { useTheme } from '@/context/ThemeContext';
-
-type PaletteName = 'traffic' | 'greenRed' | 'redGreen' | 'blueCyan' | 'purplePink' | 'gray';
+import { scaleColor, type ScaleScheme } from '@/utils/color';
 
 export interface PercentageTagProps {
   value: number;
   min?: number;
   max?: number;
+  /** Color scheme name from utils/color (e.g. 'red-green', 'green-red', 'gray-red', 'blue-red') */
+  scheme?: ScaleScheme;
+  /** Optional custom HEX gradient stops; overrides scheme if provided */
   colors?: string[];
-  palette?: PaletteName;
   showValue?: boolean;
   decimals?: number;
   suffix?: string;
@@ -20,17 +22,9 @@ export interface PercentageTagProps {
   asText?: boolean;
 }
 
-const PRESET_PALETTES: Record<PaletteName, string[]> = {
-  traffic: ['#ef4444', '#f59e0b', '#22c55e'],
-  greenRed: ['#22c55e', '#eab308', '#ef4444'],
-  redGreen: ['#ef4444', '#eab308', '#22c55e'],
-  blueCyan: ['#60a5fa', '#22d3ee'],
-  purplePink: ['#8b5cf6', '#ec4899'],
-  gray: ['#e5e7eb', '#9ca3af', '#4b5563'],
-};
-
+/* helpers (HEX-based) */
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const norm = (v: number, lo: number, hi: number) =>
+const norm01 = (v: number, lo: number, hi: number) =>
   hi === lo ? 0 : clamp((v - lo) / (hi - lo), 0, 1);
 
 function hexToRgb(hex: string) {
@@ -43,10 +37,11 @@ function hexToRgb(hex: string) {
   const n = parseInt(h, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
-const rgbToHex = (r: number, g: number, b: number) =>
-  `#${[r, g, b].map((n) => Math.round(n).toString(16).padStart(2, '0')).join('')}`;
-
-const mix = (aHex: string, bHex: string, t: number) => {
+function rgbToHex(r: number, g: number, b: number) {
+  const toHex = (n: number) => Math.round(n).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+const mixHex = (aHex: string, bHex: string, t: number) => {
   const a = hexToRgb(aHex);
   const b = hexToRgb(bHex);
   return rgbToHex(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
@@ -59,22 +54,21 @@ const lighten = (hex: string, amount: number) => {
   const { r, g, b } = hexToRgb(hex);
   return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
 };
-
-const pickColor = (stops: string[], t01: number) => {
+const pickFromStops = (stops: string[], t01: number) => {
   if (stops.length === 0) return '#999999';
   if (stops.length === 1) return stops[0];
   const pos = t01 * (stops.length - 1);
   const i = Math.floor(pos);
   const f = pos - i;
-  return mix(stops[i], stops[Math.min(i + 1, stops.length - 1)], f);
+  return mixHex(stops[i], stops[Math.min(i + 1, stops.length - 1)], f);
 };
 
 const PercentageTag: React.FC<PercentageTagProps> = ({
   value,
   min = 0,
   max = 100,
+  scheme = 'red-green',
   colors,
-  palette = 'traffic',
   showValue = true,
   decimals = 0,
   suffix = '%',
@@ -85,19 +79,22 @@ const PercentageTag: React.FC<PercentageTagProps> = ({
   asText = false,
 }) => {
   const { isDarkMode } = useTheme();
-  const stops = colors && colors.length >= 2 ? colors : PRESET_PALETTES[palette];
-  const t = norm(value, min, max);
-  const main = pickColor(stops, t);
 
-  // Light vs dark adjustments
-  const bg = isDarkMode ? mix(main, '#000000', 0.82) : mix(main, '#ffffff', 0.86);
+  const t01 = norm01(value, min, max);
+  const pct = Math.round(t01 * 100);
+
+  // main hue (HEX)
+  const main = colors && colors.length >= 2 ? pickFromStops(colors, t01) : scaleColor(pct, scheme);
+
+  // theme-aware background & readable text (HEX)
+  const bg = isDarkMode ? mixHex(main, '#000000', 0.82) : mixHex(main, '#ffffff', 0.86);
   const text = isDarkMode ? lighten(main, 0.35) : darken(main, 0.25);
+
   const content =
     children ?? (showValue ? `${value.toFixed(Math.max(0, decimals))}${suffix}` : null);
   const title = `${value.toFixed(Math.max(0, decimals))}${suffix}`;
 
   if (asText) {
-    // Plain colored text (no border/background)
     return (
       <span
         data-testid={dataTestId ?? 'percentage-text'}
@@ -110,22 +107,17 @@ const PercentageTag: React.FC<PercentageTagProps> = ({
     );
   }
 
-  // Default: AntD Tag
+  // AntD Tag expects HEX in `color` for custom colored tag.
+  // It sets white text by default, so wrap content in a span to override text color reliably.
   return (
     <Tag
       data-testid={dataTestId ?? 'percentage-tag'}
-      bordered
+      color={bg} // <- custom HEX background (and border)
       className={['font-medium', className].filter(Boolean).join(' ')}
-      style={{
-        color: text,
-        backgroundColor: bg,
-        borderColor: main,
-        boxShadow: 'inset 0 0 0 1px var(--tag-border, currentColor, 0)',
-        ...style,
-      }}
+      style={{ borderColor: main, ...style }} // subtle border with main hue
       title={title}
     >
-      {content}
+      <span style={{ color: text }}>{content}</span>
     </Tag>
   );
 };

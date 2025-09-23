@@ -25,10 +25,19 @@ use sea_orm::DatabaseConnection;
 use sea_orm::EntityTrait;
 use sea_orm::QueryFilter;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr},
 };
-use util::state::AppState;
+use util::{config, state::AppState};
+
+// --- Superuser ---
+use once_cell::sync::Lazy;
+
+pub static SUPERUSER_IDS: Lazy<HashSet<i64>> = Lazy::new(|| config::super_users().into());
+
+pub async fn is_superuser(user_id: i64) -> bool {
+    SUPERUSER_IDS.contains(&user_id)
+}
 
 // --- Role Based Access Guards ---
 
@@ -61,19 +70,31 @@ async fn user_has_any_role(
     module_id: i64,
     roles: &[&str],
 ) -> bool {
+    if roles.is_empty() {
+        // No roles specified -> deny (fail-safe)
+        return false;
+    }
+
     for role in roles {
-        if user::Model::is_in_role(db, user_id, module_id, role)
-            .await
-            .unwrap_or(false)
-        {
-            return true;
+        match user::Model::is_in_role(db, user_id, module_id, role).await {
+            Ok(true) => return true,
+            Ok(false) => continue,
+            Err(e) => {
+                // Log and deny on DB error (fail-safe)
+                tracing::warn!(
+                    error = %e,
+                    user_id, module_id, role,
+                    "DB error while checking role; denying access"
+                );
+                return false;
+            }
         }
     }
     false
 }
 
 /// Basic guard to ensure the request is authenticated.
-pub async fn require_authenticated(
+pub async fn allow_authenticated(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
@@ -83,7 +104,7 @@ pub async fn require_authenticated(
 }
 
 /// Admin-only guard.
-pub async fn require_admin(
+pub async fn allow_admin(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
@@ -100,7 +121,7 @@ pub async fn require_admin(
 }
 
 /// Base role-based access guard that other guards can build upon
-async fn require_role_base(
+async fn allow_role_base(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -124,6 +145,10 @@ async fn require_role_base(
         return Ok(next.run(req).await);
     }
 
+    if is_superuser(user.0.sub).await {
+        return Ok(next.run(req).await);
+    }
+
     if user_has_any_role(&db, user.0.sub, module_id, required_roles).await {
         Ok(next.run(req).await)
     } else {
@@ -131,133 +156,116 @@ async fn require_role_base(
     }
 }
 
-/// Guard for requiring lecturer access.
-pub async fn require_lecturer(
+/// Compute the set of roles that are considered "higher or equal" in privilege to the provided role.
+///
+/// Hierarchy (high -> low): Lecturer > AssistantLecturer > Tutor > Student
+/// If you allow a role you implicitly allow all roles ABOVE it ("higher roles").
+/// Example: allowing "Tutor" permits Tutor, AssistantLecturer, and Lecturer; not Students.
+fn roles_higher_or_equal(role: &str) -> &'static [&'static str] {
+    match role {
+        "Lecturer" => &["Lecturer"],
+        "AssistantLecturer" => &["Lecturer", "AssistantLecturer"],
+        "Tutor" => &["Lecturer", "AssistantLecturer", "Tutor"],
+        "Student" => &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
+        _ => &[], // Fail-safe: unknown role => deny later
+    }
+}
+
+/// Guard for allowing Lecturer and higher (effectively just Lecturer, since it's the highest).
+pub async fn allow_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_higher_or_equal("Lecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer"],
-        "Lecturer access required for this module",
+        allowed,
+        "Lecturer (or higher) access required for this module",
     )
     .await
 }
 
-/// Guard for requiring assistant lecturer access.
-pub async fn require_assistant_lecturer(
+/// Guard for allowing AssistantLecturer and higher (AssistantLecturer, Lecturer).
+pub async fn allow_assistant_lecturer(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_higher_or_equal("AssistantLecturer");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["AssistantLecturer"],
-        "Assistant lecturer access required for this module",
-    )
-    .await
-}
-
-/// Guard for requiring tutor access.
-pub async fn require_tutor(
-    State(app_state): State<AppState>,
-    Path(params): Path<HashMap<String, String>>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
-        State(app_state),
-        Path(params),
-        req,
-        next,
-        &["Tutor"],
-        "Tutor access required for this module",
-    )
-    .await
-}
-
-/// Guard for requiring student access.
-pub async fn require_student(
-    State(app_state): State<AppState>,
-    Path(params): Path<HashMap<String, String>>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
-        State(app_state),
-        Path(params),
-        req,
-        next,
-        &["Student"],
-        "Student access required for this module",
-    )
-    .await
-}
-
-/// Guard for requiring lecturer or assistant lecturer access.
-pub async fn require_lecturer_or_assistant_lecturer(
-    State(app_state): State<AppState>,
-    Path(params): Path<HashMap<String, String>>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
-        State(app_state),
-        Path(params),
-        req,
-        next,
-        &["Lecturer", "AssistantLecturer"],
+        allowed,
         "Lecturer or assistant lecturer access required for this module",
     )
     .await
 }
 
-/// Guard for requiring lecturer or tutor access.
-pub async fn require_lecturer_or_tutor(
+/// Guard for allowing Tutor and higher (Tutor, AssistantLecturer, Lecturer).
+pub async fn allow_tutor(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_higher_or_equal("Tutor");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer", "Tutor"],
-        "Lecturer or tutor access required for this module",
+        allowed,
+        "Tutor (or higher) access required for this module",
     )
     .await
 }
 
-/// Guard for requiring any assigned role (lecturer, tutor, student).
-pub async fn require_assigned_to_module(
+/// Guard for allowing Student and higher (Student, Tutor, AssistantLecturer, Lecturer).
+pub async fn allow_student(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
-    require_role_base(
+    let allowed = roles_higher_or_equal("Student");
+    allow_role_base(
         State(app_state),
         Path(params),
         req,
         next,
-        &["Lecturer", "AssistantLecturer", "Tutor", "Student"],
+        allowed,
         "User not assigned to this module",
     )
     .await
 }
 
-pub async fn require_ready_assignment(
+/// Guard for allowing any assigned role (Lecturer, AssistantLecturer, Tutor, Student).
+pub async fn allow_assigned_to_module(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, Json<ApiResponse<Empty>>)> {
+    allow_role_base(
+        State(app_state),
+        Path(params),
+        req,
+        next,
+        roles_higher_or_equal("Student"),
+        "User not assigned to this module",
+    )
+    .await
+}
+
+pub async fn allow_ready_assignment(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -841,8 +849,8 @@ pub async fn validate_known_ids(
     Ok(next.run(req).await)
 }
 
-// TODO Write tests for this guard
-pub async fn require_ticket_ws_access(
+// TODO Write tests for this gaurd
+pub async fn allow_ticket_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: axum::http::Request<Body>,
@@ -927,7 +935,7 @@ pub async fn require_ticket_ws_access(
     ))
 }
 
-pub async fn require_attendance_ws_access(
+pub async fn allow_attendance_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: Request<Body>,
@@ -1000,7 +1008,7 @@ pub async fn require_attendance_ws_access(
 /// Admin + staff (Lecturer, AssistantLecturer, Tutor) are bypassed.
 /// Path must include `{module_id}` and `{assignment_id}`.
 /// When required, PIN is read from `x-assignment-pin` header.
-pub async fn require_assignment_access(
+pub async fn allow_assignment_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,
     req: axum::http::Request<Body>,
@@ -1108,4 +1116,80 @@ pub async fn require_assignment_access(
     }
 
     Ok(next.run(req).await)
+}
+
+/// Owner-only guard for the per-user submission websocket.
+/// Path must include `{module_id}`, `{assignment_id}`, `{user_id}`.
+/// Allowed: ONLY when `AuthUser.sub == user_id`.
+/// Everyone else (including admins / staff) is forbidden.
+/// Validates that `assignment_id` belongs to `module_id`.
+pub async fn allow_submission_ws_owner_only(
+    State(app_state): State<AppState>,
+    Path(params): Path<HashMap<String, String>>,
+    req: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, axum::Json<ApiResponse<Empty>>)> {
+    let db = app_state.db();
+
+    // Auth was done by the top-level .route_layer(from_fn(allow_authenticated))
+    let user = req.extensions().get::<AuthUser>().cloned().ok_or((
+        StatusCode::UNAUTHORIZED,
+        axum::Json(ApiResponse::error("Authentication required")),
+    ))?;
+
+    let module_id = params
+        .get("module_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid module_id")),
+        ))?;
+
+    let assignment_id = params
+        .get("assignment_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid assignment_id")),
+        ))?;
+
+    let user_id = params
+        .get("user_id")
+        .and_then(|s| s.parse::<i64>().ok())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            axum::Json(ApiResponse::error("Missing or invalid user_id")),
+        ))?;
+
+    // Validate relationship: assignment belongs to module (fail-closed on DB errors)
+    use db::models::assignment::{Column as ACol, Entity as AEntity};
+    AEntity::find()
+        .filter(ACol::Id.eq(assignment_id))
+        .filter(ACol::ModuleId.eq(module_id))
+        .one(db)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(ApiResponse::error(
+                    "Database error while checking assignment",
+                )),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            axum::Json(ApiResponse::error("Assignment not found in module")),
+        ))?;
+
+    // Strictly owner-only
+    if user.0.sub == user_id {
+        return Ok(next.run(req).await);
+    }
+
+    Err((
+        StatusCode::FORBIDDEN,
+        axum::Json(ApiResponse::error(
+            "Not allowed to access this submission websocket",
+        )),
+    ))
 }

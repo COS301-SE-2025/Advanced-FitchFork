@@ -1,5 +1,5 @@
 import type { Timestamp } from "@/types/common";
-import type { SubmissionMode, GradingPolicy } from "./config";
+import type { SubmissionMode, GradingPolicy, LateOptions } from "./config";
 
 export const ASSIGNMENT_TYPES = ['assignment', 'practical'] as const;
 export type AssignmentType = (typeof ASSIGNMENT_TYPES)[number];
@@ -63,6 +63,7 @@ export interface AssignmentPolicy {
   grading_policy: GradingPolicy;
   limit_attempts: boolean;
   pass_mark: number;
+  late: LateOptions;
 }
 export interface AssignmentDetails {
   assignment: Assignment;
