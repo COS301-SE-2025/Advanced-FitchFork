@@ -26,42 +26,47 @@ use std::pin::Pin;
 pub struct AutoFeedback;
 
 impl Feedback for AutoFeedback {
-    async fn assemble_feedback(
-        &self,
-        results: &[TaskResult],
-    ) -> Result<Vec<FeedbackEntry>, MarkerError> {
-        let mut feedback_entries = Vec::new();
+    fn assemble_feedback<'a>(
+        &'a self,
+        results: &'a [TaskResult],
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<FeedbackEntry>, MarkerError>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut feedback_entries = Vec::new();
 
-        for result in results {
-            let mut summary = String::new();
+            for result in results {
+                let mut summary = String::new();
 
-            if let Some(return_code) = result.return_code {
-                if return_code != 0 {
-                    if let Some(stderr) = &result.stderr {
-                        if !stderr.trim().is_empty() {
-                            summary.push_str(&format!(
-                                "Code crashed with exit code {}: {}",
-                                return_code,
-                                stderr.trim()
-                            ));
+                if let Some(return_code) = result.return_code {
+                    if return_code != 0 {
+                        if let Some(stderr) = &result.stderr {
+                            if !stderr.trim().is_empty() {
+                                summary.push_str(&format!(
+                                    "Code crashed with exit code {}: {}",
+                                    return_code,
+                                    stderr.trim()
+                                ));
+                            } else {
+                                summary.push_str(&format!(
+                                    "Code crashed with exit code {}",
+                                    return_code
+                                ));
+                            }
                         } else {
                             summary
                                 .push_str(&format!("Code crashed with exit code {}", return_code));
                         }
-                    } else {
-                        summary.push_str(&format!("Code crashed with exit code {}", return_code));
                     }
                 }
-            }
 
-            if summary.is_empty() {
-                let student_set: std::collections::HashSet<&String> =
-                    result.student_output.iter().collect();
-                let memo_set: std::collections::HashSet<&String> =
-                    result.memo_output.iter().collect();
+                if summary.is_empty() {
+                    let student_set: std::collections::HashSet<&String> =
+                        result.student_output.iter().collect();
+                    let memo_set: std::collections::HashSet<&String> =
+                        result.memo_output.iter().collect();
 
-                let feedback_message =
-                    if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
+                    let feedback_message = if memo_set.is_subset(&student_set)
+                        && memo_set.len() < student_set.len()
+                    {
                         println!("TOO MUCH OUTPUT DETECTED");
                         "Too much output"
                     } else if !result.missed_patterns.is_empty() {
@@ -76,14 +81,14 @@ impl Feedback for AutoFeedback {
                         ""
                     };
 
-                summary.push_str(feedback_message);
-            }
+                    summary.push_str(feedback_message);
+                }
 
-            feedback_entries.push(FeedbackEntry {
-                task: result.name.clone(),
-                message: summary,
-            });
-        }
+                feedback_entries.push(FeedbackEntry {
+                    task: result.name.clone(),
+                    message: summary,
+                });
+            }
 
             Ok(feedback_entries)
         })

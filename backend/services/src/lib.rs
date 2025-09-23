@@ -7,6 +7,8 @@ pub mod assignment_overwrite_file;
 pub mod assignment_submission;
 pub mod assignment_submission_output;
 pub mod assignment_task;
+pub mod attendance_record;
+pub mod attendance_session;
 pub mod module;
 pub mod password_reset_token;
 pub mod plagiarism_case;

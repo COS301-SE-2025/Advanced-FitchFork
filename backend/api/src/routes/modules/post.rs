@@ -95,6 +95,15 @@ pub async fn create(
         );
     }
 
+    if !req.code.is_match(r"^[A-Z]{3}\d{3}$") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Code format must be ABC123 (3 uppercase letters followed by 3 digits)",
+            )),
+        );
+    }
+
     let current_year = Utc::now().year();
     if req.year < current_year.into() {
         return (
@@ -103,6 +112,24 @@ pub async fn create(
                 "Year must be {} or later",
                 current_year
             ))),
+        );
+    }
+
+    if req.credits < 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Credits must be a positive number",
+            )),
+        );
+    }
+
+    if req.credits > i32::MAX as i64 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<ModuleResponse>::error(
+                "Credits value is too large",
+            )),
         );
     }
 

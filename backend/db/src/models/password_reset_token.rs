@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
-use rand::distributions::Alphanumeric;
-use rand::{Rng, thread_rng};
+use rand::distr::Alphanumeric;
+use rand::{Rng, rng};
 use sea_orm::ActiveValue::{NotSet, Set};
 use sea_orm::IntoActiveModel;
 use sea_orm::entity::prelude::*;
@@ -40,7 +40,7 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
     pub fn new(user_id: i64, expiry_minutes: i64) -> Self {
-        let token = thread_rng()
+        let token = rng()
             .sample_iter(&Alphanumeric)
             .take(32)
             .map(char::from)

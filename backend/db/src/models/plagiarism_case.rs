@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 use sea_orm::EntityTrait;
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, DbErr, EntityTrait};
 
 /// Represents a detected plagiarism case between two submissions.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -91,49 +90,8 @@ pub enum Relation {
         belongs_to = "super::moss_report::Entity",
         from = "Column::ReportId",
         to = "super::moss_report::Column::Id"
-        // no cascade here; the FK behavior is enforced in the migration (SET NULL)
     )]
     Report,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-impl Model {
-    /// Creates a new plagiarism case entry in the database.
-    ///
-    /// # Arguments
-    /// - `db`: The active database connection.
-    /// - `assignment_id`: Assignment ID.
-    /// - `submission_id_1`: First submission id.
-    /// - `submission_id_2`: Second submission id.
-    /// - `description`: Human readable note.
-    /// - `similarity`: Percentage 0-100.
-    /// - `lines_matched`: Total matched lines for the pair.
-    /// - `report_id`: Optional MOSS report id (nullable; no cascade on delete).
-    pub async fn create_case(
-        db: &DatabaseConnection,
-        assignment_id: i64,
-        submission_id_1: i64,
-        submission_id_2: i64,
-        description: &str,
-        similarity: f32,
-        lines_matched: i64,
-        report_id: Option<i64>,
-    ) -> Result<Self, DbErr> {
-        let now = Utc::now();
-        let active = ActiveModel {
-            assignment_id: Set(assignment_id),
-            submission_id_1: Set(submission_id_1),
-            submission_id_2: Set(submission_id_2),
-            report_id: Set(report_id),
-            description: Set(description.to_string()),
-            status: Set(Status::Review),
-            similarity: Set(similarity),
-            lines_matched: Set(lines_matched),
-            created_at: Set(now),
-            updated_at: Set(now),
-            ..Default::default()
-        };
-        active.insert(db).await
-    }
-}

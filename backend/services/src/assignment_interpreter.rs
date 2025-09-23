@@ -78,28 +78,33 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
         >,
     > {
         Box::pin(async move {
-            if let Some(existing) = Repository::<Entity, Column>::find_one(
-                &vec![
-                    FilterParam::eq("assignment_id", params.assignment_id),
-                    FilterParam::eq("filename", params.clone().filename),
-                ],
-                &vec![],
-                None,
-            )
-            .await?
-            {
-                let existing_path =
-                    AssignmentInterpreterService::storage_root().join(&existing.path);
-                let _ = fs::remove_file(existing_path); // Silently ignore failure
+            // Remove any existing interpreter for this assignment
+            let existing = AssignmentInterpreter::find()
+                .filter(Column::AssignmentId.eq(assignment_id))
+                .all(db)
+                .await?;
 
-                Repository::<Entity, Column>::delete_by_id(existing.id).await?;
+            for record in existing {
+                let existing_path = storage_root().join(&record.path);
+                let _ = fs::remove_file(existing_path);
+                record.delete(db).await?;
             }
 
-            let inserted: Model =
-                Repository::<Entity, Column>::create(params.clone().into_active_model().await?)
-                    .await?;
+            let now = Utc::now();
 
-            let ext = PathBuf::from(params.filename)
+            let partial = ActiveModel {
+                assignment_id: Set(assignment_id),
+                filename: Set(filename.to_string()),
+                path: Set(String::new()),
+                command: Set(command.to_string()),
+                created_at: Set(now),
+                updated_at: Set(now),
+                ..Default::default()
+            };
+
+            let inserted: Model = partial.insert(db).await?;
+
+            let ext = PathBuf::from(filename)
                 .extension()
                 .map(|e| e.to_string_lossy().to_string());
 
@@ -108,28 +113,25 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentInterpreter, UpdateAssignme
                 None => inserted.id.to_string(),
             };
 
-            let dir_path = Self::full_directory_path(params.module_id, params.assignment_id);
-            fs::create_dir_all(&dir_path).map_err(|e| {
-                sea_orm::DbErr::Custom(format!("Failed to create directory: {}", e))
-            })?;
+            let dir_path = interpreter_dir(module_id, assignment_id);
+            fs::create_dir_all(&dir_path)
+                .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
             let file_path = dir_path.join(&stored_filename);
+            fs::write(&file_path, bytes)
+                .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {e}")))?;
+
             let relative_path = file_path
-                .strip_prefix(Self::storage_root())
+                .strip_prefix(storage_root())
                 .unwrap()
                 .to_string_lossy()
                 .to_string();
-
-            fs::write(&file_path, params.bytes)
-                .map_err(|e| sea_orm::DbErr::Custom(format!("Failed to write file: {}", e)))?;
 
             let mut model: ActiveModel = inserted.into();
             model.path = Set(relative_path);
             model.updated_at = Set(Utc::now());
 
-            Repository::<Entity, Column>::update(model)
-                .await
-                .map_err(AppError::from)
+            model.update(db).await
         })
     }
 }
@@ -178,3 +180,85 @@ impl AssignmentInterpreterService {
         fs::remove_file(full_path)
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::test_utils::setup_test_db;
+//     use chrono::Utc;
+//     use sea_orm::Set;
+//     use tempfile::TempDir;
+//     use util::test_helpers::setup_test_assignment_root; // <── use your new helper
+//     use util::paths::{interpreter_dir, interpreter_path};
+//     use serial_test::serial;
+//
+//     fn fake_bytes() -> Vec<u8> {
+//         vec![0x50, 0x4B, 0x03, 0x04] // ZIP signature
+//     }
+//
+//     #[tokio::test]
+//     #[serial]
+//     async fn test_save_and_load_file() {
+//         let temp_dir = setup_test_assignment_root();
+//         let db = setup_test_db().await;
+//
+//         // Insert dummy module so assignment FK passes
+//         let _module = crate::models::module::ActiveModel {
+//             code: Set("COS301".to_string()),
+//             year: Set(2025),
+//             description: Set(Some("Capstone".to_string())),
+//             created_at: Set(Utc::now()),
+//             updated_at: Set(Utc::now()),
+//             ..Default::default()
+//         }
+//         .insert(&db)
+//         .await
+//         .expect("Insert module failed");
+//
+//         // Insert dummy assignment
+//         let _assignment = crate::models::assignment::Model::create(
+//             &db,
+//             1,
+//             "Test Assignment",
+//             Some("Desc"),
+//             crate::models::assignment::AssignmentType::Practical,
+//             Utc::now(),
+//             Utc::now(),
+//         )
+//         .await
+//         .expect("Insert assignment failed");
+//
+//         // Save a fake file
+//         let content = fake_bytes();
+//         let filename = "interpreter.sh";
+//         let command = "sh interpreter.sh";
+//         let saved = Model::save_file(&db, 1, 1, filename, command, &content)
+//             .await
+//             .expect("Failed to save interpreter");
+//
+//         assert_eq!(saved.assignment_id, 1);
+//         assert_eq!(saved.filename, filename);
+//         assert_eq!(saved.command, command);
+//
+//         // Build expected path using path utils
+//         let expected_dir = interpreter_dir(1, 1);
+//         let expected_path = expected_dir.join(filename);
+//         assert!(
+//             expected_path.exists(),
+//             "expected file missing at {:?}",
+//             expected_path
+//         );
+//
+//         // Load contents
+//         let bytes = saved.load_file().unwrap();
+//         assert_eq!(bytes, content);
+//
+//         // Delete file only
+//         saved.delete_file_only().unwrap();
+//         assert!(
+//             !expected_path.exists(),
+//             "file should be removed at {:?}",
+//             expected_path
+//         );
+//     }
+// }

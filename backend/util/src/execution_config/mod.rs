@@ -66,6 +66,23 @@ impl Default for ExecutionLimits {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LatePolicy {
+    /// If false: late submissions are rejected.
+    #[serde(default = "default_allow_late_submissions")]
+    pub allow_late_submissions: bool,
+
+    /// How long after due_date a submission is still accepted as "late", in minutes.
+    /// 0 means only on/before due_date (no late window).
+    #[serde(default = "default_late_window_minutes")]
+    pub late_window_minutes: u32,
+
+    /// Cap on the final score for late submissions, as a percent of total (0–100).
+    /// e.g. 60 => max 60% of total marks.
+    #[serde(default = "default_late_max_percent")]
+    pub late_max_percent: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MarkingOptions {
     #[serde(default = "default_marking_scheme")]
     pub marking_scheme: MarkingScheme,
@@ -98,6 +115,17 @@ pub struct MarkingOptions {
     pub allow_practice_submissions: bool,
     #[serde(default)]
     pub dissalowed_code: Vec<String>,
+
+    #[serde(default = "default_late_policy")]
+    pub late: LatePolicy,
+}
+
+fn default_late_policy() -> LatePolicy {
+    LatePolicy {
+        allow_late_submissions: default_allow_late_submissions(),
+        late_window_minutes: default_late_window_minutes(),
+        late_max_percent: default_late_max_percent(),
+    }
 }
 
 impl Default for MarkingOptions {
@@ -112,6 +140,7 @@ impl Default for MarkingOptions {
             pass_mark: default_pass_mark(),
             allow_practice_submissions: default_allow_practice_submissions(),
             dissalowed_code: vec![],
+            late: default_late_policy(),
         }
     }
 }
@@ -157,12 +186,16 @@ impl Default for ExecutionOutputOptions {
 pub struct CodeCoverage {
     #[serde(default = "default_code_coverage_weight")]
     pub code_coverage_weight: f32,
+
+    #[serde(default)]
+    pub whitelist: Vec<String>,
 }
 
 impl Default for CodeCoverage {
     fn default() -> Self {
         Self {
             code_coverage_weight: default_code_coverage_weight(),
+            whitelist: default_code_coverage_whitelist(),
         }
     }
 }
@@ -447,6 +480,18 @@ fn default_pass_mark() -> u32 {
     50
 }
 
+fn default_allow_late_submissions() -> bool {
+    false
+}
+
+fn default_late_window_minutes() -> u32 {
+    0
+}
+
+fn default_late_max_percent() -> u32 {
+    100
+}
+
 fn default_allow_practice_submissions() -> bool {
     false
 }
@@ -541,4 +586,8 @@ fn default_allowed_cidrs() -> Vec<String> {
 
 fn default_code_coverage_weight() -> f32 {
     10.0
+}
+
+fn default_code_coverage_whitelist() -> Vec<String> {
+    Vec::new()
 }

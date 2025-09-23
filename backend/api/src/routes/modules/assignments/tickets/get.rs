@@ -15,7 +15,7 @@ use crate::{
 };
 use axum::{
     Extension,
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -31,10 +31,7 @@ use sea_orm::{
     QueryOrder, QuerySelect, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
-use services::service::Service;
-use services::ticket::{TicketService, TicketStatus};
-use services::user_module_role::UserModuleRoleService;
-use util::filters::{FilterParam, QueryParam};
+use util::state::AppState;
 
 /// GET /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}
 ///
@@ -98,9 +95,11 @@ use util::filters::{FilterParam, QueryParam};
 /// }
 /// ```
 pub async fn get_ticket(
+    State(app_state): State<AppState>,
     Path((module_id, _, ticket_id)): Path<(i64, i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
     let user_id = claims.sub;
 
     if !is_valid(user_id, ticket_id, module_id, claims.admin).await {
@@ -150,9 +149,9 @@ pub async fn get_ticket(
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
     /// Page number (default: 1)
-    pub page: Option<u64>,
+    pub page: Option<i32>,
     /// Items per page (default: 20, max: 100)
-    pub per_page: Option<u64>,
+    pub per_page: Option<i32>,
     /// Search query (matches title or description)
     pub query: Option<String>,
     /// Filter by ticket status
@@ -165,13 +164,13 @@ pub struct FilterReq {
 #[derive(Serialize)]
 pub struct FilterResponse {
     pub tickets: Vec<TicketResponse>,
-    pub page: u64,
-    pub per_page: u64,
-    pub total: u64,
+    pub page: i32,
+    pub per_page: i32,
+    pub total: i32,
 }
 
 impl FilterResponse {
-    fn new(tickets: Vec<TicketResponse>, page: u64, per_page: u64, total: u64) -> Self {
+    fn new(tickets: Vec<TicketResponse>, page: i32, per_page: i32, total: i32) -> Self {
         Self {
             tickets,
             page,
@@ -179,6 +178,20 @@ impl FilterResponse {
             total,
         }
     }
+}
+
+/// Helper to check if a user is a student in a module
+async fn is_student(module_id: i64, user_id: i64, db: &DatabaseConnection) -> bool {
+    user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(user_id))
+        .filter(user_module_role::Column::ModuleId.eq(module_id))
+        .filter(user_module_role::Column::Role.eq(Role::Student))
+        .join(JoinType::InnerJoin, user_module_role::Relation::User.def())
+        .filter(user::Column::Admin.eq(false))
+        .one(db)
+        .await
+        .map(|opt| opt.is_some())
+        .unwrap_or(false)
 }
 
 /// Retrieves tickets for an assignment with optional filtering, sorting, and pagination.
@@ -232,94 +245,68 @@ impl FilterResponse {
 pub async fn get_tickets(
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
+    State(app_state): State<AppState>,
     Query(params): Query<FilterReq>,
 ) -> impl IntoResponse {
+    let db = app_state.db();
     let user_id = claims.sub;
+
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);
-    let sort = params.sort.clone();
 
-    if let Some(sort_str) = &sort {
+    if let Some(sort_field) = &params.sort {
         let valid_fields = ["created_at", "updated_at", "status"];
-        for field in sort_str.split(',') {
+        for field in sort_field.split(',') {
             let field = field.trim().trim_start_matches('-');
             if !valid_fields.contains(&field) {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
-                );
+                )
+                    .into_response();
             }
         }
     }
 
-    let mut filters = vec![FilterParam::eq("assignment_id", assignment_id)];
-    let mut queries = Vec::new();
+    let mut condition = Condition::all().add(TicketColumn::AssignmentId.eq(assignment_id));
 
-    if !claims.admin {
-        match UserModuleRoleService::find_one(
-            &vec![
-                FilterParam::eq("user_id", user_id),
-                FilterParam::eq("module_id", module_id),
-                FilterParam::eq("role", "student".to_string()),
-            ],
-            &vec![],
-            None,
-        )
-        .await
-        {
-            Ok(Some(_)) => {
-                filters.push(FilterParam::eq("user_id", user_id));
-            }
-            Ok(None) => {}
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<FilterResponse>::error(format!(
-                        "Database error: {}",
-                        e
-                    ))),
-                );
-            }
-        }
-    };
-
-    if let Some(query_text) = params.query {
-        queries.push(QueryParam::new(
-            vec!["title".to_string(), "description".to_string()],
-            query_text,
-        ));
+    if is_student(module_id, user_id, db).await {
+        condition = condition.add(TicketColumn::UserId.eq(user_id));
     }
 
-    if let Some(status_str) = params.status {
-        match status_str.parse::<TicketStatus>() {
+    if let Some(ref query) = params.query {
+        let pattern = format!("%{}%", query.to_lowercase());
+        condition = condition.add(
+            Condition::any()
+                .add(Expr::cust("LOWER(title)").like(&pattern))
+                .add(Expr::cust("LOWER(description)").like(&pattern)),
+        );
+    }
+
+    if let Some(ref status) = params.status {
+        match status.parse::<TicketStatus>() {
             Ok(status_enum) => {
-                filters.push(FilterParam::eq("status", status_enum.to_string()));
+                condition = condition.add(TicketColumn::Status.eq(status_enum));
             }
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<FilterResponse>::error("Invalid status value")),
-                );
+                )
+                    .into_response();
             }
         }
     }
 
-    let (tickets, total) =
-        match TicketService::filter(&filters, &queries, page, per_page, sort).await {
-            Ok(result) => result,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::<FilterResponse>::error(format!(
-                        "Database error: {}",
-                        e
-                    ))),
-                );
-            }
-        };
+    let mut query = TicketEntity::find().filter(condition);
 
-    let ticket_responses: Vec<TicketResponse> =
-        tickets.into_iter().map(TicketResponse::from).collect();
+    if let Some(sort_param) = &params.sort {
+        for sort in sort_param.split(',') {
+            let (field, asc) = if sort.starts_with('-') {
+                (&sort[1..], false)
+            } else {
+                (sort, true)
+            };
 
             query = match field {
                 "created_at" => {

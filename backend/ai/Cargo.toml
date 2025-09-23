@@ -8,7 +8,7 @@ code_runner = { path = "../code_runner" }
 services = { path = "../services" }
 util = { path = "../util" }
 
-rand = "0.8"
+rand = "0.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 dotenv = "0.15"
 serde_json = "1.0"

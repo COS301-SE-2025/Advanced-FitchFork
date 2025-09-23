@@ -4,7 +4,12 @@
 //! It is typically wrapped in an `Arc` and passed into route handlers via Axum's `State<T>` extractor.
 
 use crate::ws::WebSocketManager;
-use sea_orm::DatabaseConnection;
+use dotenvy::dotenv;
+use jsonwebtoken::{DecodingKey, EncodingKey};
+use std::env;
+use std::sync::OnceLock;
+
+static APP_STATE: OnceLock<AppState> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -21,7 +26,6 @@ impl AppState {
             dotenv().ok();
 
             let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set at startup");
-
             let jwt_duration_minutes = env::var("JWT_DURATION_MINUTES")
                 .expect("JWT_DURATION_MINUTES must be set at startup")
                 .parse::<i64>()

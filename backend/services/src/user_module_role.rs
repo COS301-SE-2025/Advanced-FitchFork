@@ -4,7 +4,7 @@ use db::{
         module::{Column as ModuleColumn, Entity as ModuleEntity, Model as ModuleModel},
         user_module_role::{
             ActiveModel, Column as UserModuleRoleColumn, Entity as UserModuleRoleEntity,
-            Model as UserModuleRoleModel, Role,
+            Model as UserModuleRoleModel,
         },
     },
     repository::Repository,
@@ -14,6 +14,7 @@ use serde::Serialize;
 use util::filters::FilterParam;
 
 pub use db::models::user_module_role::Model as UserModuleRole;
+pub use db::models::user_module_role::Role;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserModuleRoleInfo {
@@ -24,21 +25,21 @@ pub struct UserModuleRoleInfo {
     pub module_credits: i64,
     pub module_created_at: String,
     pub module_updated_at: String,
-    pub role: String,
+    pub role: Role,
 }
 
 #[derive(Debug, Clone)]
 pub struct CreateUserModuleRole {
     pub user_id: i64,
     pub module_id: i64,
-    pub role: String,
+    pub role: Role,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateUserModuleRole {
     pub user_id: i64,
     pub module_id: i64,
-    pub role: Option<String>,
+    pub role: Option<Role>,
 }
 
 impl ToActiveModel<UserModuleRoleEntity> for CreateUserModuleRole {
@@ -46,9 +47,7 @@ impl ToActiveModel<UserModuleRoleEntity> for CreateUserModuleRole {
         Ok(ActiveModel {
             user_id: Set(self.user_id),
             module_id: Set(self.module_id),
-            role: Set(self.role.trim().parse::<Role>().map_err(|e| {
-                DbErr::Custom(format!("Invalid role string '{}': {}", self.role, e))
-            })?),
+            role: Set(self.role),
             ..Default::default()
         })
     }
@@ -74,10 +73,7 @@ impl ToActiveModel<UserModuleRoleEntity> for UpdateUserModuleRole {
         let mut active: ActiveModel = task.into();
 
         if let Some(role) = self.role {
-            active.role = Set(role
-                .trim()
-                .parse::<Role>()
-                .map_err(|e| DbErr::Custom(format!("Invalid role string '{}': {}", role, e)))?);
+            active.role = Set(role);
         }
 
         Ok(active)
@@ -173,7 +169,7 @@ impl UserModuleRoleService {
         Ok(result)
     }
 
-    pub async fn is_in_role(user_id: i64, module_id: i64, role: String) -> Result<bool, DbErr> {
+    pub async fn is_in_role(user_id: i64, module_id: i64, role: Role) -> Result<bool, DbErr> {
         Repository::<UserModuleRoleEntity, UserModuleRoleColumn>::exists(
             &vec![
                 FilterParam::eq("user_id", user_id),

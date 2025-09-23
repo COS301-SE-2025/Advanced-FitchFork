@@ -16,7 +16,7 @@ pub use db::models::assignment_file::Model as AssignmentFile;
 pub struct CreateAssignmentFile {
     pub assignment_id: i64,
     pub module_id: i64,
-    pub file_type: String,
+    pub file_type: FileType,
     pub filename: String,
     pub bytes: Vec<u8>,
 }
@@ -34,9 +34,7 @@ impl ToActiveModel<Entity> for CreateAssignmentFile {
             assignment_id: Set(self.assignment_id),
             filename: Set(self.filename),
             path: Set("".to_string()), // will be updated after write
-            file_type: Set(self.file_type.trim().parse::<FileType>().map_err(|e| {
-                DbErr::Custom(format!("Invalid file type '{}': {}", self.file_type, e))
-            })?),
+            file_type: Set(self.file_type),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
@@ -87,64 +85,88 @@ impl<'a> Service<'a, Entity, Column, CreateAssignmentFile, UpdateAssignmentFile>
         >,
     > {
         Box::pin(async move {
+            let now = Utc::now();
+
+            // If a row of this type already exists for this assignment, overwrite the tracked file.
             if let Some(existing) = Repository::<Entity, Column>::find_one(
                 &vec![
                     FilterParam::eq("assignment_id", params.assignment_id),
-                    FilterParam::eq("file_type", params.clone().file_type),
+                    FilterParam::eq("file_type", params.file_type),
                 ],
                 &vec![],
                 None,
             )
             .await?
             {
-                let existing_path = AssignmentFileService::storage_root().join(&existing.path);
-                let _ = fs::remove_file(existing_path); // Silently ignore failure
+                let tracked_full = Self::storage_root().join(&existing.path);
+                if let Some(parent) = tracked_full.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
+                }
+                fs::write(&tracked_full, params.bytes)
+                    .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-                Repository::<Entity, Column>::delete_by_id(existing.id).await?;
+                // Mirror to canonical config.json if needed
+                if params.file_type == FileType::Config {
+                    let canonical =
+                        Self::full_directory_path(params.module_id, params.assignment_id, &FileType::Config)
+                            .join("config.json");
+                    if canonical != tracked_full {
+                        if let Some(parent) = canonical.parent() {
+                            fs::create_dir_all(parent).map_err(|e| {
+                                DbErr::Custom(format!("Failed to create directory: {e}"))
+                            })?;
+                        }
+                        fs::write(&canonical, params.bytes).map_err(|e| {
+                            DbErr::Custom(format!("Failed to write canonical file: {e}"))
+                        })?;
+                    }
+                }
+
+                let mut am: ActiveModel = existing.into();
+                am.filename = Set(params.filename.to_string());
+                am.updated_at = Set(now);
+                
+                Repository::<Entity, Column>::update(am).await
             }
 
-            let inserted: Model =
-                Repository::<Entity, Column>::create(params.clone().into_active_model().await?)
-                    .await?;
-
-            let ext = PathBuf::from(params.filename)
-                .extension()
-                .map(|e| e.to_string_lossy().to_string());
-
-            let stored_filename = match ext {
-                Some(ext) => format!("{}.{}", inserted.id, ext),
-                None => inserted.id.to_string(),
-            };
-
-            let file_type = params
-                .file_type
-                .parse::<FileType>()
-                .map_err(|e| DbErr::Custom(format!("Invalid file type: {e}")))?;
-            let dir_path = AssignmentFileService::full_directory_path(
-                params.module_id,
-                params.assignment_id,
-                &file_type,
-            );
+            // No existing row: create directory and choose a canonical stored filename
+            let dir_path = Self::full_directory_path(params.module_id, params.assignment_id, &params.file_type);
             fs::create_dir_all(&dir_path)
                 .map_err(|e| DbErr::Custom(format!("Failed to create directory: {e}")))?;
 
-            let file_path = dir_path.join(&stored_filename);
-            let relative_path = file_path
-                .strip_prefix(AssignmentFileService::storage_root())
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
+            let stored_filename: String = if params.file_type == FileType::Config {
+                // canonical name for configs
+                "config.json".to_string()
+            } else {
+                PathBuf::from(params.filename)
+                    .file_name()
+                    .unwrap_or_else(|| OsStr::new("file"))
+                    .to_string_lossy()
+                    .to_string()
+            };
 
+            let file_path = dir_path.join(&stored_filename);
             fs::write(&file_path, params.bytes)
                 .map_err(|e| DbErr::Custom(format!("Failed to write file: {e}")))?;
 
-            let mut model: ActiveModel = inserted.into();
-            model.path = Set(relative_path);
-            model.updated_at = Set(Utc::now());
+            // In some test envs the temp storage root may differ; fall back to absolute.
+            let relative_path = match file_path.strip_prefix(storage_root()) {
+                Ok(p) => p.to_string_lossy().to_string(),
+                Err(_) => file_path.to_string_lossy().to_string(),
+            };
 
-            Repository::<Entity, Column>::update(model)
-                .await
-                .map_err(AppError::from)
+            let partial = ActiveModel {
+                assignment_id: Set(params.assignment_id),
+                filename: Set(stored_filename),
+                path: Set(relative_path),
+                file_type: Set(params.file_type),
+                created_at: Set(now),
+                updated_at: Set(now),
+                ..Default::default()
+            };
+
+            partial.insert(db).await
         })
     }
 }
@@ -182,10 +204,14 @@ impl AssignmentFileService {
         assignment_id: i64,
         file_type: &FileType,
     ) -> PathBuf {
-        Self::storage_root()
-            .join(format!("module_{module_id}"))
-            .join(format!("assignment_{assignment_id}"))
-            .join(file_type.to_string())
+        match file_type {
+            FileType::Config => config_dir(module_id, assignment_id),
+            FileType::Main => main_dir(module_id, assignment_id),
+            FileType::Memo => memo_dir(module_id, assignment_id),
+            FileType::Makefile => makefile_dir(module_id, assignment_id),
+            FileType::MarkAllocator => mark_allocator_dir(module_id, assignment_id),
+            FileType::Spec => spec_dir(module_id, assignment_id),
+        }
     }
 
     pub fn full_path(path: &str) -> PathBuf {
@@ -220,13 +246,92 @@ impl AssignmentFileService {
         fs::remove_file(full_path)
     }
 
-    // TODO: Change this to get the skeleton files instead of the memo files
-    pub async fn get_base_files(assignment_id: i64) -> Result<Vec<Model>, DbErr> {
-        Repository::<Entity, Column>::find_all(
-            &vec![FilterParam::eq("assignment_id", assignment_id)],
-            &vec![],
-            None,
-        )
-        .await
+    pub async fn get_base_files(
+        db: &DatabaseConnection,
+        assignment_id: i64,
+    ) -> Result<Vec<Self>, DbErr> {
+        use crate::models::assignment_file::Column;
+        Entity::find()
+            .filter(Column::AssignmentId.eq(assignment_id))
+            .filter(Column::FileType.eq(FileType::Spec))
+            .all(db)
+            .await
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::models::assignment::AssignmentType;
+//     use crate::test_utils::setup_test_db;
+//     use chrono::Utc;
+//     use sea_orm::Set;
+//     use util::paths::storage_root;
+//     use util::test_helpers::setup_test_storage_root;
+
+//     fn fake_bytes() -> Vec<u8> {
+//         vec![0x50, 0x4B, 0x03, 0x04] // ZIP file signature
+//     }
+
+//     #[tokio::test]
+//     #[ignore]
+//     async fn test_save_and_load_file() {
+//         let _tmp = setup_test_storage_root();
+//         let db = setup_test_db().await;
+
+//         // Insert dummy module so assignment FK passes
+//         let _module = crate::models::module::ActiveModel {
+//             code: Set("COS301".to_string()),
+//             year: Set(2025),
+//             description: Set(Some("Capstone".to_string())),
+//             created_at: Set(Utc::now()),
+//             updated_at: Set(Utc::now()),
+//             ..Default::default()
+//         }
+//         .insert(&db)
+//         .await
+//         .expect("Insert module failed");
+
+//         // Insert dummy assignment using enum value for assignment_type
+//         let _assignment = crate::models::assignment::Model::create(
+//             &db,
+//             1,
+//             "Test Assignment",
+//             Some("Desc"),
+//             AssignmentType::Practical,
+//             Utc::now(),
+//             Utc::now(),
+//         )
+//         .await
+//         .expect("Insert assignment failed");
+
+//         let content = fake_bytes();
+//         let filename = "test_file.zip";
+//         let saved = Model::save_file(
+//             &db,
+//             1, // assignment_id
+//             1, // module_id
+//             FileType::Spec,
+//             filename,
+//             &content,
+//         )
+//         .await
+//         .unwrap();
+
+//         assert_eq!(saved.assignment_id, 1);
+//         assert_eq!(saved.filename, filename);
+//         assert_eq!(saved.file_type, FileType::Spec);
+
+//         // Confirm file on disk
+//         let full_path = storage_root().join(&saved.path);
+//         assert!(full_path.exists());
+
+//         // Load contents
+//         let bytes = saved.load_file().unwrap();
+//         assert_eq!(bytes, content);
+
+//         // Delete file only
+//         saved.delete_file_only().unwrap();
+//         assert!(!full_path.exists());
+//     }
+// }

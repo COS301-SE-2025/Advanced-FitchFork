@@ -28,11 +28,11 @@ impl Seeder for TicketSeeder {
                 "Other module-related inquiry.",
             ];
 
-            let assignments = AssignmentService::find_all(&vec![], &vec![], None).await?;
-            let users = UserService::find_all(&vec![], &vec![], None).await?;
+            let assignments = assignment::Entity::find().all(db).await.unwrap_or_default();
+            let users = user::Entity::find().all(db).await.unwrap_or_default();
 
             if assignments.is_empty() || users.is_empty() {
-                return Err(AppError::DatabaseUnknown);
+                return;
             }
 
             for _ in 0..50 {
@@ -43,18 +43,21 @@ impl Seeder for TicketSeeder {
                 let description = descriptions.choose(&mut rng).unwrap().to_string();
                 let status = statuses.choose(&mut rng).unwrap();
 
-            let ticket = tickets::ActiveModel {
-                assignment_id: Set(assignment.id),
-                user_id: Set(user.id),
-                title: Set(title),
-                description: Set(description),
-                status: Set(status.parse().unwrap()),
-                created_at: Set(Utc::now()),
-                updated_at: Set(Utc::now()),
-                ..Default::default()
-            };
+                let ticket = tickets::ActiveModel {
+                    assignment_id: Set(assignment.id),
+                    user_id: Set(user.id),
+                    title: Set(title),
+                    description: Set(description),
+                    status: Set(status.parse().unwrap()),
+                    created_at: Set(Utc::now()),
+                    updated_at: Set(Utc::now()),
+                    ..Default::default()
+                };
 
-            let _ = ticket.insert(db).await;
-        }
+                let _ = ticket.insert(db).await;
+
+                Ok(())
+            }
+        })
     }
 }

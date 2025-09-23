@@ -559,14 +559,48 @@ const AssignmentLayout = () => {
 
             {auth.isStudent(module.id) &&
               assignment.due_date &&
-              new Date() > new Date(assignment.due_date) && (
-                <Alert
-                  message="Past Due Date - Practice submissions only"
-                  description="Practice submissions won't be considered for your final mark."
-                  type="warning"
-                  showIcon
-                />
-              )}
+              (() => {
+                const now = new Date();
+                const due = new Date(assignment.due_date);
+
+                if (now <= due) return null; // still before due
+
+                const late = policy?.late;
+
+                if (!late || !late.allow_late_submissions) {
+                  return (
+                    <Alert
+                      message="Past Due Date"
+                      description="Submissions after the due date are not accepted."
+                      type="error"
+                      showIcon
+                    />
+                  );
+                }
+
+                const graceEnd = new Date(due.getTime() + late.late_window_minutes * 60 * 1000);
+
+                if (now > graceEnd) {
+                  return (
+                    <Alert
+                      message="Late Window Expired"
+                      description="The late submission window has ended. No further submissions are accepted."
+                      type="error"
+                      showIcon
+                    />
+                  );
+                }
+
+                return (
+                  <Alert
+                    message="Late Submission Window Active"
+                    description={`Submissions are still accepted until ${graceEnd.toLocaleString()}, 
+          but marks are capped at ${late.late_max_percent}% of the total.`}
+                    type="warning"
+                    showIcon
+                  />
+                );
+              })()}
 
             <div key={`${activeKey}:${outletNonce}`} className="h-full">
               <Outlet />
@@ -649,7 +683,6 @@ const AssignmentLayout = () => {
           }}
         />
 
-        {/* Overlay only renders progress (no payload) */}
         {progressOpen && auth.user?.id && (
           <SubmissionProgressOverlay
             moduleId={module.id}
@@ -658,11 +691,17 @@ const AssignmentLayout = () => {
             submissionId={activeSubmissionId ?? undefined}
             triggerSubmit={deferredSubmit ?? undefined}
             wsConnectTimeoutMs={2500} // fallback if WS doesn’t connect quickly
-            onClose={() => setProgressOpen(false)}
+            onClose={() => {
+              setProgressOpen(false);
+              setActiveSubmissionId(null);
+              setDeferredSubmit(null);
+              refreshAssignment?.();
+            }}
             onDone={(submissionId) => {
               setProgressOpen(false);
               setActiveSubmissionId(null);
-              setDeferredSubmit(null); // cleanup
+              setDeferredSubmit(null);
+              refreshAssignment?.();
               navigate(
                 `/modules/${module.id}/assignments/${assignment.id}/submissions/${submissionId}`,
                 { replace: true },

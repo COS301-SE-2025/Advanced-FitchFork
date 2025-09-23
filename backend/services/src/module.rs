@@ -94,30 +94,26 @@ impl<'a> Service<'a, Entity, Column, CreateModule, UpdateModule> for ModuleServi
 
     fn delete_by_id(id: i64) -> Pin<Box<dyn Future<Output = Result<(), AppError>> + Send>> {
         Box::pin(async move {
-            let storage_root = env::var("ASSIGNMENT_STORAGE_ROOT")
-                .unwrap_or_else(|_| "data/assignment_files".to_string());
+            // Step 1: Let DB cascade delete assignments
+            info!("Deleting module {} and cascading assignments", self.id);
 
-            let module_dir = PathBuf::from(storage_root).join(format!("module_{}", id));
+            // Step 2: Remove module-level folder
+            let dir = module_dir(self.id);
 
-            if module_dir.exists() {
-                match fs::remove_dir_all(&module_dir) {
-                    Ok(_) => info!("Deleted module directory {}", module_dir.display()),
-                    Err(e) => warn!(
-                        "Failed to delete module directory {}: {}",
-                        module_dir.display(),
-                        e
-                    ),
+            if dir.exists() {
+                match fs::remove_dir_all(&dir) {
+                    Ok(_) => info!("Deleted module directory {}", dir.display()),
+                    Err(e) => warn!("Failed to delete module directory {}: {}", dir.display(), e),
                 }
             } else {
-                warn!(
-                    "Expected module directory {} does not exist",
-                    module_dir.display()
-                );
+                warn!("Expected module directory {} does not exist", dir.display());
             }
 
-            Repository::<Entity, Column>::delete_by_id(id)
-                .await
-                .map_err(AppError::from)
+            // Step 3: Delete the module
+            Entity::delete_by_id(self.id).exec(db).await?;
+            info!("Deleted module {}", self.id);
+
+            Ok(())
         })
     }
 }

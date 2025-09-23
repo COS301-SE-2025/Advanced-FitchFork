@@ -226,6 +226,26 @@ impl UserService {
             .verify_password(password.as_bytes(), &parsed)
             .is_ok()
     }
+
+    pub async fn get_emails_by_module_id(db: &DatabaseConnection, module_id: i64) -> Vec<String> {
+        let roles = RoleEntity::find()
+            .filter(RoleColumn::ModuleId.eq(module_id))
+            .all(db)
+            .await
+            .unwrap_or_default();
+
+        let mut emails: Vec<String> = Vec::new();
+        for role in roles {
+            if let Some(user) = UserEntity::find_by_id(role.user_id)
+                .one(db)
+                .await
+                .unwrap_or(None)
+            {
+                emails.push(user.email.clone());
+            }
+        }
+        emails
+    }
 }
 
 // #[cfg(test)]

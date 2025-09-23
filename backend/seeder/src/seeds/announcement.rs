@@ -39,21 +39,21 @@ impl Seeder for AnnouncementSeeder {
                 "Reading list update",
             ];
 
-        for m in modules {
-            // Prefer module staff as authors
-            let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
-                .filter(user_module_role::Column::ModuleId.eq(m.id))
-                .filter(user_module_role::Column::Role.is_in(vec![
-                    ModuleRole::Lecturer,
-                    ModuleRole::AssistantLecturer,
-                    ModuleRole::Tutor,
-                ]))
-                .all(db)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .map(|r| r.user_id)
-                .collect();
+            for m in modules {
+                // Prefer module staff as authors
+                let staff_user_ids: Vec<i64> = user_module_role::Entity::find()
+                    .filter(user_module_role::Column::ModuleId.eq(m.id))
+                    .filter(user_module_role::Column::Role.is_in(vec![
+                        ModuleRole::Lecturer,
+                        ModuleRole::AssistantLecturer,
+                        ModuleRole::Tutor,
+                    ]))
+                    .all(db)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|r| r.user_id)
+                    .collect();
 
                 let pick_author = |rng: &mut StdRng| -> i64 {
                     if !staff_user_ids.is_empty() {

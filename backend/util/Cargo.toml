@@ -18,7 +18,7 @@ dotenvy = "0.15"
 sea-orm-migration = "1.1"
 bytes = "1"
 regex = "1.11.2"
-zip = "5.0.1"
+zip = "5.1.1"
 tar = "0.4"
 flate2 = "1.0"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

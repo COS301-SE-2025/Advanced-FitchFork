@@ -14,5 +14,5 @@ fake = "4.3"
 fastrand = "2.0"
 colored = "3.0"
 futures = "0.3"
-rand = "0.8" # Using older version of rand because sqlx and other packages are behind
+rand = "0.9"
 zip = "5.0"

@@ -1,29 +1,38 @@
+pub mod filter_utils;
 pub mod grade;
 pub mod models;
 pub mod repository;
-pub mod test_utils;
 
+use migration::Migrator;
 use sea_orm::{Database, DatabaseConnection};
-use std::path::Path;
-use util::config;
+use sea_orm_migration::MigratorTrait;
+use std::env;
+use tokio::sync::OnceCell;
+use util::state::AppState;
 
-pub async fn connect() -> DatabaseConnection {
-    let path_or_url = config::database_path(); // your env var
-    // If it's already a DSN, use it as-is; otherwise treat it as a SQLite file path.
-    let url = if path_or_url.starts_with("sqlite:")
-        || path_or_url.starts_with("postgres://")
-        || path_or_url.starts_with("mysql://")
-    {
-        path_or_url
-    } else {
-        // Ensure parent directory exists (SQLite won't create intermediate dirs).
-        if let Some(parent) = Path::new(&path_or_url).parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        format!("sqlite://{path_or_url}") // yields sqlite:///abs/path for absolute paths
-    };
+static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::const_new();
 
-    Database::connect(&url)
+pub async fn get_connection() -> &'static DatabaseConnection {
+    DB_CONNECTION
+        .get_or_init(|| async {
+            let state = AppState::get();
+            let db_url = if state.is_test_mode() {
+                "sqlite://test.db?mode=rwc".to_string() // TODO: Try to figure out how to make this in memory
+            } else {
+                env::var("DATABASE_PATH")
+                    .map(|path| format!("sqlite://{}?mode=rwc", path))
+                    .expect("DATABASE_PATH must be set in .env when TEST_MODE=false")
+            };
+
+            let db = Database::connect(&db_url)
+                .await
+                .expect("Failed to connect to database");
+
+            Migrator::up(&db, None)
+                .await
+                .expect("Failed to run migrations");
+
+            db
+        })
         .await
-        .expect("Failed to connect to database")
 }

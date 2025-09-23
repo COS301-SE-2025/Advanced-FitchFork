@@ -23,6 +23,7 @@ pub struct UpdateAssignmentTask {
     pub id: i64,
     pub name: Option<String>,
     pub command: Option<String>,
+    pub code_coverage: Option<bool>,
 }
 
 impl ToActiveModel<Entity> for CreateAssignmentTask {
@@ -62,6 +63,10 @@ impl ToActiveModel<Entity> for UpdateAssignmentTask {
 
         if let Some(command) = self.command {
             active.command = Set(command);
+        }
+
+        if let Some(code_coverage) = self.code_coverage {
+            active.code_coverage = Set(code_coverage);
         }
 
         active.updated_at = Set(Utc::now());

@@ -1,10 +1,10 @@
-use db::test_utils::clean_db;
-use sea_orm::DbErr;
+// use db::test_utils::clean_db;
+// use sea_orm::DbErr;
 
-pub struct UtilService {}
+// pub struct UtilService {}
 
-impl UtilService {
-    pub async fn clean_db() -> Result<(), DbErr> {
-        clean_db().await
-    }
-}
+// impl UtilService {
+//     pub async fn clean_db() -> Result<(), DbErr> {
+//         clean_db().await
+//     }
+// }

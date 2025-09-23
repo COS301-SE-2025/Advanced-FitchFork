@@ -7,9 +7,9 @@ edition = "2021"
 db = { path = "../db" }
 util ={ path = "../util" }
 
-sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+sea-orm = { version = "1.1", features = ["runtime-tokio-rustls"] }
 argon2 = "0.5"
-rand = "0.8"
+rand = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
@@ -17,3 +17,5 @@ serde = { version = "1.0", features = ["derive"] }
 validator = { version = "0.20", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
+hmac = "0.12"
+sha2 = "0.10"

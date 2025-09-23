@@ -6,12 +6,12 @@ use crate::response::ApiResponse;
 use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use db::models::assignment::Entity as AssignmentEntity;
+use db::models::assignment::Entity as AssignmentEntity;
+use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
 use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
 use db::models::assignment_overwrite_file::{
     Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
 };
-use db::models::assignment::Entity as AssignmentEntity;
-use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
 use db::models::assignment_overwrite_file::{
     Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
 };
@@ -20,8 +20,8 @@ use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder}
 use serde::Serialize;
 use std::fs;
 use util::paths::memo_output_dir;
+use util::paths::storage_root;
 use util::{execution_config::ExecutionConfig, state::AppState};
-use util::{mark_allocator::load_allocator, paths::storage_root};
 
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
@@ -87,93 +87,48 @@ pub struct TaskDetailResponse {
 ///       {
 ///         "name": "Compilation",
 ///         "value": 10,
-///         "memo_output": "Code compiles successfully without errors."
-///       },
-///       {
-///         "name": "Output",
-///         "value": 15,
-///         "memo_output": "Program produces correct output for all test cases."
+///         "memo_output": "Code compiles successfully without errors.",
+///         "feedback": null,
+///         "regex": ["^OK$"]
 ///       }
 ///     ]
 ///   }
 /// }
 /// ```
 ///
+/// (If no mark allocator exists yet or the task isn’t defined in it, `"subsections": []`.)
+///
 /// - `404 Not Found`
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Module not found"
-/// }
+/// { "success": false, "message": "Assignment not found" }
 /// ```
 /// or
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment not found"
-/// }
+/// { "success": false, "message": "Task not found" }
 /// ```
 /// or
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Task not found"
-/// }
+/// { "success": false, "message": "Assignment does not belong to this module" }
 /// ```
 /// or
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment does not belong to this module"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Task does not belong to this assignment"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Task not found in allocator"
-/// }
+/// { "success": false, "message": "Task does not belong to this assignment" }
 /// ```
 ///
 /// - `500 Internal Server Error`
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Database error retrieving module"
-/// }
+/// { "success": false, "message": "Database error retrieving assignment" }
 /// ```
 /// or
 /// ```json
-/// {
-///   "success": false,
-///   "message": "Database error retrieving assignment"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Database error retrieving task"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to load mark allocator"
-/// }
+/// { "success": false, "message": "Database error retrieving task" }
 /// ```
 ///
 /// ### Notes
+/// - The mark allocator is **optional**. If absent or if the task is not defined within it, the
+///   endpoint still returns `200 OK` with `"subsections": []`.
 /// - `code_coverage: true` marks this task as a **coverage-type** task (special handling by the evaluator).
-/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter.
+/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"&-=-&"`).
 pub async fn get_task_details(
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
@@ -198,7 +153,7 @@ pub async fn get_task_details(
         }
     };
 
-    // Validate assignment exists and belongs to module
+    // Validate assignment exists and belongs to module; task belongs to assignment
     let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
         Ok(Some(a)) => a,
         Ok(None) => {
@@ -282,7 +237,7 @@ pub async fn get_task_details(
     };
 
     // Split memo into chunks per subsection; drop the leading chunk before the first delimiter
-    let parts: Vec<Option<String>> = if let Some(ref memo) = memo_content {
+    let mut memo_chunks: Vec<Option<String>> = if let Some(ref memo) = memo_content {
         memo.split(&separator)
             .map(|s| {
                 let t = s.trim();
@@ -292,57 +247,45 @@ pub async fn get_task_details(
                     Some(t.to_string())
                 }
             })
+            .skip(1) // first chunk is preamble before the first delimiter
             .collect()
     } else {
         Vec::new()
     };
-    let mut subsection_outputs: Vec<Option<String>> = parts.into_iter().skip(1).collect();
 
-    // ── Load allocator (normalized) and get this task’s subsections ───────────────────────
-    let allocator = match load_allocator(module_id, assignment_id) {
-        Ok(a) => a,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to load mark allocator")),
-            )
-                .into_response();
+    // ── Load allocator softly (optional) ──────────────────────────────────────────────────
+    let allocator = util::mark_allocator::load_allocator(module_id, assignment_id).ok();
+
+    // Build subsections (optional): only when allocator is present and contains this task
+    let subsections: Vec<SubsectionDetail> = if let Some(alloc) = allocator {
+        if let Some(alloc_task) = alloc
+            .tasks
+            .iter()
+            .find(|t| t.task_number == task.task_number)
+        {
+            if memo_chunks.len() < alloc_task.subsections.len() {
+                memo_chunks.resize(alloc_task.subsections.len(), None);
+            }
+            alloc_task
+                .subsections
+                .iter()
+                .enumerate()
+                .map(|(i, s)| SubsectionDetail {
+                    name: s.name.clone(),
+                    value: s.value,
+                    memo_output: memo_chunks.get(i).cloned().flatten(),
+                    feedback: s.feedback.clone(),
+                    regex: s.regex.clone(), // preserve empties; one entry per memo line
+                })
+                .collect()
+        } else {
+            // Allocator exists but task isn't defined → empty list
+            Vec::new()
         }
+    } else {
+        // No allocator yet → empty list
+        Vec::new()
     };
-
-    let alloc_task = match allocator
-        .tasks
-        .iter()
-        .find(|t| t.task_number == task.task_number)
-    {
-        Some(t) => t,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Task not found in allocator")),
-            )
-                .into_response();
-        }
-    };
-
-    // Align memo outputs with subsections
-    if subsection_outputs.len() < alloc_task.subsections.len() {
-        subsection_outputs.resize(alloc_task.subsections.len(), None);
-    }
-
-    // Build response subsections (preserve regex exactly, including empty strings)
-    let subsections: Vec<SubsectionDetail> = alloc_task
-        .subsections
-        .iter()
-        .enumerate()
-        .map(|(i, s)| SubsectionDetail {
-            name: s.name.clone(),
-            value: s.value,
-            memo_output: subsection_outputs.get(i).cloned().flatten(),
-            feedback: s.feedback.clone(),
-            regex: s.regex.clone(), // keep empties; each element corresponds to a memo line
-        })
-        .collect();
 
     // Overwrite files?
     let has_overwrite_files = match OverwriteFileEntity::find()

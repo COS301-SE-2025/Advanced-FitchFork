@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 #[derive(Debug, Clone)]
 pub enum FilterValue {
     String(Vec<String>),
-    Int(Vec<i64>),  
+    Int(Vec<i64>),
     Float(Vec<f32>),
     Bool(Vec<bool>),
     DateTime(Vec<DateTime<Utc>>),
@@ -140,7 +140,7 @@ impl FilterValue {
             FilterValue::DateTime(v) => v.len() == 1,
         }
     }
-    
+
     pub fn is_empty(&self) -> bool {
         match self {
             FilterValue::String(v) => v.is_empty(),
@@ -150,7 +150,7 @@ impl FilterValue {
             FilterValue::DateTime(v) => v.is_empty(),
         }
     }
-    
+
     pub fn len(&self) -> usize {
         match self {
             FilterValue::String(v) => v.len(),
@@ -164,56 +164,76 @@ impl FilterValue {
 
 impl FilterParam {
     pub fn eq<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
-        Self { 
-            column: column.to_string(), 
-            operator: CompareOp::Eq, 
-            value: value.into_filter_value() 
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Eq,
+            value: value.into_filter_value(),
         }
     }
-    
+
     pub fn ne<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
-        Self { 
-            column: column.to_string(), 
-            operator: CompareOp::Ne, 
-            value: value.into_filter_value() 
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Ne,
+            value: value.into_filter_value(),
         }
     }
-    
+
     pub fn like(column: &str, value: impl IntoFilterValue<String>) -> Self {
         let filter_value = value.into_filter_value();
-        Self { column: column.to_string(), operator: CompareOp::Like, value: filter_value }
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Like,
+            value: filter_value,
+        }
     }
-    
+
     pub fn gt<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         let filter_value = value.into_filter_value();
         if !filter_value.is_single() {
             panic!("Greater than comparison requires a single value");
         }
-        Self { column: column.to_string(), operator: CompareOp::Gt, value: filter_value }
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Gt,
+            value: filter_value,
+        }
     }
-    
+
     pub fn gte<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         let filter_value = value.into_filter_value();
         if !filter_value.is_single() {
             panic!("Greater than or equal comparison requires a single value");
         }
-        Self { column: column.to_string(), operator: CompareOp::Gte, value: filter_value }
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Gte,
+            value: filter_value,
+        }
     }
-    
+
     pub fn lt<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         let filter_value = value.into_filter_value();
         if !filter_value.is_single() {
             panic!("Less than comparison requires a single value");
         }
-        Self { column: column.to_string(), operator: CompareOp::Lt, value: filter_value }
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Lt,
+            value: filter_value,
+        }
     }
-    
+
     pub fn lte<T>(column: &str, value: impl IntoFilterValue<T>) -> Self {
         let filter_value = value.into_filter_value();
         if !filter_value.is_single() {
             panic!("Less than or equal comparison requires a single value");
         }
-        Self { column: column.to_string(), operator: CompareOp::Lte, value: filter_value }
+        Self {
+            column: column.to_string(),
+            operator: CompareOp::Lte,
+            value: filter_value,
+        }
     }
 }
 

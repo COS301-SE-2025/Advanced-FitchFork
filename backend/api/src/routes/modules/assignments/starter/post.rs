@@ -1,3 +1,5 @@
+use super::common::find_pack;
+use crate::response::ApiResponse;
 use axum::{
     Json,
     extract::{Path, State},
@@ -5,24 +7,9 @@ use axum::{
     response::IntoResponse,
 };
 use include_dir::{Dir, include_dir};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::{fs, io::Write};
-use zip::write::FileOptions;
-
-use super::common::find_pack;
-use crate::response::ApiResponse;
-use db::models::{
-    assignment::{Column as AssignmentCol, Entity as AssignmentEntity, Model as AssignmentModel},
-    assignment_file::{
-        Column as AssignmentFileCol, Entity as AssignmentFileEntity, FileType,
-        Model as AssignmentFileModel,
-    },
-    assignment_memo_output::{Column as MemoOutCol, Entity as MemoOutEntity},
-    assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
-};
-use db::models::{assignment_memo_output, assignment_task};
 use util::{
     execution_config::ExecutionConfig,
     mark_allocator::{TaskInfo, generate_allocator, save_allocator},
@@ -30,8 +17,8 @@ use util::{
         assignment_dir, config_dir, ensure_dir, main_dir, makefile_dir, mark_allocator_dir,
         mark_allocator_path, memo_dir, memo_output_dir, spec_dir, storage_root,
     },
-    state::AppState,
 };
+use zip::write::FileOptions;
 
 static STARTERS_ROOT: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/assets/starters");
 
@@ -52,7 +39,6 @@ struct TaskSeed {
 
 // TODO
 pub async fn create(
-    State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
     Json(body): Json<StarterReq>,
 ) -> impl IntoResponse {
@@ -200,7 +186,7 @@ pub async fn create(
     }
 
     // 6) Seed tasks (tasks.json under pack root, also via ROOT).
-    if create_tasks_from_assets_root(&pack.id, db, assignment_id)
+    if create_tasks_from_assets_root(&pack.id, assignment_id)
         .await
         .is_err()
     {
@@ -213,11 +199,11 @@ pub async fn create(
     }
 
     // 7) Best-effort generators (don’t fail request).
-    let _ = code_runner::create_memo_outputs_for_all_tasks(db, assignment_id).await;
-    let _ = try_generate_allocator(module_id, assignment_id, db).await;
+    let _ = code_runner::create_memo_outputs_for_all_tasks(assignment_id).await;
+    let _ = try_generate_allocator(module_id, assignment_id).await;
 
     // 8) Flip to ready (ignore result).
-    let _ = AssignmentModel::try_transition_to_ready(db, module_id, assignment_id).await;
+    let _ = AssignmentModel::try_transition_to_ready(module_id, assignment_id).await;
 
     (
         StatusCode::CREATED,
@@ -353,11 +339,7 @@ fn zip_dir_flat(d: &Dir<'_>) -> Result<Vec<u8>, std::io::Error> {
     Ok(buf.into_inner())
 }
 
-async fn create_tasks_from_assets_root(
-    pack_id: &str,
-    db: &sea_orm::DatabaseConnection,
-    assignment_id: i64,
-) -> Result<usize, String> {
+async fn create_tasks_from_assets_root(pack_id: &str, assignment_id: i64) -> Result<usize, String> {
     let rel = format!("{}/tasks.json", pack_id);
     let Some(tasks_file) = STARTERS_ROOT.get_file(&rel) else {
         return Ok(0);
@@ -383,11 +365,10 @@ async fn create_tasks_from_assets_root(
     Ok(created)
 }
 
-async fn try_generate_allocator(
-    module_id: i64,
-    assignment_id: i64,
-    db: &sea_orm::DatabaseConnection,
-) -> Result<(), String> {
+async fn try_generate_allocator(module_id: i64, assignment_id: i64) -> Result<(), String> {
+    use db::models::{assignment_memo_output, assignment_task};
+    use util::mark_allocator::{SaveError, TaskInfo, generate_allocator};
+
     let tasks = assignment_task::Entity::find()
         .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
         .all(db)

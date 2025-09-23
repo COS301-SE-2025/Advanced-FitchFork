@@ -42,6 +42,7 @@ use sea_orm::{
     ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
+use util::execution_config::LatePolicy;
 use util::{
     execution_config::{ExecutionConfig, GradingPolicy, SubmissionMode},
     state::AppState,
@@ -86,6 +87,7 @@ pub struct AssignmentPolicy {
     pub grading_policy: GradingPolicy,
     pub limit_attempts: bool,
     pub pass_mark: u32,
+    pub late: LatePolicy,
 }
 
 impl From<AssignmentModel> for AssignmentFileResponse {
@@ -256,6 +258,11 @@ pub async fn get_assignment(
                         grading_policy: cfg.marking.grading_policy,
                         limit_attempts: cfg.marking.limit_attempts,
                         pass_mark: cfg.marking.pass_mark,
+                        late: LatePolicy {
+                            allow_late_submissions: cfg.marking.late.allow_late_submissions,
+                            late_window_minutes: cfg.marking.late.late_window_minutes,
+                            late_max_percent: cfg.marking.late.late_max_percent,
+                        },
                     };
                     // ---------------------------------------------------------------
 
