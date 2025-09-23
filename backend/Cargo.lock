@@ -720,7 +720,7 @@ dependencies = [
  "tokio",
  "util",
  "uuid",
- "zip 4.3.0",
+ "zip 5.1.1",
 ]
 
 [[package]]
@@ -741,7 +741,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "util",
- "zip 4.3.0",
+ "zip 5.1.1",
 ]
 
 [[package]]
@@ -3522,7 +3522,7 @@ dependencies = [
  "rand 0.8.5",
  "sea-orm",
  "tokio",
- "zip 4.3.0",
+ "zip 5.1.1",
 ]
 
 [[package]]

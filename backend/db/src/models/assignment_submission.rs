@@ -46,6 +46,9 @@ pub enum SubmissionStatus {
     /// Unexpected internal error
     #[sea_orm(string_value = "failed_internal")]
     FailedInternal,
+    /// Disallowed code detected (policy violation)
+    #[sea_orm(string_value = "failed_disallowed_code")]
+    FailedDisallowedCode,
 }
 
 impl Default for SubmissionStatus {
@@ -66,6 +69,7 @@ impl std::fmt::Display for SubmissionStatus {
             SubmissionStatus::FailedExecution => "failed_execution",
             SubmissionStatus::FailedGrading => "failed_grading",
             SubmissionStatus::FailedInternal => "failed_internal",
+            SubmissionStatus::FailedDisallowedCode => "failed_disallowed_code",
         };
         write!(f, "{}", status_str)
     }
@@ -404,13 +408,13 @@ impl Model {
         submission_id: i64,
         failure_type: SubmissionStatus,
     ) -> Result<Self, DbErr> {
-        // Validate that the provided status is a failure status
         match failure_type {
             SubmissionStatus::FailedUpload
             | SubmissionStatus::FailedCompile
             | SubmissionStatus::FailedExecution
             | SubmissionStatus::FailedGrading
-            | SubmissionStatus::FailedInternal => {
+            | SubmissionStatus::FailedInternal
+            | SubmissionStatus::FailedDisallowedCode => {
                 Self::update_status(db, submission_id, failure_type).await
             }
             _ => Err(DbErr::Custom(format!(
@@ -429,6 +433,7 @@ impl Model {
                 | SubmissionStatus::FailedExecution
                 | SubmissionStatus::FailedGrading
                 | SubmissionStatus::FailedInternal
+                | SubmissionStatus::FailedDisallowedCode
         )
     }
 

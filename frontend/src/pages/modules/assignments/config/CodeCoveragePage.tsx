@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { Form, InputNumber, Typography, Space } from 'antd';
+import { Form, InputNumber, Typography, Space, Select } from 'antd';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -7,11 +7,26 @@ import { message } from '@/utils/message';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import Tip from '@/components/common/Tip';
+import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+
+type FormShape = {
+  code_coverage_weight: number;
+  code_coverage_whitelist: string[];
+};
 
 export default function CodeCoveragePage() {
   const { setValue } = useViewSlot();
-  const { config, updateConfig } = useAssignment();
-  const [form] = Form.useForm<{ code_coverage_weight: number }>();
+  const { config, updateConfig, assignment } = useAssignment();
+  const { setBreadcrumbLabel } = useBreadcrumbContext();
+
+  const [form] = Form.useForm<FormShape>();
+
+  useEffect(() => {
+    setBreadcrumbLabel(
+      `modules/${assignment.module_id}/assignments/${assignment.id}/config/code-coverage`,
+      'Code Coverage',
+    );
+  }, []);
 
   useEffect(() => {
     setValue(
@@ -27,11 +42,13 @@ export default function CodeCoveragePage() {
   useEffect(() => {
     const cc = config?.code_coverage;
     if (!cc) return;
-    // Backend accepts either fraction (0.10) or percent (10.0).
-    // We keep the UI in percent and store directly as provided.
+
     form.setFieldsValue({
+      // UI stays in percent; backend expects same number you set here.
       code_coverage_weight:
         typeof cc.code_coverage_weight === 'number' ? cc.code_coverage_weight : 10,
+      // Whitelist is a simple list of file names to count toward coverage.
+      code_coverage_whitelist: Array.isArray(cc.whitelist) ? cc.whitelist : [],
     });
   }, [config?.code_coverage, form]);
 
@@ -40,12 +57,17 @@ export default function CodeCoveragePage() {
     const values = await form.validateFields();
     try {
       const patch: Partial<AssignmentConfig> = {
-        code_coverage: { code_coverage_weight: values.code_coverage_weight },
+        code_coverage: {
+          code_coverage_weight: values.code_coverage_weight,
+          whitelist: (values.code_coverage_whitelist || [])
+            .map((s) => String(s).trim())
+            .filter(Boolean),
+        },
       };
       await updateConfig(patch);
-      message.success('Coverage weight saved');
+      message.success('Coverage settings saved');
     } catch (e: any) {
-      message.error(e?.message ?? 'Failed to save coverage weight');
+      message.error(e?.message ?? 'Failed to save coverage settings');
     }
   }, [config, form, updateConfig]);
 
@@ -54,7 +76,7 @@ export default function CodeCoveragePage() {
   return (
     <SettingsGroup
       title="Code Coverage"
-      description="Pick the percentage of marks awarded for code coverage."
+      description="Choose how much of the mark comes from coverage, and optionally list the file names that should count toward coverage."
     >
       <Form layout="vertical" form={form} className="space-y-6" disabled={disabled}>
         <Form.Item
@@ -63,16 +85,30 @@ export default function CodeCoveragePage() {
           className="w-full max-w-xs"
           rules={[
             { required: true, message: 'Enter a percentage' },
-            { type: 'number', min: 0, max: 95, message: 'Recommended 0-95' },
+            { type: 'number', min: 0, max: 95, message: 'Recommended 0–95' },
           ]}
-          extra="Example: 10 means ~10% of marks come from coverage."
+          extra="Example: 10 means ~10% of the total mark comes from coverage."
         >
           <InputNumber className="w-full" min={0} max={100} precision={2} step={0.25} />
         </Form.Item>
 
+        <Form.Item
+          name="code_coverage_whitelist"
+          label="Coverage File Whitelist"
+          tooltip="Optional. If provided, only these file names will be included when calculating code coverage."
+          extra="Enter plain file names (no globs/paths). Examples: main.cpp, utils.c, MyClass.java"
+        >
+          <Select
+            mode="tags"
+            tokenSeparators={[',', ' ']}
+            placeholder="e.g., main.cpp, utils.c, MyClass.java"
+            style={{ minWidth: 360 }}
+          />
+        </Form.Item>
+
         <div className="pt-2">
           <AssignmentConfigActions
-            primaryText="Save Coverage Weight"
+            primaryText="Save Coverage Settings"
             onPrimary={onSave}
             disabled={disabled}
           />

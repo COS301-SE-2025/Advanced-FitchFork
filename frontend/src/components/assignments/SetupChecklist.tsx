@@ -149,7 +149,7 @@ const SetupChecklist = ({
             loading={loading}
             disabled={loading}
           >
-            Generate memo output
+            Generate
           </Button>
         ) : (
           <span className="inline-flex w-full sm:w-auto justify-center items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200">
@@ -166,7 +166,7 @@ const SetupChecklist = ({
             loading={loading}
             disabled={loading}
           >
-            Generate mark allocator
+            Generate
           </Button>
         ) : (
           <span className="inline-flex w-full sm:w-auto justify-center items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200">

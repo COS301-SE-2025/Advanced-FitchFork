@@ -139,7 +139,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const res = await listTasks(moduleId, assignmentId);
       if (!res.success) {
-        message.error(res.message); // don't return the value
+        message.error(res.message);
         return;
       }
 
@@ -154,24 +154,25 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       });
       setTaskDetails(map);
-
-      const endsWithTasks = location.pathname.endsWith('/tasks');
-      if (!isMobile && endsWithTasks && sorted.length > 0) {
-        setSelectedId(sorted[0].id);
-      }
     } catch (e) {
       console.error(e);
       message.error('Failed to load tasks');
     } finally {
       setLoading(false);
     }
-  }, [moduleId, assignmentId, location.pathname, setSelectedId, isMobile]);
+  }, [moduleId, assignmentId]);
 
   // initial + dependency refresh
   useEffect(() => {
     if (!moduleId || !assignmentId) return;
     refreshTasks();
   }, [moduleId, assignmentId, refreshTasks]);
+
+  useEffect(() => {
+    if (!isMobile && location.pathname.endsWith('/tasks') && tasks.length > 0) {
+      setSelectedId(tasks[0].id);
+    }
+  }, [isMobile, location.pathname, tasks, setSelectedId]);
 
   // load selected task details when path changes
   useEffect(() => {
