@@ -63,7 +63,7 @@ impl Feedback for AutoFeedback {
 
                 let feedback_message =
                     if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
-                        println!("TOO MUCH OUTPUT DETECTED");
+                        // println!("TOO MUCH OUTPUT DETECTED");
                         "Too much output"
                     } else if !result.missed_patterns.is_empty() {
                         if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {

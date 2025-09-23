@@ -536,295 +536,6 @@ use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 /// 2. Extracting archive files (submission, makefile, main)
 /// 3. Running the configured commands inside Docker
 /// 4. Saving the output to disk and database as `assignment_submission_output`
-pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
-    db: &DatabaseConnection,
-    submission_id: i64,
-) -> Result<Vec<(i64, String)>, String> {
-    use crate::validate_files::validate_submission_files;
-    use db::models::assignment::Entity as Assignment;
-    use db::models::assignment_submission::Entity as AssignmentSubmission;
-    use reqwest::Client;
-    use sea_orm::EntityTrait;
-    use serde_json::json;
-    use tokio::fs::read;
-
-    SubmissionOutputModel::delete_for_submission(db, submission_id)
-        .await
-        .map_err(|e| format!("Failed to fetch submission: {}", e))?;
-
-    // Fetch submission
-    let submission = AssignmentSubmission::find_by_id(submission_id)
-        .one(db)
-        .await
-        .map_err(|e| format!("Failed to fetch submission: {}", e))?
-        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
-
-    let assignment_id = submission.assignment_id;
-    let user_id = submission.user_id;
-    let attempt_number = submission.attempt;
-
-    // Fetch assignment
-    let assignment = Assignment::find_by_id(assignment_id)
-        .one(db)
-        .await
-        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
-        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
-
-    let module_id = assignment.module_id;
-
-    // Validate files (unchanged)
-    validate_submission_files(module_id, assignment_id, user_id, attempt_number)?;
-
-    // Load config (unchanged)
-    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
-        .map_err(|e| format!("Failed to load execution config: {}", e))?;
-
-    // Helper-based dirs
-    let submission_path = attempt_dir(module_id, assignment_id, user_id, attempt_number);
-
-    // Archives
-    let archive_paths = vec![
-        first_archive_in(&submission_path)?, // submission archive in attempt dir
-        first_archive_in(makefile_dir(module_id, assignment_id))?,
-        first_archive_in(main_dir(module_id, assignment_id))?,
-    ];
-
-    let mut files = Vec::new();
-    for path in &archive_paths {
-        let content = read(path)
-            .await
-            .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
-        let filename = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| format!("Invalid filename: {:?}", path))?
-            .to_string();
-        files.push((filename, content));
-    }
-
-    // Get tasks
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
-
-    if tasks.is_empty() {
-        println!("No tasks found for assignment {}", assignment_id);
-        return Ok(Vec::new());
-    }
-
-    // HTTP client setup
-    let host = config::code_manager_host();
-    let port = config::code_manager_port();
-    let code_manager_url = format!("http://{}:{}/run", host, port);
-    let client = Client::new();
-
-    // Serialize config
-    let config_value = serde_json::to_value(&config)
-        .map_err(|e| format!("Failed to serialize execution config: {}", e))?;
-    // Run all tasks concurrently while preserving original order by index
-    use std::sync::Arc;
-    use tokio::sync::Semaphore;
-    use tokio::task::JoinSet;
-    use tokio::time::{Duration, sleep};
-    let mut join_set = JoinSet::new();
-
-    // Bounded concurrency to avoid DB locking or overwhelming code manager
-    let max_concurrency = std::cmp::max(
-        1,
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            / 2,
-    );
-    let semaphore = Arc::new(Semaphore::new(max_concurrency));
-
-    // enumerate to preserve order
-    for (idx, task) in tasks.into_iter().enumerate() {
-        let filename = format!(
-            "submission_task_{}_user_{}_attempt_{}.txt",
-            task.task_number, user_id, attempt_number
-        );
-
-        let task_files_base = files.clone();
-        let cm_url = code_manager_url.clone();
-        let client_cloned = client.clone();
-        let config_value_cloned = config_value.clone();
-        let db_cloned = db.clone();
-        let module_id_cloned = module_id;
-        let assignment_id_cloned = assignment_id;
-        let submission_path_cloned = submission_path.clone();
-
-        let sem = semaphore.clone();
-        join_set.spawn(async move {
-            let _permit = sem.acquire_owned().await.ok();
-            // Prepare task-specific files (apply overwrites)
-            let mut task_files = task_files_base;
-            let overwrite_dir =
-                overwrite_task_dir(module_id_cloned, assignment_id_cloned, task.task_number);
-            if overwrite_dir.exists() {
-                if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_file() {
-                            if let Ok(content) = std::fs::read(&path) {
-                                if let Some(file_name) = path
-                                    .file_name()
-                                    .and_then(|s| s.to_str())
-                                    .map(|s| s.to_string())
-                                {
-                                    task_files.retain(|(name, _)| name != &file_name);
-                                    task_files.push((file_name, content));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Compose request
-            let request_body = json!({
-                "config": config_value_cloned,
-                "commands": [task.command.clone()],
-                "files": task_files,
-            });
-
-            // Send request
-            let response_res = client_cloned.post(&cm_url).json(&request_body).send().await;
-            match response_res {
-                Err(e) => {
-                    println!("HTTP request failed for task {}: {}", task.task_number, e);
-                    return None as Option<(usize, i64, String, String)>;
-                }
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        let text = response.text().await.unwrap_or_default();
-                        println!("Code manager error for task {}: {}", task.task_number, text);
-                        return None;
-                    }
-
-                    let resp_json: serde_json::Value = match response.json().await {
-                        Ok(v) => v,
-                        Err(e) => {
-                            println!(
-                                "Failed to parse response JSON for task {}: {}",
-                                task.task_number, e
-                            );
-                            return None;
-                        }
-                    };
-
-                    let output_vec = match resp_json.get("output").and_then(|v| v.as_array()) {
-                        Some(arr) => arr
-                            .iter()
-                            .map(|val| val.as_str().unwrap_or("").to_string())
-                            .collect::<Vec<String>>(),
-                        None => {
-                            println!(
-                                "Response missing 'output' array for task {}",
-                                task.task_number
-                            );
-                            Vec::new()
-                        }
-                    };
-
-                    let output_combined = output_vec.join("\n");
-
-                    if task.code_coverage {
-                        match CoverageProcessor::process_report(
-                            config.project.language,
-                            &output_combined,
-                        ) {
-                            Ok(coverage_json) => {
-                                let coverage_report_path =
-                                    submission_path_cloned.join("coverage_report.json");
-                                if let Err(e) =
-                                    std::fs::write(&coverage_report_path, &coverage_json)
-                                {
-                                    println!(
-                                        "Failed to save coverage report to attempt directory: {}",
-                                        e
-                                    );
-                                } else {
-                                    println!(
-                                        "Coverage report saved to: {:?}",
-                                        coverage_report_path
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                println!(
-                                    "Failed to process coverage report for task {}: {}",
-                                    task.task_number, e
-                                );
-                            }
-                        }
-                    } else {
-                        // Save file with simple retry (helps with SQLite write locks)
-                        let mut saved = false;
-                        for attempt in 0..5 {
-                            match SubmissionOutputModel::save_file(
-                                &db_cloned,
-                                task.id,
-                                submission_id,
-                                &filename,
-                                output_combined.as_bytes(),
-                            )
-                            .await
-                            {
-                                Ok(_) => {
-                                    saved = true;
-                                    break;
-                                }
-                                Err(e) => {
-                                    let backoff_ms = 20u64 * (1 << attempt);
-                                    println!(
-                                        "Retry {}/5 saving output for task {} ({} ms): {}",
-                                        attempt + 1,
-                                        task.task_number,
-                                        backoff_ms,
-                                        e
-                                    );
-                                    sleep(Duration::from_millis(backoff_ms)).await;
-                                }
-                            }
-                        }
-                        if !saved {
-                            println!(
-                                "Failed to save submission output for task {} after retries",
-                                task.task_number
-                            );
-                        }
-                    }
-
-                    Some((idx, task.id, filename, output_combined))
-                }
-            }
-        });
-    }
-
-    // Collect results preserving order by idx
-    let mut results: Vec<(usize, i64, String, String)> = Vec::new();
-    while let Some(res) = join_set.join_next().await {
-        if let Ok(Some(tuple)) = res {
-            results.push(tuple);
-        }
-    }
-    results.sort_by_key(|(idx, _, _, _)| *idx);
-
-    // Return collected outputs in original order (task_id, output)
-    let collected: Vec<(i64, String)> = results
-        .into_iter()
-        .map(|(_, task_id, _fname, output)| (task_id, output))
-        .collect();
-
-    Ok(collected)
-}
-
-/// Runs all configured tasks for a given assignment ID and student attempt by:
-/// 1. Validating submission files
-/// 2. Extracting archive files (submission, makefile, main)
-/// 3. Running the configured commands inside Docker
-/// 4. Saving the output to disk and database as `assignment_submission_output`
 pub async fn create_submission_outputs_for_all_tasks(
     db: &DatabaseConnection,
     submission_id: i64,
@@ -837,7 +548,6 @@ pub async fn create_submission_outputs_for_all_tasks(
     use serde_json::json;
     use tokio::fs::read;
 
-    // Remove any existing outputs for this submission to avoid stale DB rows
     SubmissionOutputModel::delete_for_submission(db, submission_id)
         .await
         .map_err(|e| format!("Failed to clear old submission outputs: {}", e))?;
@@ -872,12 +582,31 @@ pub async fn create_submission_outputs_for_all_tasks(
     // Paths via helpers
     let submission_path = attempt_dir(module_id, assignment_id, user_id, attempt_number);
 
+    // Standard archive paths (for non-code-coverage tasks)
     let archive_paths = vec![
         first_archive_in(&submission_path)?,
         first_archive_in(makefile_dir(module_id, assignment_id))?,
         first_archive_in(main_dir(module_id, assignment_id))?,
     ];
 
+    // // Code coverage archive paths (submission + memo + makefile, no main)
+    // let code_coverage_archive_paths = vec![
+    //     first_archive_in(&submission_path)?,
+    //     first_archive_in(makefile_dir(module_id, assignment_id))?,
+    //     first_archive_in(memo_dir(module_id, assignment_id))?,
+    // ];
+
+    // Get tasks
+    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+        .await
+        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+
+    if tasks.is_empty() {
+        println!("No tasks found for assignment {}", assignment_id);
+        return Ok(());
+    }
+
+    // Load standard files
     let mut files = Vec::new();
     for path in &archive_paths {
         let content = read(path)
@@ -891,14 +620,26 @@ pub async fn create_submission_outputs_for_all_tasks(
         files.push((filename, content));
     }
 
-    // Get tasks
-    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
-        .await
-        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+    // Only build coverage files if at least one task needs it
+    let mut code_coverage_files = Vec::new();
+    if tasks.iter().any(|t| t.code_coverage) {
+        let code_coverage_archive_paths = vec![
+            first_archive_in(&submission_path)?,
+            first_archive_in(makefile_dir(module_id, assignment_id))?,
+            first_archive_in(memo_dir(module_id, assignment_id))?, // <-- only used if needed
+        ];
 
-    if tasks.is_empty() {
-        println!("No tasks found for assignment {}", assignment_id);
-        return Ok(());
+        for path in &code_coverage_archive_paths {
+            let content = read(path)
+                .await
+                .map_err(|e| format!("Failed to read file {:?}: {}", path, e))?;
+            let filename = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| format!("Invalid filename: {:?}", path))?
+                .to_string();
+            code_coverage_files.push((filename, content));
+        }
     }
 
     // HTTP client setup
@@ -933,7 +674,14 @@ pub async fn create_submission_outputs_for_all_tasks(
             "submission_task_{}_user_{}_attempt_{}.txt",
             task.task_number, user_id, attempt_number
         );
-        let task_files_base = files.clone();
+
+        // Choose appropriate file set based on whether this is a code coverage task
+        let task_files_base = if task.code_coverage {
+            code_coverage_files.clone()
+        } else {
+            files.clone()
+        };
+
         let cm_url = code_manager_url.clone();
         let client_cloned = client.clone();
         let config_value_cloned = config_value.clone();
@@ -941,6 +689,8 @@ pub async fn create_submission_outputs_for_all_tasks(
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
         let submission_path_cloned = submission_path.clone();
+        let whitelist_cloned = config.code_coverage.whitelist.clone();
+        let whitelist = whitelist_cloned.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -1017,7 +767,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                     let output_combined = output_vec.join("\n");
 
                     if task.code_coverage {
-                        match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                        match CoverageProcessor::process_report(config.project.language, &output_combined, &whitelist) {
                             Ok(coverage_json) => {
                                 let coverage_report_path = submission_path_cloned.join("coverage_report.json");
                                 match std::fs::write(&coverage_report_path, &coverage_json) {
