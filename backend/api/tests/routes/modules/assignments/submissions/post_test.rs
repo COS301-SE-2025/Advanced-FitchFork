@@ -1364,7 +1364,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "Failed to run code for submission");
     }
 
     // Helper function to create a submission with an output file wired via path utilities.

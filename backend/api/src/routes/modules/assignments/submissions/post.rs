@@ -1356,7 +1356,8 @@ async fn run_submission_pipeline(
         )
         .await;
 
-        return Err("Failed to run code for submission".to_string());
+        // return Err("Failed to run code for submission".to_string());
+        return Err(format!("Failed to run code for submission: {}", exec_err));
     }
 
     // grading start
