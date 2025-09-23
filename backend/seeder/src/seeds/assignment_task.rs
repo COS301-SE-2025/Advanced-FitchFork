@@ -69,16 +69,21 @@ impl Seeder for AssignmentTaskSeeder {
         }
         let special_assignment_id: i64 = 9999;
 
-        let special_tasks = vec![(1, "make task1"), (2, "make task2"), (3, "make task3")];
+        let special_tasks = vec![
+            (1, "make task1", false),
+            (2, "make task2", false),
+            (3, "make task3", false),
+            (4, "make task4", true),
+        ];
 
-        for (task_number, command) in special_tasks {
+        for (task_number, command, code_coverage) in special_tasks {
             match db::models::assignment_task::Model::create(
                 db,
                 special_assignment_id,
                 task_number,
                 "Untitled Task",
                 command,
-                false,
+                code_coverage,
             )
             .await
             {

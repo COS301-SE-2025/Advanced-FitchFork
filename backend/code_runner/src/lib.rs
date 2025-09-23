@@ -412,6 +412,8 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
         let submission_path_cloned = submission_path.clone();
+        let whitelist_cloned = config.code_coverage.whitelist.clone();
+        let whitelist = whitelist_cloned.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -492,6 +494,7 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
                         match CoverageProcessor::process_report(
                             config.project.language,
                             &output_combined,
+                            &whitelist,
                         ) {
                             Ok(coverage_json) => {
                                 let coverage_report_path =
@@ -518,7 +521,6 @@ pub async fn create_submission_outputs_for_all_tasks_for_interpreter(
                             }
                         }
                     } else {
-                        // Save file with simple retry (helps with SQLite write locks)
                         let mut saved = false;
                         for attempt in 0..5 {
                             match SubmissionOutputModel::save_file(
@@ -700,6 +702,8 @@ pub async fn create_submission_outputs_for_all_tasks(
         let module_id_cloned = module_id;
         let assignment_id_cloned = assignment_id;
         let submission_path_cloned = submission_path.clone();
+        let whitelist_cloned = config.code_coverage.whitelist.clone();
+        let whitelist = whitelist_cloned.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -776,7 +780,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                     let output_combined = output_vec.join("\n");
 
                     if task.code_coverage {
-                        match CoverageProcessor::process_report(config.project.language, &output_combined) {
+                        match CoverageProcessor::process_report(config.project.language, &output_combined, &whitelist) {
                             Ok(coverage_json) => {
                                 let coverage_report_path = submission_path_cloned.join("coverage_report.json");
                                 match std::fs::write(&coverage_report_path, &coverage_json) {

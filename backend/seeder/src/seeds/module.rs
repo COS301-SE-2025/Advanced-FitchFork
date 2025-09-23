@@ -58,7 +58,7 @@ impl Seeder for ModuleSeeder {
 
         let special_module = module::ActiveModel {
             id: Set(9999),
-            code: Set("TEST9999".to_string()),
+            code: Set("JAVA9999".to_string()),
             year: Set(2025),
             credits: Set(16),
             description: Set(Some(
@@ -73,7 +73,7 @@ impl Seeder for ModuleSeeder {
 
         let special_module2 = module::ActiveModel {
             id: Set(9998),
-            code: Set("TEST9998".to_string()),
+            code: Set("CPP9998".to_string()),
             year: Set(2025),
             credits: Set(16),
             description: Set(Some(
