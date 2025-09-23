@@ -1,18 +1,22 @@
 // ai/src/utils/evaluator.rs
+// I generally would not recommend editing this file unless you know what you're doing.
 
-use crate::HashMap;
+use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
+use util::languages::Language;
+mod strategy;
+use strategy::strategy_for;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Property {
-    Safety,            // G(¬unsafe)
+    Safety,            // G(~unsafe)
     ProperTermination, // G(ter => VRC)
-    SegmentationFault, // G(¬segfault)
-    Exceptions,        // G(¬exception)
-    ExecutionTime,     // G(ter => (r ≤ e))
-    IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x ≠ o))
-    ExpectedExact,     // ExpectedExact,
-    ExpectedContains,  // ExpectedContains,
+    SegmentationFault, // G(~segfault)
+    Exceptions,        // G(~exception)
+    ExecutionTime,     // G(ter => (r <= e))
+    IllegalOutput,     // G(ter => ∀o∈Out ∀x∈X (x =/ o))
+    ExpectedExact,     // ExpectedExact
+    ExpectedContains,  // ExpectedContains
 }
 
 #[derive(Debug, Clone)]
@@ -20,7 +24,7 @@ pub struct TaskSpec {
     pub language: Language,
     /// Valid return codes for "proper termination" (default: [0])
     pub valid_return_codes: Option<Vec<i32>>,
-    /// Execution-time bound in milliseconds (r ≤ e)
+    /// Execution-time bound in milliseconds (r <= e)
     pub max_runtime_ms: Option<u64>,
     /// For IllegalOutput: forbidden outputs X (exact line matches after trim)
     pub forbidden_outputs: Vec<String>,
@@ -36,7 +40,6 @@ impl Default for TaskSpec {
         }
     }
 }
-use util::languages::Language;
 
 impl TaskSpec {
     pub fn from_execution_config(config: &ExecutionConfig) -> Self {
@@ -77,7 +80,7 @@ impl Evaluator {
     /// Expected markers (case-insensitive):
     ///   EXIT_CODE: <n>  or EXIT_CODE=<n>
     ///   RUNTIME_MS: <n> or RUNTIME_MS=<n>
-    ///   STDERR:         (starts stderr section to EOF)
+    ///   STDERR: (starts stderr section to EOF)
     pub fn parse(&self, task_id: i64, blob: &str) -> TaskView {
         let (exit_code, stdout, stderr) = split_exit_stdout_stderr(blob);
         let runtime_ms = extract_marker_int(blob, "runtime_ms").map(|v| v.max(0) as u64);
@@ -95,9 +98,10 @@ impl Evaluator {
     /// Evaluate a single task against the selected property set (excluding expected-output checks).
     pub fn evaluate_task(&self, spec: &TaskSpec, view: &TaskView) -> TaskEvaluation {
         let mut violated = Vec::new();
+        let strat = strategy_for(spec.language);
 
-        // Safety: G(¬unsafe)
-        if violates_safety(spec.language, &view.stderr) {
+        // Safety: G(~unsafe)
+        if strat.violates_safety(&view.stderr) {
             violated.push(Property::Safety);
         }
 
@@ -109,17 +113,17 @@ impl Evaluator {
             }
         }
 
-        // Segmentation Fault: G(¬segfault)
-        if has_segfault(spec.language, &view.stderr) {
+        // Segmentation Fault: G(~segfault)
+        if strat.has_segfault(&view.stderr) {
             violated.push(Property::SegmentationFault);
         }
 
-        // Exceptions: G(¬exception)
-        if has_exception(spec.language, &view.stderr) {
+        // Exceptions: G(~exception)
+        if strat.has_exception(&view.stderr) {
             violated.push(Property::Exceptions);
         }
 
-        // Execution Time: G(ter => (r ≤ e))
+        // Execution Time: G(ter => (r <= e))
         if view.terminated {
             if let Some(bound) = spec.max_runtime_ms {
                 if let Some(r) = view.runtime_ms {
@@ -130,7 +134,7 @@ impl Evaluator {
             }
         }
 
-        // Illegal Output: G(ter => ∀o∈Out ∀x∈X (x ≠ o))
+        // Illegal Output: G(ter => ∀o∈Out ∀x∈X (x =/ o))
         if view.terminated && !spec.forbidden_outputs.is_empty() {
             let outs = normalized_lines(&view.stdout);
             let forb = spec
@@ -167,7 +171,6 @@ impl Evaluator {
         let mut ltl_violations = 0usize;
         let mut failed_tasks = 0usize;
 
-        // Build a single label→expected-lines map from ALL memo entries (ignores task_id).
         let mut memo_sections: HashMap<String, Vec<String>> = HashMap::new();
         for (_tid, memotxt) in memo {
             let secs = parse_labeled_sections_with_delim(memotxt, delimiter);
@@ -177,11 +180,6 @@ impl Evaluator {
         }
 
         for (i, (task_id, blob)) in outs.iter().enumerate() {
-            eprintln!("--- Evaluating blob ---");
-            eprintln!("task_id={task_id}, index={i}");
-            eprintln!("{blob}");
-            eprintln!("------------------------");
-
             let spec = specs.get(i).unwrap_or_else(|| &specs[0]);
             let view = self.parse(*task_id, blob);
             let eval = self.evaluate_task(spec, &view);
@@ -189,7 +187,7 @@ impl Evaluator {
             let mut checks = 0usize;
             let mut viols = 0usize;
 
-            // Core LTL-ish checks
+            // Core LTL checks
             checks += 1;
             if eval.violated.contains(&Property::Safety) {
                 viols += 1;
@@ -214,26 +212,21 @@ impl Evaluator {
                 }
             }
 
-            // ---------- Labeled memo comparison (by subtask label via delimiter) ----------
             let out_sections = parse_labeled_sections_with_delim(&view.stdout, delimiter);
 
             for (label, memo_lines) in &memo_sections {
-                // Exact match within this label
                 checks += 1;
                 match out_sections.get(label) {
                     Some(out_lines) => {
                         if out_lines != memo_lines {
                             viols += 1;
-                            // If you want to tag the property, push Property::ExpectedExact into a separate vector you track here
                         }
                     }
                     None => {
-                        // Section missing -> violation
                         viols += 1;
                     }
                 }
 
-                // "Contains" check within the same label
                 checks += 1;
                 match out_sections.get(label) {
                     Some(out_lines) => {
@@ -242,7 +235,6 @@ impl Evaluator {
                             .all(|needle| out_lines.iter().any(|hay| hay.contains(needle)));
                         if !contains_ok {
                             viols += 1;
-                            // Likewise, this corresponds to ExpectedContains
                         }
                     }
                     None => {
@@ -250,7 +242,6 @@ impl Evaluator {
                     }
                 }
             }
-            // ------------------------------------------------------------------------------
 
             if !spec.forbidden_outputs.is_empty() && view.terminated {
                 checks += 1;
@@ -262,11 +253,12 @@ impl Evaluator {
             ltl_checks += checks;
             ltl_violations += viols;
 
-            // Failure metric (separate from LTL)
+            // Failure metric
             let ret_ok = is_valid_return_code(view.exit_code, spec.valid_return_codes.as_deref());
+            let strat = strategy_for(spec.language);
             let failed = !ret_ok
-                || (view.terminated && has_segfault(spec.language, &view.stderr))
-                || (view.terminated && has_exception(spec.language, &view.stderr))
+                || (view.terminated && strat.has_segfault(&view.stderr))
+                || (view.terminated && strat.has_exception(&view.stderr))
                 || self.contains_forbidden_output(&view.stdout, &spec.forbidden_outputs);
 
             if failed {
@@ -339,9 +331,7 @@ fn split_exit_stdout_stderr(blob: &str) -> (Option<i32>, String, String) {
         let rest = tail[label_len..].trim_start_matches(':').trim_start();
         stderr.push_str(rest);
     } else {
-        // Heuristic for errors if no STDERR section is found
-        // This is a fallback for cases where the output does not follow the expected format.
-        // We assume that if the blob contains error-like messages, they should go to stderr.
+        // If it looks like an error route to stderr
         let lower = blob.to_ascii_lowercase();
         let looks_error = [
             "error:",
@@ -380,10 +370,8 @@ fn extract_marker_int(blob: &str, key: &str) -> Option<i32> {
         let ll = l.to_ascii_lowercase();
         if let Some(idx) = ll.find(&key_lower) {
             let after = &ll[idx + key_lower.len()..];
-            // strip separators
             let after =
                 after.trim_start_matches(|c: char| c == ':' || c == '=' || c.is_whitespace());
-            // take signed int prefix
             let mut end = 0;
             for ch in after.chars() {
                 if ch.is_ascii_digit() || ch == '-' || ch == '+' {
@@ -428,74 +416,6 @@ fn normalized_lines(s: &str) -> Vec<String> {
         .collect()
 }
 
-// IF YOU WANT TO ADD SUPPORT FOR OTHER LANGUAGES, ADD THEM HERE
-fn violates_safety(lang: Language, stderr: &str) -> bool {
-    let s = stderr.to_ascii_lowercase();
-    match lang {
-        Language::Cpp => {
-            s.contains("double free")
-                || s.contains("double-free")
-                || s.contains("invalid pointer")
-                || s.contains("use-after-free")
-                || s.contains("heap-use-after-free")
-                || s.contains("segmentation fault")
-                || s.contains("sigsegv")
-                || s.contains("addresssanitizer")
-                || s.contains("asan:")
-        }
-        Language::Java => {
-            s.contains("hs_err_pid")
-                || s.contains("a fatal error has been detected by the java runtime environment")
-                || s.contains("sigsegv")
-                || s.contains("exception_access_violation")
-                || s.contains("problematic frame:")
-                || s.contains("outofmemoryerror: direct buffer memory")
-                || s.contains("internal error (")
-        }
-        _ => false, // safe default for other languages
-    }
-}
-
-fn has_segfault(lang: Language, stderr: &str) -> bool {
-    let s = stderr.to_ascii_lowercase();
-    match lang {
-        Language::Cpp => s.contains("segmentation fault") || s.contains("sigsegv"),
-        Language::Java => {
-            s.contains("sigsegv")
-                || s.contains("exception_access_violation")
-                || s.contains("hs_err_pid")
-                || s.contains("problematic frame:")
-        }
-        _ => false,
-    }
-}
-
-fn has_exception(lang: Language, stderr: &str) -> bool {
-    let s = stderr.to_ascii_lowercase();
-    match lang {
-        Language::Cpp => {
-            s.contains("exception")
-                || s.contains("terminate called")
-                || s.contains("std::terminate")
-                || s.contains("std::bad_alloc")
-        }
-        Language::Java => {
-            s.contains("exception in thread")
-                || s.contains("java.lang.exception")
-                || s.contains("java.lang.runtimeexception")
-                || s.contains("java.lang.nullpointerexception")
-                || s.contains("java.lang.illegalargumentexception")
-                || s.contains("java.lang.indexoutofboundsexception")
-                || s.contains("java.lang.arrayindexoutofboundsexception")
-                || s.contains("java.lang.outofmemoryerror")
-                || s.contains("java.lang.stackoverflowerror")
-                || s.contains("exception:")
-                || s.contains("error:")
-        }
-        _ => false,
-    }
-}
-
 fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
     match (exit, valid) {
         (Some(code), Some(list)) => list.contains(&code),
@@ -508,9 +428,6 @@ fn is_valid_return_code(exit: Option<i32>, valid: Option<&[i32]>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ---------------- helpers ----------------
-
     fn spec_cpp() -> TaskSpec {
         TaskSpec {
             language: Language::Cpp,
@@ -543,7 +460,6 @@ mod tests {
         }
     }
 
-    // Simple out/memo tuple makers
     fn out(task_id: i64, blob: &str) -> (i64, String) {
         (task_id, blob.to_string())
     }
@@ -551,7 +467,6 @@ mod tests {
         (task_id, text.to_string())
     }
 
-    // Build a stdout with labeled sections + optional Retcode
     fn build_labeled_stdout(
         delim: &str,
         sections: &[(&str, &[&str])],
@@ -576,8 +491,6 @@ mod tests {
         s.push_str(&format!("Retcode: {retcode}\n"));
         s
     }
-
-    // ---------------- parse/utility tests ----------------
 
     #[test]
     fn extract_marker_int_retcode_and_runtime() {
@@ -630,8 +543,6 @@ mod tests {
             &vec!["x".to_string(), "y".to_string()]
         );
     }
-
-    // ---------------- language/safety/exception tests ----------------
 
     #[test]
     fn cpp_safety_detects_asan_and_uaf() {
@@ -688,8 +599,6 @@ mod tests {
         );
     }
 
-    // ---------------- termination/forbidden/runtime tests ----------------
-
     #[test]
     fn proper_termination_ok_when_zero_exit() {
         let ev = Evaluator::new();
@@ -742,8 +651,6 @@ mod tests {
         assert!(ev.contains_forbidden_output("Hello FORB\n", &[String::from("forb")]));
         assert!(!ev.contains_forbidden_output("clean\n", &[String::from("bad")]));
     }
-
-    // ---------------- delimiter-based memo tests ----------------
 
     #[test]
     fn memo_exact_and_contains_both_pass_yield_zero_ltl() {
