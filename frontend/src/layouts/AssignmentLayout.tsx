@@ -89,6 +89,12 @@ const AssignmentLayout = () => {
             show: true,
             disabled: !isAssignmentReady,
           },
+          {
+            value: `${basePath}/statistics`,
+            label: 'Statistics',
+            show: true,
+            disabled: !isAssignmentReady,
+          },
           { value: `${basePath}/config`, label: 'Files & Config', show: true, disabled: false },
         ]
       : []),

@@ -41,6 +41,7 @@ export const LANGUAGE_LABELS: Record<(typeof LANGUAGES)[number], string> = {
   go: 'GoLang',
   rust: 'Rust',
 };
+
 export const LANGUAGE_OPTIONS = LANGUAGES.map((val) => ({
   label: LANGUAGE_LABELS[val],
   value: val,

@@ -98,6 +98,7 @@ import ModuleOverview from './pages/modules/ModuleOverview';
 import ModulePersonnel from './pages/modules/ModulePersonnel';
 import ModulesList from './pages/modules/ModulesList';
 import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
+import AssignmentStatisticsPage from './pages/modules/assignments/AssignmentStatisticsPage';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -206,6 +207,7 @@ export default function App() {
                       <Route index element={<PlagiarismCases />} />
                       <Route path=":plagiarism_id" element={<></>} />
                     </Route>
+                    <Route path="statistics" element={<AssignmentStatisticsPage />} />
                     <Route path="config" element={<AssignmentConfigLayout />}>
                       <Route
                         index

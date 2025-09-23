@@ -1,7 +1,7 @@
 use super::common::{MarkSummary, SubmissionDetailResponse};
 use crate::{
     auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
-    ws::modules::assignments::submissions::topics::submission_topic,
+    ws::modules::assignments::submissions::topics::{submission_staff_topic, submission_topic},
 };
 use axum::{
     Json,
@@ -16,6 +16,7 @@ use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
+    user
 };
 use db::models::{assignment_memo_output, assignment_submission::SubmissionStatus};
 use marker::MarkingJob;
@@ -76,8 +77,12 @@ pub struct RemarkResponse {
 
 #[derive(Debug, Serialize)]
 pub struct ResubmitResponse {
-    resubmitted: usize,
-    failed: Vec<FailedOperation>,
+    /// Number actually (re)started
+    pub started: usize,
+    /// Submissions we skipped because they were not in a final state (queued/running/grading)
+    pub skipped_in_progress: usize,
+    /// Per-submission failures (not found, DB errors, etc.)
+    pub failed: Vec<FailedOperation>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,6 +137,17 @@ struct WsMark {
     total: i64,
 }
 
+#[inline]
+async fn broadcast_to_staff(
+    app: &AppState,
+    module_id: i64,
+    assignment_id: i64,
+    payload: serde_json::Value,
+) {
+    let topic = submission_staff_topic(module_id, assignment_id);
+    app.ws().broadcast(&topic, payload.to_string()).await;
+}
+
 async fn emit_submission_status(
     app: &AppState,
     module_id: i64,
@@ -168,8 +184,24 @@ async fn emit_submission_status(
         }
     }
 
+    // (1) per-user topic (unchanged)
     app.ws().broadcast(&topic, payload.to_string()).await;
+
+    // (2) staff topic → include user_id and user_username
+    let mut staff_payload = payload.clone();
+    if let Some(obj) = staff_payload.as_object_mut() {
+        obj.insert("user_id".into(), serde_json::json!(user_id));
+
+        // look up username (best-effort)
+        if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(app.db()).await {
+            obj.insert("user_username".into(), serde_json::json!(u.username));
+        }
+    }
+
+    broadcast_to_staff(app, module_id, assignment_id, staff_payload).await;
 }
+
+
 
 /// Applies the appropriate comparator to a marking job based on the scheme
 fn apply_comparator<'a>(marking_job: MarkingJob<'a>, scheme: &MarkingScheme) -> MarkingJob<'a> {
@@ -1814,9 +1846,7 @@ pub async fn resubmit_submissions(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ResubmitResponse>::error(
-                    "Assignment not found",
-                )),
+                Json(ApiResponse::<ResubmitResponse>::error("Assignment not found")),
             );
         }
     };
@@ -1832,16 +1862,7 @@ pub async fn resubmit_submissions(
             }
         };
 
-    let (_, _, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
-        Ok(paths) => paths,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ResubmitResponse>::error(e)),
-            );
-        }
-    };
-
+    // load config once (used by background tasks)
     let config = match get_execution_config(module_id, assignment_id) {
         Ok(config) => config,
         Err(e) => {
@@ -1852,134 +1873,149 @@ pub async fn resubmit_submissions(
         }
     };
 
-    // Run resubmissions concurrently per submission, with bounded concurrency
-    use std::sync::Arc;
-    use tokio::sync::Semaphore;
-    use tokio::task::JoinSet;
+    // tallies we return immediately
+    let mut started: usize = 0;
+    let mut skipped_in_progress: usize = 0;
+    let mut failed: Vec<FailedOperation> = Vec::new();
 
-    let max_concurrency = std::cmp::max(
-        1,
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            / 2,
-    );
-    let semaphore = Arc::new(Semaphore::new(max_concurrency));
-    let mut join_set = JoinSet::new();
-
-    for sid in submission_ids.clone() {
-        let db = db.clone();
-        let assignment = assignment.clone();
-        let memo_outputs = memo_outputs.clone();
-        let config = config.clone();
-        let sem = semaphore.clone();
-
-        join_set.spawn(async move {
-            let _permit = sem.acquire_owned().await.ok();
-
-            // Fetch submission and validate
-            let submission = match assignment_submission::Entity::find_by_id(sid)
-                .one(&db)
-                .await
-            {
-                Ok(Some(s)) => s,
-                Ok(None) => return (sid, Err("Submission not found".to_string())),
-                Err(e) => return (sid, Err(format!("Database error: {}", e))),
-            };
-            if submission.assignment_id != assignment.id {
-                return (
-                    sid,
-                    Err("Submission does not belong to this assignment".to_string()),
-                );
+    for sid in submission_ids {
+        // fetch submission
+        let submission = match assignment_submission::Entity::find_by_id(sid)
+            .one(db)
+            .await
+        {
+            Ok(Some(s)) => s,
+            Ok(None) => {
+                failed.push(FailedOperation { id: Some(sid), error: "Submission not found".into() });
+                continue;
             }
+            Err(e) => {
+                failed.push(FailedOperation { id: Some(sid), error: format!("Database error: {e}") });
+                continue;
+            }
+        };
 
-            if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
-                assignment.module_id,
+        // sanity: same assignment
+        if submission.assignment_id != assignment.id {
+            failed.push(FailedOperation {
+                id: Some(sid),
+                error: "Submission does not belong to this assignment".into(),
+            });
+            continue;
+        }
+
+        if !submission.is_complete() {
+            skipped_in_progress += 1; // queued | running | grading
+            continue;
+        }
+
+        // optional: disallowed-code check (fast local read)
+        if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
+            assignment.module_id,
+            assignment.id,
+            submission.user_id,
+            submission.attempt,
+            submission.id,
+            None,
+        )) {
+            match check_disallowed_code(
+                &file_bytes,
+                &config,
+                db,
                 assignment.id,
                 submission.user_id,
                 submission.attempt,
-                submission.id,
-                None,
-            )) {
-                match check_disallowed_code(&file_bytes, &config, &db, assignment.id, submission.user_id, submission.attempt, submission.is_practice, &submission.filename, &submission.file_hash, &assignment).await {
-                    DisallowedCodeCheckResult::Clean => {
-                        // Continue with normal processing
-                    }
-                    DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                        return (sid, Err("Submission rejected: disallowed code patterns detected (marked as 0)".to_string()));
-                    }
-                    DisallowedCodeCheckResult::CheckFailed(e) => {
-                        eprintln!("Disallowed code check failed: {}", e);
-                        return (sid, Err("Failed to scan submission for disallowed code patterns".to_string()));
-                    }
+                submission.is_practice,
+                &submission.filename,
+                &submission.file_hash,
+                &assignment,
+            )
+            .await
+            {
+                DisallowedCodeCheckResult::Clean => {}
+                DisallowedCodeCheckResult::DisallowedFound(_response) => {
+                    emit_submission_status(
+                        &app_state,
+                        module_id,
+                        assignment_id,
+                        submission.user_id,
+                        submission.id,
+                        SubmissionStatus::FailedUpload,
+                        Some("Disallowed code patterns detected".into()),
+                        None, // no mark payload here during resubmit
+                    ).await;
+
+                    failed.push(FailedOperation {
+                        id: Some(sid),
+                        error: "Submission rejected: disallowed code patterns detected (marked as 0)".into(),
+                    });
+                    continue;
+                }
+                DisallowedCodeCheckResult::CheckFailed(e) => {
+                    eprintln!("Disallowed code check failed: {e}");
+                    failed.push(FailedOperation {
+                        id: Some(sid),
+                        error: "Failed to scan submission for disallowed code patterns".into(),
+                    });
+                    continue;
                 }
             }
+        }
 
-            if let Err(e) =
-                clear_submission_output(&submission, assignment.module_id, assignment.id)
-            {
-                return (sid, Err(e));
-            }
+        // clear old outputs before launching
+        if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
+            failed.push(FailedOperation { id: Some(sid), error: e });
+            continue;
+        }
 
-            if let Err(e) = process_submission_code(
-                &db,
-                submission.id,
-                config.clone(),
+        // spawn background pipeline and DO NOT await
+        let db_bg = db.clone();
+        let app_bg = app_state.clone();
+        let assignment_bg = assignment.clone();
+        let config_bg = config.clone();
+        let submission_bg = submission.clone();
+
+        emit_submission_status(
+            &app_state,
+            module_id,
+            assignment_id,
+            submission.user_id,
+            submission.id,
+            SubmissionStatus::Queued,
+            None,
+            None,
+        ).await;
+
+        tokio::spawn(async move {
+            // Full pipeline (exec + grade + WS statuses). This does its own status emits.
+            let _ = run_submission_pipeline(
+                &db_bg,
+                &app_bg,
+                &assignment_bg,
+                &config_bg,
+                &submission_bg,
                 module_id,
                 assignment_id,
+                submission_bg.user_id,
             )
-            .await
-            {
-                return (
-                    sid,
-                    Err(format!("Failed to run code for submission: {}", e)),
-                );
-            }
-
-            match grade_submission(
-                submission,
-                &assignment,
-                &memo_outputs,
-                &config,
-                &db,
-                true,
-            )
-            .await
-            {
-                Ok(_) => (sid, Ok(())),
-                Err(e) => (sid, Err(e)),
-            }
+            .await;
         });
-    }
 
-    let mut resubmitted = 0usize;
-    let mut failed: Vec<FailedOperation> = Vec::new();
-    while let Some(res) = join_set.join_next().await {
-        match res {
-            Ok((_sid, Ok(()))) => resubmitted += 1,
-            Ok((sid, Err(e))) => failed.push(FailedOperation {
-                id: Some(sid),
-                error: e,
-            }),
-            Err(e) => failed.push(FailedOperation {
-                id: None,
-                error: format!("Join error: {}", e),
-            }),
-        }
+        started += 1;
     }
 
     let response = ResubmitResponse {
-        resubmitted,
+        started,
+        skipped_in_progress,
         failed,
     };
+
     let message = format!(
-        "Resubmitted {}/{} submissions",
-        resubmitted,
-        submission_ids.len()
+        "Started {} resubmission(s); {} skipped (in progress); {} failed.",
+        response.started,
+        response.skipped_in_progress,
+        response.failed.len()
     );
 
-    (
-        StatusCode::OK,
-        Json(ApiResponse::success(response, &message)),
-    )
+    (StatusCode::OK, Json(ApiResponse::success(response, &message)))
 }

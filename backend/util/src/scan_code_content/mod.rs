@@ -13,6 +13,24 @@ enum ArchiveFormat {
     Gz,
 }
 
+fn reader_contains_disallowed<R: Read>(
+    mut reader: R,
+    config: &ExecutionConfig,
+) -> Result<bool, String> {
+    let mut buf = Vec::new();
+    reader
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("Failed to read file contents: {e}"))?;
+
+    let text = String::from_utf8_lossy(&buf);
+    for dis in &config.marking.dissalowed_code {
+        if !dis.is_empty() && text.contains(dis) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn detect_archive_format(bytes: &[u8]) -> Result<ArchiveFormat, String> {
     if bytes.len() < 4 {
         return Err("File too small to determine format".to_string());
@@ -48,28 +66,19 @@ fn detect_archive_format(bytes: &[u8]) -> Result<ArchiveFormat, String> {
 fn scan_zip_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);
     let mut archive =
-        ZipArchive::new(cursor).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+        ZipArchive::new(cursor).map_err(|e| format!("Failed to read zip archive: {e}"))?;
 
     for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
+        let mut file = archive.by_index(i)
             .map_err(|e| format!("Failed to read file in archive: {e}"))?;
 
-        if file.is_dir() {
-            continue;
-        }
+        if file.is_dir() { continue; }
 
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .map_err(|e| format!("Failed to read file contents: {e}"))?;
-
-        for dis in &config.marking.dissalowed_code {
-            if contents.contains(dis) {
-                return Ok(true);
-            }
+        // read raw bytes, lossy decode
+        if reader_contains_disallowed(&mut file, config)? {
+            return Ok(true);
         }
     }
-
     Ok(false)
 }
 
@@ -77,76 +86,43 @@ fn scan_tar_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, Stri
     let cursor = Cursor::new(bytes);
     let mut archive = Archive::new(cursor);
 
-    for entry in archive
-        .entries()
-        .map_err(|e| format!("Failed to read tar entries: {}", e))?
-    {
-        let mut entry = entry.map_err(|e| format!("Failed to read tar entry: {}", e))?;
+    for entry in archive.entries()
+        .map_err(|e| format!("Failed to read tar entries: {e}"))? {
+        let mut entry = entry.map_err(|e| format!("Failed to read tar entry: {e}"))?;
+        if entry.header().entry_type().is_dir() { continue; }
 
-        if entry.header().entry_type().is_dir() {
-            continue;
-        }
-
-        let mut contents = String::new();
-        entry
-            .read_to_string(&mut contents)
-            .map_err(|e| format!("Failed to read entry contents: {e}"))?;
-
-        for dis in &config.marking.dissalowed_code {
-            if contents.contains(dis) {
-                return Ok(true);
-            }
+        if reader_contains_disallowed(&mut entry, config)? {
+            return Ok(true);
         }
     }
-
     Ok(false)
 }
+
 
 fn scan_tar_gz_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);
     let decoder = GzDecoder::new(cursor);
     let mut archive = Archive::new(decoder);
 
-    for entry in archive
-        .entries()
-        .map_err(|e| format!("Failed to read tar.gz entries: {}", e))?
-    {
-        let mut entry = entry.map_err(|e| format!("Failed to read tar.gz entry: {}", e))?;
+    for entry in archive.entries()
+        .map_err(|e| format!("Failed to read tar.gz entries: {e}"))? {
+        let mut entry = entry.map_err(|e| format!("Failed to read tar.gz entry: {e}"))?;
+        if entry.header().entry_type().is_dir() { continue; }
 
-        if entry.header().entry_type().is_dir() {
-            continue;
-        }
-
-        let mut contents = String::new();
-        entry
-            .read_to_string(&mut contents)
-            .map_err(|e| format!("Failed to read entry contents: {e}"))?;
-
-        for dis in &config.marking.dissalowed_code {
-            if contents.contains(dis) {
-                return Ok(true);
-            }
+        if reader_contains_disallowed(&mut entry, config)? {
+            return Ok(true);
         }
     }
-
     Ok(false)
 }
+
 
 fn scan_gz_file(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);
     let mut decoder = GzDecoder::new(cursor);
-    let mut contents = String::new();
-
-    decoder
-        .read_to_string(&mut contents)
-        .map_err(|e| format!("Failed to decompress gz file: {e}"))?;
-
-    for dis in &config.marking.dissalowed_code {
-        if contents.contains(dis) {
-            return Ok(true);
-        }
+    if reader_contains_disallowed(&mut decoder, config)? {
+        return Ok(true);
     }
-
     Ok(false)
 }
 

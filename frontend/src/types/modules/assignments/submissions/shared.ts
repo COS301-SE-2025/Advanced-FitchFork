@@ -86,6 +86,10 @@ export interface FailedResubmission {
 
 // Response shape from the endpoint
 export interface ResubmitResponse {
-  resubmitted: number;
+  /** how many were actually (re)started */
+  started: number;
+  /** how many were skipped because they’re not in a final state (queued/running/grading) */
+  skipped_in_progress: number;
+  /** per-ID errors */
   failed: FailedResubmission[];
 }
