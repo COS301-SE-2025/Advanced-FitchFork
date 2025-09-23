@@ -812,6 +812,7 @@ const EntityList = forwardRef(function <T>(
                 rowKey={getRowKey}
                 loading={loading}
                 tableLayout="auto"
+                scroll={{ x: 'max-content' }}
                 pagination={{
                   ...pagination,
                   showSizeChanger: true,

@@ -2871,4 +2871,220 @@ mod tests {
         .await;
         assert!(invalid_result.is_err());
     }
+
+    fn enable_late_acceptance(module_id: i64, assignment_id: i64) {
+        // Start from your default config to keep everything else as-is
+        let mut cfg = ExecutionConfig::default_config();
+
+        // Make sure your runner path is Manual and your delimiter matches memo files
+        cfg.project.submission_mode = SubmissionMode::Manual;
+        cfg.marking.deliminator = "&-=-&".to_string();
+
+        // Allow late submissions and make the window permissive for the tests
+        cfg.marking.late.allow_late_submissions = true;
+        cfg.marking.late.late_window_minutes = 24 * 60; // 24h is generous for tests
+        cfg.marking.late.late_max_percent = 100;        // do not cap for these tests
+
+        // Keep attempts behavior as per your suite defaults
+        // (we don't touch limit_attempts/max_attempts here)
+
+        cfg.save(module_id, assignment_id).expect("write config.json");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_is_late_flag_transitions_across_boundary() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // ensure runner/marker + late policy are OK for late submits
+        enable_late_acceptance(data.module.id, data.assignment.id);
+
+        // Start with due date in the past -> should be late
+        let mut a: AssignmentActiveModel =
+            AssignmentEntity::find_by_id(data.assignment.id)
+                .one(db).await.unwrap().unwrap().into();
+        a.due_date = Set(Utc::now() - chrono::Duration::minutes(5));
+        a.update(db).await.unwrap();
+
+        let submission_zip = create_submission_zip();
+        let (boundary, body) = multipart_body("late1.zip", &submission_zip, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions",
+                        data.module.id, data.assignment.id);
+
+        let req1 = Request::builder()
+            .method("POST").uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={boundary}"))
+            .body(Body::from(body)).unwrap();
+
+        let resp1 = app.clone().oneshot(req1).await.unwrap();
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1 = axum::body::to_bytes(resp1.into_body(), usize::MAX).await.unwrap();
+        let j1: serde_json::Value = serde_json::from_slice(&body1).unwrap();
+        assert_eq!(j1["success"], true);
+        assert_eq!(j1["data"]["is_late"], true);
+
+        // Move due date into the future, submit again → should not be late
+        let mut a2: AssignmentActiveModel =
+            AssignmentEntity::find_by_id(data.assignment.id)
+                .one(db).await.unwrap().unwrap().into();
+        a2.due_date = Set(Utc::now() + chrono::Duration::minutes(5));
+        a2.update(db).await.unwrap();
+
+        let (boundary2, body2) = multipart_body("late2.zip", &create_submission_zip(), None, Some("true"));
+        let req2 = Request::builder()
+            .method("POST").uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={boundary2}"))
+            .body(Body::from(body2)).unwrap();
+
+        let resp2 = app.oneshot(req2).await.unwrap();
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let body2 = axum::body::to_bytes(resp2.into_body(), usize::MAX).await.unwrap();
+        let j2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+        assert_eq!(j2["success"], true);
+        assert_eq!(j2["data"]["is_late"], false);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_late_submission_counts_toward_attempts() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // allow late, keep memo/allocator/makefile config sane
+        enable_late_acceptance(data.module.id, data.assignment.id);
+
+        // Force a clearly past due date to ensure 'late'
+        let mut a: AssignmentActiveModel =
+            AssignmentEntity::find_by_id(data.assignment.id)
+                .one(db).await.unwrap().unwrap().into();
+        a.due_date = Set(Utc::now() - Duration::hours(2));
+        a.update(db).await.unwrap();
+
+        // Submit twice; both are late; attempts should go 1 -> 2
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions",
+                        data.module.id, data.assignment.id);
+
+        // capture by value to avoid closure lifetime issues
+        let token0 = token.clone();
+        let uri0 = uri.clone();
+        let once = move |app: &BoxCloneService<Request<Body>, Response, Infallible>| {
+            let app = app.clone();
+            let uri = uri0.clone();
+            let token = token0.clone();
+            async move {
+                let (b, body) = multipart_body("late.zip", &create_submission_zip(), None, Some("true"));
+                let req = Request::builder()
+                    .method("POST").uri(&uri)
+                    .header(AUTHORIZATION, format!("Bearer {}", token))
+                    .header(CONTENT_TYPE, format!("multipart/form-data; boundary={b}"))
+                    .body(Body::from(body)).unwrap();
+                let resp = app.oneshot(req).await.unwrap();
+                assert_eq!(resp.status(), StatusCode::OK);
+                let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+            }
+        };
+
+        let j1 = once(&app).await;
+        assert_eq!(j1["data"]["is_late"], true);
+        assert_eq!(j1["data"]["attempt"], 1);
+
+        let j2 = once(&app).await;
+        assert_eq!(j2["data"]["is_late"], true);
+        assert_eq!(j2["data"]["attempt"], 2);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_late_metadata_shape_when_present() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // ensure config accepts late so route doesn't 500
+        enable_late_acceptance(data.module.id, data.assignment.id);
+
+        // Past due to force late
+        let mut a: AssignmentActiveModel =
+            AssignmentEntity::find_by_id(data.assignment.id)
+                .one(db).await.unwrap().unwrap().into();
+        a.due_date = Set(Utc::now() - Duration::minutes(1));
+        a.update(db).await.unwrap();
+
+        let (boundary, body) = multipart_body("late.zip", &create_submission_zip(), None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions",
+                        data.module.id, data.assignment.id);
+        let req = Request::builder()
+            .method("POST").uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={boundary}"))
+            .body(Body::from(body)).unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["is_late"], true);
+
+        if let Some(obj) = json["data"].as_object() {
+            if obj.contains_key("late_by_seconds") {
+                assert!(json["data"]["late_by_seconds"].as_i64().unwrap_or(0) >= 0);
+            }
+            if obj.contains_key("late_window_seconds") {
+                assert!(json["data"]["late_window_seconds"].as_i64().unwrap_or(0) >= 0);
+            }
+            if obj.contains_key("late_penalty_percent") {
+                let p = json["data"]["late_penalty_percent"].as_f64().unwrap_or(0.0);
+                assert!((0.0..=100.0).contains(&p));
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_late_flag_ignores_filename_or_archive_timestamps() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let db = app_state.db();
+        let data = setup_test_data(db).await;
+
+        // accept late so the route doesn't reject
+        enable_late_acceptance(data.module.id, data.assignment.id);
+
+        // due well in the past
+        let mut a: AssignmentActiveModel =
+            AssignmentEntity::find_by_id(data.assignment.id)
+                .one(db).await.unwrap().unwrap().into();
+        a.due_date = Set(Utc::now() - Duration::hours(6));
+        a.update(db).await.unwrap();
+
+        // build a valid submission (Main + helpers) so the pipeline can compile/run
+        let submission_zip = create_submission_zip();
+
+        let (boundary, body) = multipart_body("futureish.zip", &submission_zip, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!("/api/modules/{}/assignments/{}/submissions", data.module.id, data.assignment.id);
+        let req = Request::builder()
+            .method("POST").uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .body(Body::from(body)).unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["is_late"], true);
+    }
 }

@@ -184,7 +184,6 @@ export default function SubmissionsList() {
       key: 'status',
       render: (_: unknown, record) => <SubmissionStatusTag status={record.status} />,
     },
-
     {
       title: 'Is Practice',
       dataIndex: 'is_practice',

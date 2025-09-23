@@ -26,6 +26,11 @@ pub fn assert_default_config(d: &Value) {
             .is_empty()
     );
 
+    // NEW: late policy defaults
+    assert_eq!(d["marking"]["late"]["allow_late_submissions"], false);
+    assert_eq!(d["marking"]["late"]["late_window_minutes"], 0);
+    assert_eq!(d["marking"]["late"]["late_max_percent"], 100);
+
     // ---------- project ----------
     assert_eq!(d["project"]["language"], "cpp"); // serde rename_all = "lowercase"
     assert_eq!(d["project"]["submission_mode"], "manual");
@@ -103,7 +108,6 @@ pub fn assert_default_config(d: &Value) {
     // ---------- code_coverage ----------
     assert_eq!(d["code_coverage"]["code_coverage_weight"], 10f32);
 }
-
 fn approx(v: &Value, expected: f64, path: &str) {
     let got = v.as_f64().unwrap();
     assert!(

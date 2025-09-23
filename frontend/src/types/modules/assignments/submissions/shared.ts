@@ -13,17 +13,10 @@ export const SUBMISSION_STATUSES = [
   'failed_execution',
   'failed_grading',
   'failed_internal',
+  'failed_disallowed_code',
 ] as const;
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
-export const SUBMISSION_PHASES = [
-  'queued',
-  'executing',
-  'grading',
-  'finalizing',
-  'done',
-] as const;
-export type SubmissionPhase = (typeof SUBMISSION_PHASES)[number];
 
 // ─────────────────────────────────────────────────────────────
 // Shared Types

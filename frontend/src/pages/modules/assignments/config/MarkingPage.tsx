@@ -26,22 +26,22 @@ export default function MarkingPage() {
         <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
           Marking Configuration
         </Typography.Text>
-        <Tip
-          iconOnly
-          newTab
-          to="/help/assignments/config/marking#what"
-          text="Marking help"
-        />
+        <Tip iconOnly newTab to="/help/assignments/config/marking#what" text="Marking help" />
       </Space>,
     );
   }, [setValue]);
 
-  // Seed form whenever config.marking changes (ensure default for new field)
+  // Seed form whenever config.marking changes (+ sensible defaults)
   useEffect(() => {
     if (!config?.marking) return;
     form.setFieldsValue({
       ...config.marking,
       dissalowed_code: config.marking.dissalowed_code ?? [],
+      late: {
+        allow_late_submissions: config.marking.late?.allow_late_submissions ?? false,
+        late_window_minutes: config.marking.late?.late_window_minutes ?? 0,
+        late_max_percent: config.marking.late?.late_max_percent ?? 100,
+      },
     });
   }, [config?.marking, form]);
 
@@ -60,6 +60,11 @@ export default function MarkingPage() {
         pass_mark: values.pass_mark,
         allow_practice_submissions: values.allow_practice_submissions,
         dissalowed_code: values.dissalowed_code ?? [],
+        late: {
+          allow_late_submissions: values.late.allow_late_submissions,
+          late_window_minutes: values.late.late_window_minutes,
+          late_max_percent: values.late.late_max_percent,
+        },
       };
       await updateConfig({ marking: toSave });
       message.success('Marking config saved');
@@ -73,11 +78,12 @@ export default function MarkingPage() {
   const disabled = !config;
 
   return (
-    <SettingsGroup
-      title="Marking & Feedback"
-      description="Determine how submissions are evaluated and how feedback is generated."
-    >
-      <Form layout="vertical" form={form} className="space-y-6" disabled={disabled}>
+    <Form layout="vertical" form={form} className="space-y-6" disabled={disabled}>
+      {/* ===== Group: Marking & Feedback ===== */}
+      <SettingsGroup
+        title="Marking & Feedback"
+        description="Determine how submissions are evaluated and how feedback is generated."
+      >
         <Form.Item
           name="marking_scheme"
           label="Marking Scheme"
@@ -105,7 +111,7 @@ export default function MarkingPage() {
           <Select className="w-full" options={GRADING_POLICY_OPTIONS} />
         </Form.Item>
 
-        {/* ---- Practice submissions (students only) ---- */}
+        {/* Practice submissions (students only) */}
         <Form.Item
           name="allow_practice_submissions"
           label="Allow Practice Submissions"
@@ -116,7 +122,7 @@ export default function MarkingPage() {
           <Switch />
         </Form.Item>
 
-        {/* ---- Attempts ---- */}
+        {/* Attempts */}
         <div className="grid gap-2">
           <Form.Item
             name="limit_attempts"
@@ -174,7 +180,7 @@ export default function MarkingPage() {
           <Input className="w-full" placeholder="e.g., &-=-&" />
         </Form.Item>
 
-        {/* ---- Disallowed code substrings ---- */}
+        {/* Disallowed code substrings */}
         <Form.Item
           name="dissalowed_code"
           label="Disallowed Code Substrings"
@@ -189,15 +195,71 @@ export default function MarkingPage() {
             placeholder="e.g., import forbidden_code, system(, eval("
           />
         </Form.Item>
+      </SettingsGroup>
 
-        <div className="pt-2">
-          <AssignmentConfigActions
-            primaryText="Save Marking Config"
-            onPrimary={onSave}
-            disabled={disabled}
-          />
-        </div>
-      </Form>
-    </SettingsGroup>
+      {/* ===== Group: Late Submissions ===== */}
+      <SettingsGroup
+        title="Late Submissions"
+        description="Accept late submissions within a grace window and optionally cap the awarded mark."
+      >
+        <Form.Item
+          name={['late', 'allow_late_submissions']}
+          label="Allow Late Submissions"
+          valuePropName="checked"
+          className={fieldWidth}
+          tooltip="If OFF, late uploads are rejected. If ON, uploads after due date are accepted within the grace window below."
+          rules={[{ type: 'boolean' }]}
+        >
+          <Switch />
+        </Form.Item>
+
+        <Form.Item
+          noStyle
+          shouldUpdate={(prev, cur) =>
+            prev?.late?.allow_late_submissions !== cur?.late?.allow_late_submissions
+          }
+        >
+          {({ getFieldValue }) =>
+            getFieldValue(['late', 'allow_late_submissions']) ? (
+              <>
+                <Form.Item
+                  name={['late', 'late_window_minutes']}
+                  label="Late Window (minutes)"
+                  className={fieldWidth}
+                  rules={[
+                    { required: true, message: 'Enter a grace window' },
+                    { type: 'number', min: 0, message: 'Must be ≥ 0' },
+                  ]}
+                  extra="Submissions after the due date are accepted up to this many minutes late."
+                >
+                  <InputNumber className="w-full" min={0} precision={0} />
+                </Form.Item>
+
+                <Form.Item
+                  name={['late', 'late_max_percent']}
+                  label="Cap Awarded Mark (%)"
+                  className={fieldWidth}
+                  rules={[
+                    { required: true, message: 'Enter a cap percentage' },
+                    { type: 'number', min: 0, max: 100, message: 'Must be between 0 and 100' },
+                  ]}
+                  extra="If the earned mark exceeds this percentage of the total, it will be capped."
+                >
+                  <InputNumber className="w-full" min={0} max={100} precision={0} />
+                </Form.Item>
+              </>
+            ) : null
+          }
+        </Form.Item>
+      </SettingsGroup>
+
+      <div className="pt-2">
+        <AssignmentConfigActions
+          primaryText="Save Marking Config"
+          onPrimary={onSave}
+          disabled={disabled}
+        />
+      </div>
+    </Form>
   );
 }

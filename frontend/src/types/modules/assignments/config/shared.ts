@@ -7,17 +7,15 @@ export const MARKING_SCHEMES = ['exact', 'percentage', 'regex'] as const;
 /** Feedback schemes */
 export const FEEDBACK_SCHEMES = ['auto', 'manual', 'ai'] as const;
 /** Languages (Rust currently supports only C++ and Java) */
-export const LANGUAGES = [
-  'c',
-  'cpp',
-  'java',
-  'python',
-  'go',
-  'rust'
-] as const;
+export const LANGUAGES = ['c', 'cpp', 'java', 'python', 'go', 'rust'] as const;
 
-/** Submission modes */
+/**
+ * Submission modes
+ * NOTE: backend treats anything not 'manual' as the asynchronous/AI pipeline.
+ * Keep legacy values for compatibility.
+ */
 export const SUBMISSION_MODES = ['manual', 'gatlam', 'rng', 'codecoverage'] as const;
+
 /** Grading policies (mirrors Rust enum) */
 export const GRADING_POLICIES = ['best', 'last'] as const;
 
@@ -30,21 +28,19 @@ export const MARKING_SCHEME_OPTIONS = MARKING_SCHEMES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
 }));
-
 export const FEEDBACK_SCHEME_OPTIONS = FEEDBACK_SCHEMES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
 }));
 
 export const LANGUAGE_LABELS: Record<(typeof LANGUAGES)[number], string> = {
-  c: `C`,
+  c: 'C',
   cpp: 'C++',
   java: 'Java',
-  python: `Python`,
+  python: 'Python',
   go: 'GoLang',
   rust: 'Rust',
 };
-
 export const LANGUAGE_OPTIONS = LANGUAGES.map((val) => ({
   label: LANGUAGE_LABELS[val],
   value: val,
@@ -54,17 +50,14 @@ export const SUBMISSION_MODE_OPTIONS = SUBMISSION_MODES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
 }));
-
 export const GRADING_POLICY_OPTIONS = GRADING_POLICIES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
 }));
-
 export const CROSSOVER_TYPE_OPTIONS = CROSSOVER_TYPES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
 }));
-
 export const MUTATION_TYPE_OPTIONS = MUTATION_TYPES.map((val) => ({
   label: val.charAt(0).toUpperCase() + val.slice(1),
   value: val,
@@ -107,6 +100,22 @@ export interface AssignmentExecutionConfig {
   max_processes: number;
 }
 
+/** Late submission policy (new in ExecutionConfig.marking.late). */
+export interface LateOptions {
+  /** Allow late submissions at all. */
+  allow_late_submissions: boolean;
+  /**
+   * Minutes after due date during which late submissions are still accepted.
+   * (If `allow_late_submissions` is true.)
+   */
+  late_window_minutes: number;
+  /**
+   * Cap for the earned mark when late, expressed as a percentage of total (0–100).
+   * e.g. 60 means “late submissions can earn at most 60% of total”.
+   */
+  late_max_percent: number;
+}
+
 /** Configuration for marking and feedback generation (MarkingOptions). */
 export interface AssignmentMarkingConfig {
   /** Strategy used to mark student submissions. */
@@ -135,13 +144,15 @@ export interface AssignmentMarkingConfig {
 
   /**
    * If true, **students** may make practice submissions.
-   * If false (default), practice uploads are rejected for students.
-   * Staff (lecturer/assistant/admin) are unaffected (always allowed).
+   * If false, practice uploads are rejected for students (staff unaffected).
    */
   allow_practice_submissions: boolean;
 
   /** Substrings to flag as disallowed in source files (serialized as `dissalowed_code`). */
   dissalowed_code: string[];
+
+  /** late submission policy. */
+  late: LateOptions;
 }
 
 /** Options for execution output capture (ExecutionOutputOptions). */
@@ -213,13 +224,13 @@ export interface GatlamConfig {
 export interface CodeCoverage {
   code_coverage_weight: number;
 }
+
 /**
  * Top-level assignment configuration (ExecutionConfig in Rust).
- * Combines execution limits, marking rules, project setup, output options, and GA/TLAM config.
  */
 export interface AssignmentConfig {
   execution: AssignmentExecutionConfig;
-  marking: AssignmentMarkingConfig;
+  marking: AssignmentMarkingConfig;     // ← includes .late now
   project: AssignmentProjectConfig;
   output: AssignmentOutputConfig;
   gatlam: GatlamConfig;

@@ -90,7 +90,7 @@ pub struct FailedOperation {
 // Helper Functions
 // ============================================================================
 
-fn is_failed(status: &SubmissionStatus) -> bool {
+fn status_is_failed(status: &SubmissionStatus) -> bool {
     matches!(
         status,
         SubmissionStatus::FailedUpload
@@ -98,7 +98,28 @@ fn is_failed(status: &SubmissionStatus) -> bool {
             | SubmissionStatus::FailedExecution
             | SubmissionStatus::FailedGrading
             | SubmissionStatus::FailedInternal
+            | SubmissionStatus::FailedDisallowedCode
     )
+}
+
+fn within_late_window(
+    submitted_at: chrono::DateTime<chrono::Utc>,
+    due: chrono::DateTime<chrono::Utc>,
+    window_minutes: u32,
+) -> bool {
+    if submitted_at <= due { return true; }
+    let latest_ok = due + chrono::Duration::minutes(window_minutes as i64);
+    submitted_at <= latest_ok
+}
+
+/// Returns (adjusted_earned, capped_to_opt)
+fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i64>) {
+    let cap = ((max_percent as i128) * (total as i128) / 100) as i64;
+    if earned > cap {
+        (cap, Some(cap))
+    } else {
+        (earned, None)
+    }
 }
 
 #[derive(Serialize)]
@@ -126,7 +147,7 @@ async fn emit_submission_status(
         "ts": chrono::Utc::now().to_rfc3339(),
     });
 
-    if is_failed(&status) {
+    if status_is_failed(&status) {
         if let Some(msg) = message {
             if let Some(obj) = payload.as_object_mut() {
                 obj.insert("message".into(), serde_json::Value::String(msg));
@@ -225,19 +246,18 @@ pub async fn check_disallowed_code(
 ) -> DisallowedCodeCheckResult {
     match scan_code_content::contains_dissalowed_code(file_bytes, config) {
         Ok(true) => {
-            let allocator =
-                match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        eprintln!("Failed to load allocator: {}", e);
-                        return DisallowedCodeCheckResult::CheckFailed(format!(
-                            "Failed to load mark allocator: {}",
-                            e
-                        ));
-                    }
-                };
+            let allocator = match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("Failed to load allocator: {}", e);
+                    return DisallowedCodeCheckResult::CheckFailed(format!(
+                        "Failed to load mark allocator: {}", e
+                    ));
+                }
+            };
 
-            let submission = match AssignmentSubmissionModel::save_file(
+            // Save the submission with zero mark total preset from allocator
+            let saved = match AssignmentSubmissionModel::save_file(
                 db,
                 assignment_id,
                 user_id,
@@ -248,59 +268,52 @@ pub async fn check_disallowed_code(
                 file_name,
                 file_hash,
                 file_bytes,
-            )
-            .await
-            {
-                Ok(model) => {
-                    if let Err(e) = AssignmentSubmissionModel::set_failed(
-                        db,
-                        model.id,
-                        assignment_submission::SubmissionStatus::FailedUpload,
-                    )
-                    .await
-                    {
-                        eprintln!(
-                            "Failed to update submission status to failed_upload: {:?}",
-                            e
-                        );
-                    }
-                    model
-                }
+            ).await {
+                Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error saving disallowed submission: {:?}", e);
                     return DisallowedCodeCheckResult::CheckFailed(format!(
-                        "Failed to save submission: {}",
-                        e
+                        "Failed to save submission: {}", e
                     ));
+                }
+            };
+
+            // Immediately mark as failed_disallowed_code and use the UPDATED model for accurate status
+            let updated = match AssignmentSubmissionModel::set_failed(
+                db,
+                saved.id,
+                assignment_submission::SubmissionStatus::FailedDisallowedCode,
+            ).await {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set failed_disallowed_code: {:?}", e);
+                    saved
                 }
             };
 
             let now = Utc::now();
             let response = SubmissionDetailResponse {
-                id: submission.id,
-                attempt: submission.attempt,
-                filename: submission.filename.clone(),
-                hash: submission.file_hash.clone(),
+                id: updated.id,
+                attempt: updated.attempt,
+                filename: updated.filename.clone(),
+                hash: updated.file_hash.clone(),
                 created_at: now.to_rfc3339(),
                 updated_at: now.to_rfc3339(),
-                mark: MarkSummary {
-                    earned: 0,
-                    total: allocator.total_value,
-                },
-                is_practice: submission.is_practice,
-                is_late: is_late(submission.created_at, assignment.due_date),
-                ignored: submission.ignored,
-                status: submission.status.to_string(),
+                mark: MarkSummary { earned: 0, total: allocator.total_value },
+                is_practice: updated.is_practice,
+                is_late: is_late(updated.created_at, assignment.due_date),
+                ignored: updated.ignored,
+                status: SubmissionStatus::FailedDisallowedCode.to_string(),
                 tasks: vec![],
                 code_coverage: None,
-                user: None, // just ignore this lol
+                user: None,
             };
 
             let report_path = submission_report_path(
                 assignment.module_id,
                 assignment.id,
-                submission.user_id,
-                submission.attempt,
+                updated.user_id,
+                updated.attempt,
             );
             if let Some(parent) = report_path.parent() {
                 let _ = fs::create_dir_all(parent);
@@ -311,6 +324,7 @@ pub async fn check_disallowed_code(
 
             DisallowedCodeCheckResult::DisallowedFound(response)
         }
+
         Ok(false) => DisallowedCodeCheckResult::Clean,
         Err(e) => {
             eprintln!("Disallowed scan error: {}", e);
@@ -685,10 +699,30 @@ async fn grade_submission(
         }
     };
 
-    let mark = MarkSummary {
+    let mut mark = MarkSummary {
         earned: mark_report.data.mark.earned,
         total: mark_report.data.mark.total,
     };
+
+    // Apply late cap if applicable
+    let is_late_now = submission.created_at > assignment.due_date;
+    let mut _late_capped_to: Option<i64> = None;
+    if is_late_now && config.marking.late.allow_late_submissions {
+        if within_late_window(
+            submission.created_at,
+            assignment.due_date,
+            config.marking.late.late_window_minutes,
+        ) {
+            let (adj, capped) = cap_late_earned(
+                mark.earned,
+                mark.total,
+                config.marking.late.late_max_percent,
+            );
+            mark.earned = adj;
+            _late_capped_to = capped;
+        }
+    }
+
     let tasks = serde_json::to_value(&mark_report.data.tasks)
         .unwrap_or_default()
         .as_array()
@@ -1315,6 +1349,31 @@ async fn run_submission_pipeline(
     assignment_id: i64,
     user_id: i64,
 ) -> Result<SubmissionDetailResponse, String> {
+    // --- Late acceptance gate ---
+    let submitted_at = submission.created_at;
+    let due = assignment.due_date;
+    let is_late_now = submitted_at > due;
+    if is_late_now {
+        let late = &config.marking.late;
+        if !late.allow_late_submissions ||
+           !within_late_window(submitted_at, due, late.late_window_minutes)
+        {
+            // reject late submission outright
+            let _ = AssignmentSubmissionModel::set_failed(
+                db, submission.id, assignment_submission::SubmissionStatus::FailedUpload
+            ).await;
+
+            emit_submission_status(
+                app, module_id, assignment_id, user_id, submission.id,
+                SubmissionStatus::FailedUpload,
+                Some("Late submissions are not allowed for this assignment".into()),
+                None,
+            ).await;
+
+            return Err("Late submissions are not allowed".to_string());
+        }
+    }
+
     // running
     if AssignmentSubmissionModel::set_running(db, submission.id)
         .await

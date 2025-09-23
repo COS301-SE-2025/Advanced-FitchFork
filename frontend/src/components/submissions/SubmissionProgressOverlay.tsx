@@ -1,4 +1,3 @@
-// src/components/submissions/SubmissionProgressOverlay.tsx
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Result, Space, Typography, Button, Progress, Divider } from 'antd';
@@ -16,7 +15,6 @@ import {
   SUBMISSION_STATUSES,
   type SubmissionStatus,
 } from '@/types/modules/assignments/submissions';
-import EventBus from '@/utils/EventBus';
 
 const { Title } = Typography;
 
@@ -24,7 +22,9 @@ type Props = {
   moduleId: number;
   assignmentId: number;
   userId: number;
+  /** Called when modal is closed */
   onClose?: () => void;
+  /** Called when submission is done and user clicks “Go to submission” */
   onDone?: (submissionId: number) => void;
   submissionId?: number;
   triggerSubmit?: () => Promise<number | null>;
@@ -110,9 +110,8 @@ export default function SubmissionProgressOverlay({
     if (!triggerSubmit || firedRef.current) return;
 
     let timer: number | undefined;
-
-    // Fallback if WS doesn’t connect in time
     const timeoutMs = Math.max(500, wsConnectTimeoutMs ?? 2000);
+
     timer = window.setTimeout(() => {
       if (!firedRef.current) {
         firedRef.current = true;
@@ -120,7 +119,6 @@ export default function SubmissionProgressOverlay({
       }
     }, timeoutMs) as unknown as number;
 
-    // Preferred: fire as soon as WS connects
     if (connected && !firedRef.current) {
       Promise.resolve().then(() => {
         if (!firedRef.current) {
@@ -138,7 +136,6 @@ export default function SubmissionProgressOverlay({
   // Active progress (WS only)
   const progress = latest ?? null;
 
-  // Derived state
   const activeSubmissionId = submissionId ?? progress?.submissionId ?? null;
 
   const isSubmissionStatus = (v: unknown): v is SubmissionStatus =>
@@ -151,7 +148,7 @@ export default function SubmissionProgressOverlay({
         ? 'queued'
         : 'connecting';
 
-  const isFailed = typeof rawStatus === 'string' && rawStatus.startsWith('failed_');
+  const isFailed = rawStatus.startsWith('failed_');
   const isGraded = rawStatus === 'graded';
   const linearPercent =
     rawStatus === 'connecting'
@@ -167,23 +164,25 @@ export default function SubmissionProgressOverlay({
   const headerIcon = isFailed ? (
     <CloseCircleTwoTone twoToneColor="#ff4d4f" />
   ) : isGraded ? (
-    // Icon won’t be shown when graded (title hidden), but keep for non-graded header.
     <CheckCircleTwoTone twoToneColor="#52c41a" />
   ) : (
     <ClockCircleTwoTone twoToneColor="#1677ff" />
   );
 
+  const handleClose = () => {
+    onClose?.(); // parent can refresh assignment here
+  };
+
   const handleGoToSubmission = () => {
     if (!activeSubmissionId) return;
-    onDone?.(activeSubmissionId);
+    onDone?.(activeSubmissionId); // parent can refresh assignment here
     navigate(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${activeSubmissionId}`);
     onClose?.();
   };
 
-  // ===== Confetti + one-time EventBus emission on terminal state (WS-only) =====
+  // ===== Confetti =====
   const prevStatusRef = useRef<SubmissionStatus | 'queued' | 'connecting' | null>(null);
   const firedForSubmissionRef = useRef<number | null>(null);
-  const emittedTerminalRef = useRef<number | null>(null);
 
   const launcherRef = useRef<ReturnType<typeof confetti.create> | null>(null);
   useEffect(() => {
@@ -198,7 +197,6 @@ export default function SubmissionProgressOverlay({
   }, []);
 
   useEffect(() => {
-    const cameFromWs = !!progress; // all updates here are WS-driven
     const launch = launcherRef.current ?? confetti;
 
     const justGraded = prevStatusRef.current !== 'graded' && isGraded;
@@ -209,7 +207,7 @@ export default function SubmissionProgressOverlay({
       firedForSubmissionRef.current === activeSubmissionId;
 
     const shouldFire =
-      cameFromWs && justGraded && isPerfect && !alreadyFiredForThis && activeSubmissionId != null;
+      justGraded && isPerfect && !alreadyFiredForThis && activeSubmissionId != null;
 
     if (shouldFire) {
       firedForSubmissionRef.current = activeSubmissionId;
@@ -228,47 +226,10 @@ export default function SubmissionProgressOverlay({
       shot(0.25, { angle: 60, origin: { x: 0, y: 0.4 } });
       shot(0.25, { angle: 120, origin: { x: 1, y: 0.4 } });
       shot(0.5, { spread: 100, origin: { x: 0.5, y: 0.3 } });
-
-      const duration = 15_000;
-      const end = Date.now() + duration;
-      const defaults: ConfettiOptions = {
-        startVelocity: 30,
-        spread: 360,
-        ticks: 60,
-        zIndex: 2147483647,
-        disableForReducedMotion: false,
-      };
-      const interval = window.setInterval(() => {
-        const timeLeft = end - Date.now();
-        if (timeLeft <= 0) return window.clearInterval(interval);
-        const particleCount = 50 * (timeLeft / duration);
-        launch({
-          ...defaults,
-          particleCount,
-          origin: { x: rand(0.1, 0.3), y: Math.random() - 0.2 },
-        });
-        launch({
-          ...defaults,
-          particleCount,
-          origin: { x: rand(0.7, 0.9), y: Math.random() - 0.2 },
-        });
-      }, 250);
-    }
-
-    // Emit EventBus once on terminal (WS-driven)
-    const terminal = isGraded || isFailed;
-    if (
-      cameFromWs &&
-      terminal &&
-      activeSubmissionId &&
-      emittedTerminalRef.current !== activeSubmissionId
-    ) {
-      emittedTerminalRef.current = activeSubmissionId;
-      EventBus.emit('submission:updated', { id: activeSubmissionId });
     }
 
     prevStatusRef.current = rawStatus;
-  }, [rawStatus, pct, isGraded, isFailed, activeSubmissionId, mark, progress]);
+  }, [rawStatus, pct, isGraded, activeSubmissionId, mark]);
 
   // ===== Body content =====
   const body = (
@@ -322,7 +283,6 @@ export default function SubmissionProgressOverlay({
               </div>
             )}
           />
-          {/* Big text BELOW the circle when graded */}
           <Title level={3} className="!m-0 !text-center">
             Submission Graded
           </Title>
@@ -342,7 +302,7 @@ export default function SubmissionProgressOverlay({
       destroyOnClose
       footer={
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={handleClose}>Close</Button>
           <Button
             type="primary"
             onClick={handleGoToSubmission}
@@ -352,7 +312,6 @@ export default function SubmissionProgressOverlay({
           </Button>
         </div>
       }
-      // Hide modal header entirely when graded
       title={
         isGraded ? null : (
           <div className="flex items-center justify-center gap-2">
