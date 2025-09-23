@@ -118,7 +118,7 @@ async fn test_create_memo_outputs_for_all_tasks_9998_cpp() {
 
     let assignment_id = 9998;
 
-    match create_memo_outputs_for_all_tasks(&db, assignment_id).await {
+    match create_memo_outputs_for_all_tasks(&db, assignment_id, ).await {
         Ok(_) => println!("Memo outputs generated successfully for all tasks (C++ 9998)."),
         Err(e) => panic!("Failed to generate memo outputs: {}", e),
     }

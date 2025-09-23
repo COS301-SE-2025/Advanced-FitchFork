@@ -9,8 +9,8 @@ use util::execution_config::{
 /// Gene-level configuration
 #[derive(Clone)]
 pub struct GeneConfig {
-    pub min_value: i32,               // minimum valid value
-    pub max_value: i32,               // maximum valid value
+    pub min_value: i32, // minimum valid value
+    pub max_value: i32, // maximum valid value
     pub invalid_values: HashSet<i32>, // explicitly disallowed values
 }
 
@@ -32,17 +32,15 @@ impl GeneConfig {
 
 /// GA-wide configuration
 pub struct GAConfig {
-    pub population_size: usize,       // Number of chromosomes per generation
+    pub population_size: usize, // Number of chromosomes per generation
     pub number_of_generations: usize, // Total number of generations to run
-    //todo: use this in run
     pub selection_size: usize, // Number of individuals selected during selection
     pub reproduction_probability: f64, // Probability of applying crossover during reproduction
-    //todo: use this probability
     pub crossover_probability: f64, // Used in some variants, may control forced crossover
     pub mutation_probability: f64,  // Probability of mutating a child
-    pub genes: Vec<GeneConfig>,     // Configuration for each gene in the chromosome
+    pub genes: Vec<GeneConfig>, // Configuration for each gene in the chromosome
     pub crossover_type: CrossoverType, // Which crossover operator to use (one-point, two-point, uniform)
-    pub mutation_type: MutationType,   // Which mutation operator to use (bit-flip, swap, scramble)
+    pub mutation_type: MutationType, // Which mutation operator to use (bit-flip, swap, scramble)
 }
 
 impl GAConfig {
@@ -412,7 +410,7 @@ mod tests {
         if sign { -mag } else { mag }
     }
 
-    // --- GeneConfig & GAConfig ----------------------------------------------
+    // --- GeneConfig & GAConfig 
 
     #[test]
     fn gene_bits_respects_range() {
@@ -502,7 +500,6 @@ mod tests {
         assert_eq!(child.genes().len(), 5);
 
         for (i, &b) in child.genes().iter().enumerate() {
-            // must equal either parent's bit at that position
             assert!(b == p1.genes()[i] || b == p2.genes()[i]);
         }
     }

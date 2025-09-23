@@ -63,10 +63,10 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     let module_id = assignment.module_id;
 
-    // Validate required input files (unchanged)
+    // Validate required input files
     validate_memo_files(module_id, assignment_id)?;
 
-    // Load config (unchanged; uses util::execution_config under the hood)
+    // Load config 
     let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
         .map_err(|e| format!("Failed to load execution config: {}", e))?;
 
@@ -79,7 +79,7 @@ pub async fn create_memo_outputs_for_all_tasks(
             .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
     }
 
-    // Delete old entries from DB (unchanged)
+    // Delete old entries from DB
     MemoOutputEntity::delete_many()
         .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
         .exec(db)
@@ -287,6 +287,250 @@ pub async fn create_memo_outputs_for_all_tasks(
 
     Ok(())
 }
+
+
+pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
+    db: &DatabaseConnection,
+    assignment_id: i64,
+    submission_id: Option<i64>,
+) -> Result<(), String> {
+    // Fetch the assignment to get module_id
+    let assignment = Assignment::find_by_id(assignment_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch assignment: {}", e))?
+        .ok_or_else(|| format!("Assignment {} not found", assignment_id))?;
+
+    let module_id = assignment.module_id;
+
+    // Validate required input files
+    validate_memo_files(module_id, assignment_id)?;
+
+    // Load config
+    let config = ExecutionConfig::get_execution_config(module_id, assignment_id)
+        .map_err(|e| format!("Failed to load execution config: {}", e))?;
+
+    // Base and subdirs via helpers
+    let memo_out_dir = memo_output_dir(module_id, assignment_id);
+
+
+    if submission_id.is_some() {
+    // Delete old files on disk
+        if memo_out_dir.exists() {
+            fs::remove_dir_all(&memo_out_dir)
+                .map_err(|e| format!("Failed to delete old memo_output dir: {}", e))?;
+        }
+
+    // Delete old entries from DB
+        MemoOutputEntity::delete_many()
+            .filter(MemoOutputColumn::AssignmentId.eq(assignment_id))
+            .exec(db)
+            .await
+            .map_err(|e| format!("Failed to delete old memo outputs: {}", e))?;
+    }
+
+    // Load archives with helpers
+    let archive_paths = vec![
+        first_archive_in(memo_dir(module_id, assignment_id))?,
+        first_archive_in(makefile_dir(module_id, assignment_id))?,
+        first_archive_in(main_dir(module_id, assignment_id))?,
+    ];
+
+    let tasks = AssignmentTask::get_by_assignment_id(db, assignment_id)
+        .await
+        .map_err(|e| format!("DB error loading tasks: {}", e))?;
+
+    if tasks.is_empty() {
+        return Err("No tasks are defined for this assignment. Add at least one task before generating memo output.".to_string());
+    }
+
+    // Prepare HTTP client
+    let client = Client::new();
+
+    let host = config::code_manager_host();
+
+    let port = config::code_manager_port();
+
+    let code_manager_url = format!("http://{}:{}", host, port);
+
+    // Read common archives once to avoid repeated disk IO
+    let mut base_files: Vec<(String, Vec<u8>)> = Vec::new();
+    for archive_path in &archive_paths {
+        let content = std::fs::read(archive_path)
+            .map_err(|e| format!("Failed to read archive file {:?}: {}", archive_path, e))?;
+        let file_name = archive_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid archive filename: {:?}", archive_path))?
+            .to_string();
+        base_files.push((file_name, content));
+    }
+
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tokio::task::JoinSet;
+    use tokio::time::{Duration, sleep};
+
+    let max_concurrency = std::cmp::max(
+        1,
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 2,
+    );
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+    let mut join_set = JoinSet::new();
+
+    for task in tasks.into_iter() {
+        if task.code_coverage {
+            continue;
+        }
+
+        let filename = format!("task_{}_output.txt", task.task_number);
+        let task_files_base = base_files.clone();
+        let client_cloned = client.clone();
+        let cm_url = code_manager_url.clone();
+        let config_value = serde_json::to_value(&config)
+            .map_err(|e| format!("Failed to serialize ExecutionConfig: {}", e))?;
+        let db_cloned = db.clone();
+        let sem = semaphore.clone();
+        join_set.spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+            // Apply overwrites for this task
+            let mut files = task_files_base;
+            let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
+            if overwrite_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Ok(content) = std::fs::read(&path) {
+                                if let Some(file_name) = path
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .map(|s| s.to_string())
+                                {
+                                    files.retain(|(name, _)| name != &file_name);
+                                    files.push((file_name, content));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let request_body = serde_json::json!({
+                "config": config_value,
+                "commands": [task.command.clone()],
+                "files": files,
+            });
+
+            // Fire request
+            let resp_res = client_cloned
+                .post(format!("{}/run", cm_url))
+                .json(&request_body)
+                .send()
+                .await;
+            let response = match resp_res {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to send request to code_manager (task {}): {}",
+                        task.task_number, e
+                    ));
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+                return Err(format!(
+                    "code_manager error for task {}: {} {}",
+                    task.task_number, status, text
+                ));
+            }
+
+            let resp_json: serde_json::Value = match response.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    return Err(format!(
+                        "Failed to parse response JSON for task {}: {}",
+                        task.task_number, e
+                    ));
+                }
+            };
+
+            let output_vec = resp_json
+                .get("output")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| {
+                    format!(
+                        "Response missing 'output' array for task {}",
+                        task.task_number
+                    )
+                })?
+                .iter()
+                .map(|val| val.as_str().unwrap_or("").to_string())
+                .collect::<Vec<String>>();
+            let output_combined = output_vec.join("\n");
+
+            // Save with retries to mitigate transient locks
+            for attempt in 0..5 {
+                match db::models::assignment_memo_output::Model::save_file(
+                    &db_cloned,
+                    assignment_id,
+                    task.id,
+                    &filename,
+                    output_combined.as_bytes(),
+                )
+                .await
+                {
+                    Ok(_) => return Ok::<(), String>(()),
+                    Err(e) => {
+                        let backoff_ms = 20u64 * (1 << attempt);
+                        println!(
+                            "Retry {}/5 saving memo output for task {} ({} ms): {}",
+                            attempt + 1,
+                            task.task_number,
+                            backoff_ms,
+                            e
+                        );
+                        sleep(Duration::from_millis(backoff_ms)).await;
+                    }
+                }
+            }
+            Err(format!(
+                "Failed to save memo output for task {} after retries",
+                task.task_number
+            ))
+        });
+    }
+
+    // Collect errors if any
+    let mut first_err: Option<String> = None;
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+            }
+            Err(e) => {
+                if first_err.is_none() {
+                    first_err = Some(format!("Join error: {}", e));
+                }
+            }
+        }
+    }
+
+    if let Some(e) = first_err {
+        return Err(e);
+    }
+
+    Ok(())
+}
+
 
 use db::models::assignment_submission_output::Model as SubmissionOutputModel;
 
@@ -1124,7 +1368,7 @@ pub async fn run_interpreter(
     create_main_from_interpreter(db, submission_id, generated_string).await?;
 
     // Step 2
-    create_memo_outputs_for_all_tasks(db, assignment_id).await?;
+    create_memo_outputs_for_all_tasks_with_submission_id(db, assignment_id, Some(submission_id)).await?;
 
     // Step 3
     create_submission_outputs_for_all_tasks(db, submission_id).await?;
