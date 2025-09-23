@@ -157,12 +157,16 @@ impl Default for ExecutionOutputOptions {
 pub struct CodeCoverage {
     #[serde(default = "default_code_coverage_weight")]
     pub code_coverage_weight: f32,
+
+    #[serde(default)]
+    pub whitelist: Vec<String>,
 }
 
 impl Default for CodeCoverage {
     fn default() -> Self {
         Self {
             code_coverage_weight: default_code_coverage_weight(),
+            whitelist: default_code_coverage_whitelist(),
         }
     }
 }
@@ -541,4 +545,8 @@ fn default_allowed_cidrs() -> Vec<String> {
 
 fn default_code_coverage_weight() -> f32 {
     10.0
+}
+
+fn default_code_coverage_whitelist() -> Vec<String> {
+    Vec::new()
 }
