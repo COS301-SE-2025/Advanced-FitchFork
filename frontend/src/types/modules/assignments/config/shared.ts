@@ -11,27 +11,9 @@ export const LANGUAGES = [
   'c',
   'cpp',
   'java',
-  'ml',
-  'pascal',
-  'ada',
-  'lisp',
-  'scheme',
-  'haskell',
-  'fortran',
-  'ascii',
-  'vhdl',
-  'perl',
-  'matlab',
   'python',
-  'mips',
-  'prolog',
-  'spice',
-  'vb',
-  'csharp',
-  'modula2',
-  'a8086',
-  'javascript',
-  'plsql',
+  'go',
+  'rust'
 ] as const;
 
 /** Submission modes */
@@ -54,34 +36,13 @@ export const FEEDBACK_SCHEME_OPTIONS = FEEDBACK_SCHEMES.map((val) => ({
   value: val,
 }));
 
-// pretty labels (C++/C#/PL/SQL/…)
-const NOT_IMPL = ' (not implemented)';
-
 export const LANGUAGE_LABELS: Record<(typeof LANGUAGES)[number], string> = {
-  c: `C${NOT_IMPL}`,
+  c: `C`,
   cpp: 'C++',
   java: 'Java',
-  ml: `ML${NOT_IMPL}`,
-  pascal: `Pascal${NOT_IMPL}`,
-  ada: `Ada${NOT_IMPL}`,
-  lisp: `Lisp${NOT_IMPL}`,
-  scheme: `Scheme${NOT_IMPL}`,
-  haskell: `Haskell${NOT_IMPL}`,
-  fortran: `Fortran${NOT_IMPL}`,
-  ascii: `ASCII${NOT_IMPL}`,
-  vhdl: `VHDL${NOT_IMPL}`,
-  perl: `Perl${NOT_IMPL}`,
-  matlab: `MATLAB${NOT_IMPL}`,
-  python: `Python${NOT_IMPL}`,
-  mips: `MIPS${NOT_IMPL}`,
-  prolog: `Prolog${NOT_IMPL}`,
-  spice: `SPICE${NOT_IMPL}`,
-  vb: `VB${NOT_IMPL}`,
-  csharp: `C#${NOT_IMPL}`,
-  modula2: `Modula-2${NOT_IMPL}`,
-  a8086: `8086 Assembly${NOT_IMPL}`,
-  javascript: `JavaScript${NOT_IMPL}`,
-  plsql: `PL/SQL${NOT_IMPL}`,
+  python: `Python`,
+  go: 'GoLang',
+  rust: 'Rust',
 };
 
 export const LANGUAGE_OPTIONS = LANGUAGES.map((val) => ({
@@ -250,7 +211,7 @@ export interface GatlamConfig {
 }
 
 export interface CodeCoverage {
-  code_coverage_required: number;
+  code_coverage_weight: number;
 }
 /**
  * Top-level assignment configuration (ExecutionConfig in Rust).

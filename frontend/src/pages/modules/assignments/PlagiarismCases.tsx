@@ -43,6 +43,7 @@ import {
   MossRunModal,
   MossReportsCard,
   PlagiarismGraph,
+  HashScanModal,
 } from '@/components/plagiarism';
 import PlagiarismStatusTag from '@/components/plagiarism/PlagiarismStatusTag';
 import { formatModuleCode } from '@/utils/modules';
@@ -120,6 +121,7 @@ const PlagiarismCases = () => {
 
   // Run MOSS modal
   const [mossOpen, setMossOpen] = useState(false);
+  const [hashOpen, setHashOpen] = useState(false);
 
   // Report list (source of truth)
   const [reports, setReports] = useState<MossReport[]>([]);
@@ -314,6 +316,13 @@ const PlagiarismCases = () => {
         icon: <DeploymentUnitOutlined />,
         handler: () => setGraphOpen(true),
       },
+      {
+        key: 'hash-scan',
+        label: 'Run Hash Scan',
+        isPrimary: false,
+        icon: <CheckCircleOutlined />, // pick an icon you like
+        handler: () => setHashOpen(true),
+      },
     ],
     entity: (entity: PlagiarismCaseItem) => {
       const editAction = {
@@ -499,7 +508,7 @@ const PlagiarismCases = () => {
                 width: 160,
                 sorter: { multiple: 2 },
                 render: (_, c) => (
-                  <PercentageTag value={c.similarity} decimals={1} palette="greenRed" />
+                  <PercentageTag value={c.similarity} decimals={1} scheme="green-red" />
                 ),
               },
               // NEW: Lines matched
@@ -575,6 +584,7 @@ const PlagiarismCases = () => {
                 onCreate={() => setCreateOpen(true)}
                 onRefresh={() => listRef.current?.refresh()}
                 onGenerate={() => setMossOpen(true)}
+                onHashScan={() => setHashOpen(true)}
               />
             }
           />
@@ -703,6 +713,18 @@ const PlagiarismCases = () => {
         latestGeneratedAt={reports?.[0]?.generated_at ?? null}
         hasArchive={Boolean(reports?.[0]?.has_archive)}
         latestArchiveAt={reports?.[0]?.archive_generated_at ?? null}
+      />
+
+      {/* Run Hash Scan modal */}
+      <HashScanModal
+        open={hashOpen}
+        onClose={() => setHashOpen(false)}
+        moduleId={moduleId}
+        assignmentId={assignmentId}
+        onRan={() => {
+          // refresh cases if create_cases=true created any
+          listRef.current?.refresh();
+        }}
       />
     </>
   );

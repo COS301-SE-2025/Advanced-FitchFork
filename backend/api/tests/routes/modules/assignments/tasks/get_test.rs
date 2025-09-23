@@ -15,11 +15,13 @@ mod tests {
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
     use serde_json::Value;
-    use serde_json::json;
     use serial_test::serial;
     use std::fs;
     use tower::ServiceExt;
-    use util::{mark_allocator::save_allocator, paths::memo_output_dir};
+    use util::{
+        mark_allocator::{MarkAllocator, Subsection, Task, save_allocator},
+        paths::memo_output_dir,
+    };
 
     struct TestData {
         admin_user: UserModel,
@@ -93,32 +95,56 @@ mod tests {
         .await
         .expect("Failed to create task 2");
 
-        let allocator_data = json!({
-            "allocatorVersion": "1.0",
-            "tasks": [
-                {
-                    "task1": {
-                        "name": "Task 1 Name",
-                        "value": 25,
-                        "subsections": [
-                            { "name": "Subsection A", "value": 10 },
-                            { "name": "Subsection B", "value": 15 }
-                        ]
-                    }
+        let allocator = MarkAllocator {
+            generated_at: Utc::now(),
+            total_value: 55,
+            tasks: vec![
+                Task {
+                    task_number: 1,
+                    name: "Task 1 Name".to_string(),
+                    value: 25,
+                    code_coverage: Some(false),
+                    subsections: vec![
+                        Subsection {
+                            name: "Subsection A".to_string(),
+                            value: 10,
+                            regex: None,
+                            feedback: None,
+                        },
+                        Subsection {
+                            name: "Subsection B".to_string(),
+                            value: 15,
+                            regex: None,
+                            feedback: None,
+                        },
+                    ],
                 },
-                {
-                    "task2": {
-                        "name": "Task 2 Name",
-                        "value": 30,
-                        "subsections": [
-                            { "name": "Part 1", "value": 20 },
-                            { "name": "Part 2", "value": 10 }
-                        ]
-                    }
-                }
-            ]
-        });
-        let _ = save_allocator(module.id, assignment.id, allocator_data).await;
+                Task {
+                    task_number: 2,
+                    name: "Task 2 Name".to_string(),
+                    value: 30,
+                    code_coverage: Some(false),
+                    subsections: vec![
+                        Subsection {
+                            name: "Part 1".to_string(),
+                            value: 20,
+                            regex: None,
+                            feedback: None,
+                        },
+                        Subsection {
+                            name: "Part 2".to_string(),
+                            value: 10,
+                            regex: None,
+                            feedback: None,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        // Persist using the MarkAllocator API
+        save_allocator(module.id, assignment.id, &allocator)
+            .expect("Failed to save test allocator");
 
         let memo_dir = memo_output_dir(module.id, assignment.id);
         fs::create_dir_all(&memo_dir).expect("Failed to create memo output directory");

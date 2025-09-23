@@ -1,8 +1,6 @@
 import React from 'react';
 import { Row, Col } from 'antd';
 import { AssignmentsPanel } from '@/components/assignments';
-import { SubmissionsPanel } from '@/components/submissions';
-import { GradesPanel } from '@/components/grades';
 import { TicketsPanel } from '@/components/tickets';
 import { AnnouncementsPanel } from '@/components/announcements';
 import { MyModules } from '@/components/modules';
@@ -16,27 +14,17 @@ const StudentDashboard: React.FC = () => {
         <Col xs={24} lg={10} className="lg:h-full h-auto min-h-0 min-w-0">
           <div className="min-h-0 flex flex-col lg:h-full gap-4 h-auto">
             <div className="lg:flex-[1.2] min-h-0">
-              <div className="min-h-0 lg:h-full h-auto">
-                <AssignmentsPanel />
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 hidden lg:block">
-              <SubmissionsPanel />
+              <AssignmentsPanel role="student" />
             </div>
           </div>
         </Col>
 
-        {/* MIDDLE: MyModules + Grades + Tickets */}
+        {/* MIDDLE: MyModules + Tickets */}
         <Col xs={24} lg={7} className="lg:h-full h-auto min-h-0 min-w-0">
           <div className="min-h-0 flex flex-col lg:h-full gap-4 h-auto">
             <div className="lg:flex-[0.9] min-h-0 hidden lg:block">
               <div className="lg:h-full h-auto min-h-0">
-                <MyModules />
-              </div>
-            </div>
-            <div className="lg:flex-[0.8] min-h-0">
-              <div className="lg:h-full h-auto min-h-0">
-                <GradesPanel />
+                <MyModules role="student" />
               </div>
             </div>
             <div className="lg:flex-[0.8] min-h-0">
@@ -50,7 +38,7 @@ const StudentDashboard: React.FC = () => {
         {/* RIGHT: Announcements */}
         <Col xs={24} lg={7} className="lg:h-full h-auto min-h-0 min-w-0">
           <div className="lg:h-full h-auto min-h-0">
-            <AnnouncementsPanel />
+            <AnnouncementsPanel role="student" />
           </div>
         </Col>
       </Row>

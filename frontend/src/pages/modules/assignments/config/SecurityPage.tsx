@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { Form, Input, Select, Typography, Switch, InputNumber, Button, Space } from 'antd';
+import { AimOutlined } from '@ant-design/icons';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -7,6 +8,9 @@ import { message } from '@/utils/message';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import type { AssignmentSecurityConfig } from '@/types/modules/assignments/config';
 import Tip from '@/components/common/Tip';
+
+// 🆕 network helpers (you said you added these)
+import { getCurrentIpAsCidr, asSingleHostCIDR, isIPv4, isIPv6 } from '@/utils/network';
 
 type FormShape = {
   password_enabled: boolean;
@@ -30,9 +34,10 @@ const ipv6CidrRe = /^[0-9a-f:]+\/\d{1,3}$/i;
 // Numeric PIN (1–9 only)
 const PIN_CHARS = '123456789';
 const generatePin = (len = PIN_LENGTH) =>
-  Array.from({ length: len }, () => PIN_CHARS[Math.floor(Math.random() * PIN_CHARS.length)]).join(
-    '',
-  );
+  Array.from(
+    { length: len },
+    () => PIN_CHARS[Math.floor(Math.random() * Math.random() * PIN_CHARS.length)],
+  ).join('');
 
 export default function SecurityPage() {
   const { setValue } = useViewSlot();
@@ -45,12 +50,7 @@ export default function SecurityPage() {
         <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
           Security
         </Typography.Text>
-        <Tip
-          iconOnly
-          newTab
-          to="/help/assignments/config/security#what"
-          text="Security help"
-        />
+        <Tip iconOnly newTab to="/help/assignments/config/security#what" text="Security help" />
       </Space>,
     );
   }, [setValue]);
@@ -69,15 +69,57 @@ export default function SecurityPage() {
 
   const disabled = !config;
 
+  // ── CIDR normalization helpers
+  const looksLikeCidr = (s: string) => /\/\d{1,3}$/.test(s.trim());
+
+  const normalizeOne = (raw: string): string | null => {
+    const v = raw.trim();
+    if (!v) return null;
+    // bare IP → /32 or /128
+    if (!looksLikeCidr(v)) {
+      if (isIPv4(v) || isIPv6(v)) {
+        try {
+          return asSingleHostCIDR(v);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+    // rough mask sanity
+    const [ip, maskStr] = v.split('/');
+    const mask = Number(maskStr);
+    if (isIPv4(ip)) return mask >= 0 && mask <= 32 ? `${ip}/${mask}` : null;
+    if (isIPv6(ip)) return mask >= 0 && mask <= 128 ? `${ip}/${mask}` : null;
+    return null;
+  };
+
+  const normalizeMany = (vals: (string | number)[] | undefined): string[] => {
+    const out: string[] = [];
+    (vals ?? []).forEach((x) => {
+      const s = String(x).trim();
+      if (!s) return;
+      const norm = normalizeOne(s);
+      if (norm && !out.includes(norm)) out.push(norm);
+    });
+    return out;
+  };
+
   const validateCidrs = useCallback((_: any, value: string[]) => {
     if (!value || value.length === 0) return Promise.resolve();
     const bad = value.find((v) => !(ipv4CidrRe.test(v) || ipv6CidrRe.test(v)));
     return bad ? Promise.reject(new Error(`Invalid CIDR: "${bad}"`)) : Promise.resolve();
   }, []);
 
+  // ── Save
   const onSave = useCallback(async () => {
     if (!config) return message.error('No configuration loaded yet.');
-    const values = await form.validateFields(); // FormShape
+    // Make sure the select's values are normalized before save
+    const rawValues = await form.validateFields(); // FormShape
+    const normalizedCidrs = normalizeMany(rawValues.allowed_cidrs);
+    form.setFieldsValue({ allowed_cidrs: normalizedCidrs });
+
+    const values = await form.validateFields(); // re-validate after normalization
 
     const existingPin = config.security?.password_pin ?? null;
 
@@ -115,6 +157,19 @@ export default function SecurityPage() {
 
   const handleGeneratePin = () => {
     form.setFieldsValue({ password_pin: generatePin(PIN_LENGTH) });
+  };
+
+  // ── Add My IP handler
+  const onAddMyIp = async () => {
+    try {
+      const cidr = await getCurrentIpAsCidr(); // returns /32 or /128
+      const current = form.getFieldValue('allowed_cidrs') as string[] | undefined;
+      const next = normalizeMany([...(current ?? []), cidr]);
+      form.setFieldsValue({ allowed_cidrs: next });
+      message.success(`Added ${cidr}`);
+    } catch {
+      message.error('Could not detect your public IP.');
+    }
   };
 
   return (
@@ -191,19 +246,35 @@ export default function SecurityPage() {
           <Switch />
         </Form.Item>
 
-        <Form.Item
-          name="allowed_cidrs"
-          label="Allowed CIDRs"
-          className={textFieldWidth}
-          rules={[{ validator: validateCidrs }]}
-          extra={cidrHelp}
-        >
-          <Select
-            mode="tags"
-            tokenSeparators={[',', ' ']}
-            placeholder="Add CIDRs (leave empty to allow all)"
-            className="w-full"
-          />
+        {/* ── Allowed CIDRs with “Add my IP” ───────────────────── */}
+        <Form.Item label="Allowed CIDRs" className={textFieldWidth} extra={cidrHelp}>
+          <Space direction="vertical" className="w-full">
+            <Space.Compact className="w-full">
+              {/* Keep validation on the inner Form.Item that actually owns the value */}
+              <Form.Item name="allowed_cidrs" noStyle rules={[{ validator: validateCidrs }]}>
+                <Select
+                  mode="tags"
+                  tokenSeparators={[',', ' ']}
+                  placeholder="Add CIDRs (leave empty to allow all)"
+                  className="w-full"
+                  // Normalize + dedupe on change
+                  onChange={(vals) => {
+                    const next = normalizeMany(vals as (string | number)[]);
+                    form.setFieldsValue({ allowed_cidrs: next });
+                  }}
+                />
+              </Form.Item>
+
+              <Button icon={<AimOutlined />} onClick={onAddMyIp}>
+                Add my IP
+              </Button>
+            </Space.Compact>
+
+            <Typography.Text type="secondary" className="text-xs">
+              Bare IPs are auto-converted to single-host CIDR (<code>/32</code> for IPv4,{' '}
+              <code>/128</code> for IPv6).
+            </Typography.Text>
+          </Space>
         </Form.Item>
 
         <div className="pt-2">

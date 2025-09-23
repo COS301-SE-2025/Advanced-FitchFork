@@ -82,8 +82,9 @@ const TaskView: React.FC = () => {
 
   useEffect(() => {
     if (!selectedTask) return;
-    const label = (selectedTask.name && selectedTask.name.trim())
-      || `Task ${selectedTask.task_number ?? selectedTask.id}`;
+    const label =
+      (selectedTask.name && selectedTask.name.trim()) ||
+      `Task ${selectedTask.task_number ?? selectedTask.id}`;
     setValue(
       <Typography.Text
         className="text-base font-medium text-gray-900 dark:text-gray-100 truncate"

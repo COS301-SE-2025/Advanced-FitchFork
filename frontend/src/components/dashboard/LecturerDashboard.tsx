@@ -1,117 +1,53 @@
-import React, { type PropsWithChildren } from 'react';
-import { Row, Col, Card, Statistic } from 'antd';
-import { ClockCircleOutlined, CheckCircleOutlined, TeamOutlined } from '@ant-design/icons';
-import SubmissionAnalyticsPanel from '../submissions/SubmissionAnalyticsPanel';
+import React from 'react';
+import { Row, Col } from 'antd';
 
-type PlaceholderProps = PropsWithChildren<{ title: string }>;
+import { AssignmentsPanel } from '@/components/assignments';
+import { PlagiarismCasesPanel } from '@/components/plagiarism';
+import ReleaseChecklistPanel from '@/components/release/ReleaseChecklistPanel';
+import { MyModules } from '@/components/modules';
+import { TicketsPanel } from '@/components/tickets';
 
-const PlaceholderPanel: React.FC<PlaceholderProps> = ({ title, children }) => (
-  <Card
-    className="h-full rounded-2xl flex flex-col"
-    styles={{ body: { display: 'flex', flexDirection: 'column', minHeight: 0, padding: 12 } }}
-    title={<span className="font-semibold">{title}</span>}
-  >
-    <div className="flex-1 min-h-0">
-      <div className="h-full rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-4 text-center text-gray-500 overflow-auto">
-        {children ?? 'Coming soon'}
-      </div>
-    </div>
-  </Card>
-);
+import type { ModuleRole } from '@/types/modules';
 
-/** Simple Statistic tile that expands to its grid cell */
-const StatsTile: React.FC<{
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  suffix?: React.ReactNode;
-}> = ({ title, value, icon, suffix }) => (
-  <Card className="h-full rounded-2xl" styles={{ body: { height: '100%', padding: 16 } }}>
-    <div className="h-full flex items-start gap-3 min-w-0">
-      <div className="shrink-0">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <Statistic
-          title={<span className="text-sm text-gray-500">{title}</span>}
-          value={value}
-          suffix={suffix}
-        />
-      </div>
-    </div>
-  </Card>
-);
+const ROLE_LECTURER: ModuleRole = 'lecturer';
 
 const LecturerDashboard: React.FC = () => {
-  // placeholder numbers for now
-  const upcomingAssignments: number = 6;
-  const unmarkedSubmissions: number = 14;
-  const modulesYouLecturer: number = 3;
-
   return (
     <div className="h-full min-h-0">
+      {/* Desktop can be fixed by parent; this row will then fill and scroll internally */}
       <Row gutter={[16, 16]} className="h-full">
-        {/* Top-left: Submission Analytics */}
-        <Col xs={24} md={14} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0">
-              <SubmissionAnalyticsPanel />
+        {/* LEFT column (xl=12): Assignments (top) + ReleaseChecklist (bottom) */}
+        <Col xs={24} xl={12} className="h-full min-h-0 min-w-0">
+          <div className="flex flex-col h-full min-h-0 gap-4">
+            {/* Give weights if you want, e.g. flex-[1.2] / flex-[0.8] */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              <AssignmentsPanel
+                role={ROLE_LECTURER}
+                viewLabels={{ due: 'Open', upcoming: 'Upcoming' }}
+              />
             </div>
-          </div>
-        </Col>
-        {/* Top-right: Plagiarism Cases */}
-        <Col xs={24} md={10} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Plagiarism Cases" />
-            </div>
-          </div>
-        </Col>
-
-        {/* Bottom-left: Upcoming Assignments + My Modules */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 flex flex-col gap-3">
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="Upcoming Assignments" />
-            </div>
-            <div className="flex-1 min-h-0">
-              <PlaceholderPanel title="My Modules" />
+            <div className="flex-1 min-h-0 flex flex-col">
+              <ReleaseChecklistPanel role={ROLE_LECTURER} status="setup" />
             </div>
           </div>
         </Col>
 
-        {/* Bottom-right: split into 2 columns → left stats, right quick actions + release checklist */}
-        <Col xs={24} md={12} className="min-h-0">
-          <div className="h-full min-h-0 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Left column: vertical stats strip */}
-            <div className="min-h-0">
-              <div className="h-full grid grid-rows-3 gap-3">
-                <StatsTile
-                  title="Upcoming assignments"
-                  value={upcomingAssignments}
-                  icon={<ClockCircleOutlined />}
-                  suffix={upcomingAssignments === 1 ? 'item' : 'items'}
-                />
-                <StatsTile
-                  title="Unmarked submissions"
-                  value={unmarkedSubmissions}
-                  icon={<CheckCircleOutlined />}
-                  suffix={unmarkedSubmissions === 1 ? 'submission' : 'submissions'}
-                />
-                <StatsTile
-                  title="Modules you lecture"
-                  value={modulesYouLecturer}
-                  icon={<TeamOutlined />}
-                  suffix={modulesYouLecturer === 1 ? 'module' : 'modules'}
-                />
-              </div>
+        {/* RIGHT column (xl=12): Plagiarism (top) + MyModules/Tickets (bottom split) */}
+        <Col xs={24} xl={12} className="h-full min-h-0 min-w-0">
+          <div className="flex flex-col h-full min-h-0 gap-4">
+            <div className="flex-1 min-h-0 flex flex-col">
+              <PlagiarismCasesPanel role={ROLE_LECTURER} />
             </div>
 
-            {/* Right column: Quick Actions (top) + Release Checklist (bottom) */}
-            <div className="min-h-0 flex flex-col gap-3">
-              <div className="flex-1 min-h-0">
-                <PlaceholderPanel title="Quick Actions" />
-              </div>
-              <div className="flex-1 min-h-0">
-                <PlaceholderPanel title="Release Checklist" />
+            <div className="flex-1 min-h-0 flex flex-col">
+              {/* Bottom row split: fill remaining height */}
+              <div className="flex min-h-0 h-full flex-col md:flex-row gap-4">
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                  <MyModules role={ROLE_LECTURER} />
+                </div>
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                  <TicketsPanel role={ROLE_LECTURER} />
+                </div>
               </div>
             </div>
           </div>

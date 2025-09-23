@@ -1,16 +1,22 @@
 {
   "generated_at": "2025-06-20T12:00:00+02:00",
+  "total_value": 10,
   "tasks": [
     {
-      "task1": {
-        "name": "EmptyStudent",
-        "value": 10,
-        "subsections": [
-          { "name": "First", "value": 5 },
-          { "name": "Second", "value": 5 }
-        ]
-      }
+      "task_number": 1,
+      "name": "EmptyStudent",
+      "value": 10,
+      "code_coverage": false,
+      "subsections": [
+        {
+          "name": "First",
+          "value": 5
+        },
+        {
+          "name": "Second",
+          "value": 5
+        }
+      ]
     }
-  ],
-  "total_value": 10
-} 
+  ]
+}

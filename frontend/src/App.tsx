@@ -17,9 +17,6 @@ import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
 import CalendarPage from './pages/shared/CalendarPage';
 
-import ModuleOverview from './pages/modules/ModuleOverview';
-import ModulePersonnel from './pages/modules/ModulePersonnel';
-
 import AppLayout from './layouts/AppLayout';
 import ModuleLayout from './layouts/ModuleLayout';
 import SettingsLayout from './layouts/SettingsLayout';
@@ -27,56 +24,19 @@ import Account from './pages/settings/Account';
 import Security from './pages/settings/Security';
 import Appearance from './pages/settings/Appearance';
 import AssignmentLayout from './layouts/AssignmentLayout';
-import SubmissionView from './pages/modules/assignments/submissions/SubmissionView';
-import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
-import MemoOutput from './pages/modules/assignments/MemoOutput';
-import MarkAllocator from './pages/modules/assignments/MarkAllocator';
-import SetupChecklistPage from './pages/modules/assignments/SetupChecklistPage';
 import HelpPageLayout from './layouts/HelpPageLayout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import AuthLayout from './layouts/AuthLayout';
-import ModulesList from './pages/modules/ModulesList';
-import ModuleGrades from './pages/modules/ModuleGrades';
-import AssignmentsList from './pages/modules/assignments/AssignmentsList';
 
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
 import ProtectedModuleRoute from './components/routes/ProtectedModuleRoute';
-import Tickets from './pages/modules/assignments/tickets/Tickets';
-import TicketView from './pages/modules/assignments/tickets/TicketView';
 import WithModuleContext from './components/providers/WithModuleContext';
 import WithAssignmentContext from './components/providers/WithAssignmentContext';
 import AssignmentConfigLayout from './layouts/ConfigLayout';
-import ExecutionPage from './pages/modules/assignments/config/ExecutionPage';
-import MarkingPage from './pages/modules/assignments/config/MarkingPage';
 import { useUI } from './context/UIContext';
-import AssignmentMobileMenu from './pages/modules/assignments/AssignmentMobileMenu';
-import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
-import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
-import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
-import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
-import Announcements from './pages/modules/announcements/Announcements';
-import AnnouncementView from './pages/modules/announcements/AnnouncementView';
-import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
-import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
-import OutputPage from './pages/modules/assignments/config/OutputPage';
-import GatlamPage from './pages/modules/assignments/config/GatlamPage';
-import CodeCoveragePage from './pages/modules/assignments/config/CodeCoveragePage';
-import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
-import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
-import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
-import AssignmentGrades from './pages/modules/assignments/AssignmentGrades';
-import AttendanceSessionsList from './pages/modules/attendance/AttendanceSessionsList';
-import AttendanceSessionView from './pages/modules/attendance/AttendanceSessionView';
-import AttendanceMarkPage from './pages/modules/attendance/AttendanceMarkPage';
-import AttendanceSessionProjector from './pages/modules/attendance/AttendanceSessionProjector';
-import SecurityPage from './pages/modules/assignments/config/SecurityPage';
-import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPage';
-import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
-import TaskView from './pages/modules/assignments/tasks/TaskView';
-import TasksPage from './pages/modules/assignments/tasks';
-import TasksMobileMenu from './pages/modules/assignments/tasks/TasksMobileMenu';
+
 import MakefileHelp from './pages/help/assignments/files/Makefile';
 import MainFile from './pages/help/assignments/files/MainFile';
 import MemoFiles from './pages/help/assignments/files/MemoFiles';
@@ -97,6 +57,47 @@ import HowToSubmitHelp from './pages/help/assignments/submissions/HowToSubmitHel
 import AssignmentSetupHelp from './pages/help/assignments/AssignmentSetupHelp';
 import TasksHelp from './pages/help/assignments/TasksHelp';
 import SystemMonitoringHelp from './pages/help/system/SystemMonitoring';
+import MobileHelpPageMenu from './pages/help/MobileHelpPageMenu';
+import FitchforkOverview from './pages/help/Overview';
+import Announcements from './pages/modules/announcements/Announcements';
+import AnnouncementView from './pages/modules/announcements/AnnouncementView';
+import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
+import AssignmentFiles from './pages/modules/assignments/AssignmentFiles';
+import AssignmentGrades from './pages/modules/assignments/AssignmentGrades';
+import AssignmentMobileMenu from './pages/modules/assignments/AssignmentMobileMenu';
+import AssignmentsList from './pages/modules/assignments/AssignmentsList';
+import AssignmentVerifyPage from './pages/modules/assignments/AssignmentVerifyPage';
+import AssignmentFilePage from './pages/modules/assignments/config/AssignmentFilePage';
+import AssignmentPage from './pages/modules/assignments/config/AssignmentPage';
+import CodeCoveragePage from './pages/modules/assignments/config/CodeCoveragePage';
+import ConfigMobileMenu from './pages/modules/assignments/config/ConfigMobileMenu';
+import ExecutionPage from './pages/modules/assignments/config/ExecutionPage';
+import GatlamPage from './pages/modules/assignments/config/GatlamPage';
+import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
+import MarkingPage from './pages/modules/assignments/config/MarkingPage';
+import OutputPage from './pages/modules/assignments/config/OutputPage';
+import SecurityPage from './pages/modules/assignments/config/SecurityPage';
+import MemoOutput from './pages/modules/assignments/MemoOutput';
+import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
+import SetupChecklistPage from './pages/modules/assignments/SetupChecklistPage';
+import SubmissionIde from './pages/modules/assignments/submissions/SubmissionIde';
+import SubmissionsList from './pages/modules/assignments/submissions/SubmissionsList';
+import SubmissionView from './pages/modules/assignments/submissions/SubmissionView';
+import TasksPage from './pages/modules/assignments/tasks';
+import TasksMobileMenu from './pages/modules/assignments/tasks/TasksMobileMenu';
+import TaskView from './pages/modules/assignments/tasks/TaskView';
+import Tickets from './pages/modules/assignments/tickets/Tickets';
+import TicketView from './pages/modules/assignments/tickets/TicketView';
+import AttendanceMarkPage from './pages/modules/attendance/AttendanceMarkPage';
+import AttendanceSessionProjector from './pages/modules/attendance/AttendanceSessionProjector';
+import AttendanceSessionsList from './pages/modules/attendance/AttendanceSessionsList';
+import AttendanceSessionView from './pages/modules/attendance/AttendanceSessionView';
+import ModuleGrades from './pages/modules/ModuleGrades';
+import ModuleMobileMenu from './pages/modules/ModuleMobileMenu';
+import ModuleOverview from './pages/modules/ModuleOverview';
+import ModulePersonnel from './pages/modules/ModulePersonnel';
+import ModulesList from './pages/modules/ModulesList';
+import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
 
 export default function App() {
   const { isMobile } = useUI();
@@ -193,15 +194,11 @@ export default function App() {
                     <Route path="submissions" element={<SubmissionsList />} />
                     <Route path="submissions/:submission_id" element={<SubmissionView />} />
                     <Route path="tasks" element={<TasksPage />}>
-                      <Route
-                        index
-                        element={isMobile ? <TasksMobileMenu /> : <TaskView />}
-                      />
+                      <Route index element={isMobile ? <TasksMobileMenu /> : <TaskView />} />
                       <Route path=":task_id" element={<TaskView />} />
                     </Route>
                     <Route path="tickets" element={<Tickets />} />
                     <Route path="memo-output" element={<MemoOutput />} />
-                    <Route path="mark-allocator" element={<MarkAllocator />} />
                     <Route path="stats" element={<UnderConstruction />} />
                     <Route path="grades" element={<AssignmentGrades />} />
 
@@ -281,13 +278,19 @@ export default function App() {
             {/* Help Routes */}
             <Route path="/help" element={<HelpPageLayout />}>
               {/* Default → Getting Started / Overview */}
-              <Route index element={<Navigate to="getting-started/overview" replace />} />
+              <Route
+                index
+                element={
+                  isMobile ? (
+                    <MobileHelpPageMenu />
+                  ) : (
+                    <Navigate to="getting-started/overview" replace />
+                  )
+                }
+              />
 
               {/* Ambiguous roots → first leaf */}
-              <Route
-                path="getting-started"
-                element={<Navigate to="getting-started/overview" replace />}
-              />
+              <Route path="getting-started" element={<Navigate to="getting-started/overview" />} />
               <Route path="modules" element={<Navigate to="modules/overview" replace />} />
               <Route path="assignments" element={<Navigate to="assignments/setup" replace />} />
               <Route
@@ -318,7 +321,7 @@ export default function App() {
               <Route path="support" element={<Navigate to="support/troubleshooting" replace />} />
 
               {/* Getting Started */}
-              <Route path="getting-started/overview" element={<UnderConstruction />} />
+              <Route path="getting-started/overview" element={<FitchforkOverview />} />
 
               {/* Modules */}
               <Route path="modules/overview" element={<UnderConstruction />} />

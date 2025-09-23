@@ -12,12 +12,13 @@ type Props = {
   onCreate?: () => void;
   onRefresh?: () => void;
   onGenerate?: () => void;
+  onHashScan?: () => void;
   loading?: boolean;
 };
 
 const { Title, Paragraph } = Typography;
 
-const PlagiarismEmptyState = ({ onCreate, onRefresh, onGenerate, loading }: Props) => {
+const PlagiarismEmptyState = ({ onCreate, onRefresh, onGenerate, onHashScan, loading }: Props) => {
   // Only secondary actions go in the dropdown (primary Run MOSS is its own button)
   const secondaryMenuItems: MenuProps['items'] = [
     ...(onCreate
@@ -45,25 +46,38 @@ const PlagiarismEmptyState = ({ onCreate, onRefresh, onGenerate, loading }: Prop
             No plagiarism cases yet
           </Title>
 
-          <Paragraph className="!m-0 !text-sm !text-gray-600 dark:!text-gray-400">
-            Create your first case or run a MOSS check to get started.
+          <Paragraph>
+            Create your first case, run a Hash Scan for identical files, or run a MOSS similarity
+            check.
           </Paragraph>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-            {(onGenerate || onCreate) && (
+            {/* Primary actions */}
+            {(onGenerate || onHashScan || onCreate) && (
               <Space.Compact>
-                {/* Primary action (like ControlBar primary) */}
-                <Button
-                  type="primary"
-                  icon={<ExperimentOutlined />}
-                  onClick={() => onGenerate?.()}
-                  loading={loading}
-                  data-testid="control-action-run-moss"
-                >
-                  Run MOSS
-                </Button>
+                {onHashScan && (
+                  <Button
+                    type="primary"
+                    onClick={() => onHashScan?.()}
+                    data-testid="control-action-run-hash-scan"
+                  >
+                    Run Hash Scan
+                  </Button>
+                )}
 
-                {/* Secondary actions dropdown (like ControlBar secondary) */}
+                {onGenerate && (
+                  <Button
+                    type="primary"
+                    icon={<ExperimentOutlined />}
+                    onClick={() => onGenerate?.()}
+                    loading={loading}
+                    data-testid="control-action-run-moss"
+                  >
+                    Run MOSS
+                  </Button>
+                )}
+
+                {/* Secondary dropdown (e.g., Add Case) */}
                 {secondaryMenuItems.length > 0 && (
                   <Dropdown
                     data-testid="control-action-dropdown"

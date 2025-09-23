@@ -30,12 +30,13 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use chrono::{DateTime, Utc};
+use db::grade::{GradeComputationError, compute_assignment_grade_for_student};
 use db::models::{
     assignment::{
         self, AssignmentType, Column as AssignmentColumn, Entity as AssignmentEntity,
         Model as AssignmentModel,
     },
-    assignment_file, assignment_submission, user,
+    assignment_file, user,
 };
 use sea_orm::{
     ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, sea_query::Expr,
@@ -266,16 +267,40 @@ pub async fn get_assignment(
                     )
                     .await
                     {
-                        if let Ok(Some(sub)) =
-                            AssignmentSubmissionService::get_best_for_user(assignment_id, user.sub)
-                                .await
+                        match compute_assignment_grade_for_student(
+                            db,
+                            module_id,
+                            assignment_id,
+                            user_id,
+                        )
+                        .await
                         {
-                            best_mark = Some(BestMark {
-                                earned: sub.earned,
-                                total: sub.total,
-                                attempt: sub.attempt,
-                                submission_id: sub.id,
-                            });
+                            Ok(Some(selection)) => {
+                                let submission = selection.submission;
+                                best_mark = Some(BestMark {
+                                    earned: submission.earned,
+                                    total: submission.total,
+                                    attempt: submission.attempt,
+                                    submission_id: submission.id,
+                                });
+                            }
+                            Ok(None) => { /* no submissions */ }
+                            Err(GradeComputationError::AssignmentNotFound) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: assignment {} not found in module {}",
+                                    assignment_id, module_id
+                                );
+                            }
+                            Err(GradeComputationError::ExecutionConfig(err)) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: execution config error: {err}"
+                                );
+                            }
+                            Err(GradeComputationError::Database(err)) => {
+                                eprintln!(
+                                    "compute_assignment_grade_for_student: database error: {err}"
+                                );
+                            }
                         }
 
                         if let Ok(summary) = a.attempts_summary_for_user(db, user_id).await {

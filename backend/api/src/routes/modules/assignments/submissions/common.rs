@@ -123,3 +123,15 @@ pub struct SubmissionDetailResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<serde_json::Value>,
 }
+
+// ---- instant ACK (client will GET /submissions/{id} and attach WS) ----
+#[derive(serde::Serialize)]
+pub struct SubmitAck {
+    pub id: i64,
+    pub status: String, // e.g. "queued", "failed_upload"
+    pub attempt: i64,
+    pub is_practice: bool,
+    pub filename: String,
+    pub hash: String,
+    pub created_at: String, // RFC3339
+}

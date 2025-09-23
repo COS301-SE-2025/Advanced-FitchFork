@@ -13,13 +13,22 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::{assignment, module, user_module_role};
+use db::grade::{
+    GradeComputationError, GradeComputationOptions, compute_assignment_grade_for_student,
+    compute_assignment_grades,
+};
+use db::models::{
+    assignment::{self, Status as AssignmentStatus},
+    module,
+    user_module_role::{self, Role as ModuleRole},
+};
 use migration::Expr;
 use sea_orm::{
     ColumnTrait, Condition, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, str::FromStr};
 use util::state::AppState;
 
 /// Query parameters for filtering, sorting, and pagination of assignments
@@ -39,6 +48,8 @@ pub struct AssignmentFilterReq {
     pub status: Option<String>,
     /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
+    /// Filter assignments for a specific module
+    pub module_id: Option<i64>,
 }
 
 /// Response object for a module
@@ -59,6 +70,12 @@ pub struct AssignmentResponse {
     pub created_at: String,
     pub updated_at: String,
     pub module: ModuleResponse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grade: Option<AssignmentGrade>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submission_summary: Option<AssignmentSubmissionSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub readiness: Option<assignment::ReadinessReport>,
 }
 
 /// Response for a paginated list of assignments
@@ -68,6 +85,19 @@ pub struct FilterAssignmentResponse {
     pub page: i32,
     pub per_page: i32,
     pub total: i32,
+}
+
+#[derive(Serialize)]
+pub struct AssignmentGrade {
+    pub percentage: f32,
+    pub earned: i64,
+    pub total: i64,
+}
+
+#[derive(Serialize)]
+pub struct AssignmentSubmissionSummary {
+    pub submitted: u32,
+    pub total_students: u32,
 }
 
 impl FilterAssignmentResponse {
@@ -150,6 +180,12 @@ pub async fn get_my_assignments(
     let module_ids: Vec<i64> = memberships
         .iter()
         .filter(|m| {
+            if let Some(module_filter) = params.module_id {
+                if m.module_id != module_filter {
+                    return false;
+                }
+            }
+
             requested_role
                 .as_ref()
                 .map_or(true, |r| &m.role.to_string() == r)
@@ -166,6 +202,14 @@ pub async fn get_my_assignments(
             .into_response();
     }
 
+    let mut module_role_map: HashMap<i64, Vec<user_module_role::Role>> = HashMap::new();
+    for membership in &memberships {
+        module_role_map
+            .entry(membership.module_id)
+            .or_default()
+            .push(membership.role.clone());
+    }
+
     let mut condition = Condition::all().add(assignment::Column::ModuleId.is_in(module_ids));
 
     if let Some(year) = params.year {
@@ -173,7 +217,20 @@ pub async fn get_my_assignments(
     }
 
     if let Some(ref status) = params.status {
-        condition = condition.add(assignment::Column::Status.eq(status));
+        match AssignmentStatus::from_str(status) {
+            Ok(parsed) => {
+                condition = condition.add(assignment::Column::Status.eq(parsed));
+            }
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::<FilterAssignmentResponse>::error(
+                        "Invalid status parameter",
+                    )),
+                )
+                    .into_response();
+            }
+        }
     }
 
     if let Some(ref q) = params.query {
@@ -237,6 +294,10 @@ pub async fn get_my_assignments(
     match paginator.fetch_page((page - 1) as u64).await {
         Ok(results) => {
             let mut assignments_vec = Vec::new();
+
+            let mut module_student_count_cache: HashMap<i64, u32> = HashMap::new();
+            let mut assignment_submitted_cache: HashMap<i64, u32> = HashMap::new();
+
             for a in results {
                 let m = module::Entity::find_by_id(a.module_id)
                     .one(db)
@@ -246,6 +307,136 @@ pub async fn get_my_assignments(
                     continue;
                 }
                 let m = m.unwrap();
+
+                let roles = module_role_map.get(&m.id).cloned().unwrap_or_default();
+                let is_student = roles.iter().any(|r| matches!(r, ModuleRole::Student));
+                let is_staff = roles.iter().any(|r| {
+                    matches!(
+                        r,
+                        ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor
+                    )
+                });
+                let is_lecturer_or_assistant = roles
+                    .iter()
+                    .any(|r| matches!(r, ModuleRole::Lecturer | ModuleRole::AssistantLecturer));
+
+                let mut grade: Option<AssignmentGrade> = None;
+                if is_student {
+                    match compute_assignment_grade_for_student(db, m.id, a.id, user_id).await {
+                        Ok(Some(selection)) => {
+                            grade = Some(AssignmentGrade {
+                                percentage: selection.score_pct,
+                                earned: selection.submission.earned,
+                                total: selection.submission.total,
+                            });
+                        }
+                        Ok(None) => {}
+                        Err(GradeComputationError::AssignmentNotFound) => {
+                            eprintln!(
+                                "get_my_assignments: assignment {} not found in module {}",
+                                a.id, m.id
+                            );
+                        }
+                        Err(GradeComputationError::ExecutionConfig(err)) => {
+                            eprintln!(
+                                "get_my_assignments: execution config error for assignment {}: {}",
+                                a.id, err
+                            );
+                        }
+                        Err(GradeComputationError::Database(err)) => {
+                            eprintln!(
+                                "get_my_assignments: database error computing grade for assignment {}: {}",
+                                a.id, err
+                            );
+                        }
+                    }
+                }
+
+                let mut submission_summary: Option<AssignmentSubmissionSummary> = None;
+                if is_staff {
+                    let total_students = if let Some(count) = module_student_count_cache.get(&m.id)
+                    {
+                        *count
+                    } else {
+                        let count = match user_module_role::Entity::find()
+                            .filter(user_module_role::Column::ModuleId.eq(m.id))
+                            .filter(
+                                user_module_role::Column::Role.eq(user_module_role::Role::Student),
+                            )
+                            .count(db)
+                            .await
+                        {
+                            Ok(n) => n as u32,
+                            Err(err) => {
+                                eprintln!(
+                                    "get_my_assignments: failed to count students for module {}: {}",
+                                    m.id, err
+                                );
+                                0
+                            }
+                        };
+                        module_student_count_cache.insert(m.id, count);
+                        count
+                    };
+
+                    let submitted = if let Some(count) = assignment_submitted_cache.get(&a.id) {
+                        *count
+                    } else {
+                        let count = match compute_assignment_grades(
+                            db,
+                            m.id,
+                            a.id,
+                            GradeComputationOptions::default(),
+                        )
+                        .await
+                        {
+                            Ok(res) => res.grades.len() as u32,
+                            Err(GradeComputationError::AssignmentNotFound) => {
+                                eprintln!(
+                                    "get_my_assignments: assignment {} not found while computing submissions",
+                                    a.id
+                                );
+                                0
+                            }
+                            Err(GradeComputationError::ExecutionConfig(err)) => {
+                                eprintln!(
+                                    "get_my_assignments: execution config error while computing submissions for assignment {}: {}",
+                                    a.id, err
+                                );
+                                0
+                            }
+                            Err(GradeComputationError::Database(err)) => {
+                                eprintln!(
+                                    "get_my_assignments: database error while computing submissions for assignment {}: {}",
+                                    a.id, err
+                                );
+                                0
+                            }
+                        };
+                        assignment_submitted_cache.insert(a.id, count);
+                        count
+                    };
+
+                    submission_summary = Some(AssignmentSubmissionSummary {
+                        submitted,
+                        total_students,
+                    });
+                }
+
+                let readiness = if is_lecturer_or_assistant {
+                    match assignment::Model::compute_readiness_report(db, m.id, a.id).await {
+                        Ok(report) => Some(report),
+                        Err(err) => {
+                            eprintln!(
+                                "get_my_assignments: readiness compute error for assignment {}: {}",
+                                a.id, err
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
 
                 assignments_vec.push(AssignmentResponse {
                     id: a.id,
@@ -259,6 +450,9 @@ pub async fn get_my_assignments(
                         id: m.id,
                         code: m.code,
                     },
+                    grade,
+                    submission_summary,
+                    readiness,
                 });
             }
 

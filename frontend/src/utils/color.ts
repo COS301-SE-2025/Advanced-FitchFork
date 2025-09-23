@@ -1,3 +1,5 @@
+// src/utils/color.ts
+
 /** 32-bit FNV-1a hash → stable across sessions without crypto deps */
 export function hash32(str: string): number {
   let h = 0x811c9dc5 >>> 0;
@@ -53,59 +55,65 @@ export function getNodeColor(id: string, isDarkMode: boolean): string {
   return hslToCss(parts);
 }
 
+/* ──────────────────────────
+   HEX color helpers
+   ────────────────────────── */
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function interpolateColor(start: string, end: string, t: number): string {
-  const s = parseInt(start.slice(1), 16);
-  const e = parseInt(end.slice(1), 16);
-
-  const sr = (s >> 16) & 0xff, sg = (s >> 8) & 0xff, sb = s & 0xff;
-  const er = (e >> 16) & 0xff, eg = (e >> 8) & 0xff, eb = e & 0xff;
-
-  const r = Math.round(lerp(sr, er, t));
-  const g = Math.round(lerp(sg, eg, t));
-  const b = Math.round(lerp(sb, eb, t));
-
-  return `rgb(${r}, ${g}, ${b})`;
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => Math.round(n).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-export type ScaleScheme = "gray-red" | "red-green" | "green-red" | "blue-red";
+function hexToRgb(hex: string) {
+  let h = hex.replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
 
-/** 0–100 → color with orange midpoint */
-export function scaleColor(value: number, scheme: ScaleScheme = "red-green"): string {
+function interpolateHex(startHex: string, endHex: string, t: number): string {
+  const s = hexToRgb(startHex);
+  const e = hexToRgb(endHex);
+  return rgbToHex(lerp(s.r, e.r, t), lerp(s.g, e.g, t), lerp(s.b, e.b, t));
+}
+
+/* Public type for consumers (e.g., PercentageTag) */
+export type ScaleScheme = 'gray-red' | 'red-green' | 'green-red' | 'blue-red';
+
+/** 0–100 → HEX color with orange midpoint */
+export function scaleColor(value: number, scheme: ScaleScheme = 'red-green'): string {
   const t = Math.max(0, Math.min(1, value / 100));
-
-  // fixed orange midpoint
-  const mid = "#f59e0b";
+  const mid = '#f59e0b';
 
   let start: string, end: string;
   switch (scheme) {
-    case "gray-red":
-      start = "#9ca3af"; // gray-400
-      end = "#ef4444";   // red-500
+    case 'gray-red':
+      start = '#9ca3af'; // gray-400
+      end = '#ef4444';   // red-500
       break;
-    case "green-red":
-      start = "#22c55e"; // green-500
-      end = "#ef4444";   // red-500
+    case 'green-red':
+      start = '#22c55e'; // green-500
+      end = '#ef4444';   // red-500
       break;
-    case "blue-red":
-      start = "#3b82f6"; // blue-500
-      end = "#ef4444";   // red-500
+    case 'blue-red':
+      start = '#3b82f6'; // blue-500
+      end = '#ef4444';   // red-500
       break;
-    case "red-green":
+    case 'red-green':
     default:
-      start = "#ef4444"; // red-500
-      end = "#22c55e";   // green-500
+      start = '#ef4444'; // red-500
+      end = '#22c55e';   // green-500
       break;
   }
 
   if (t < 0.5) {
     // first half: start → orange
-    return interpolateColor(start, mid, t / 0.5);
+    return interpolateHex(start, mid, t / 0.5);
   } else {
     // second half: orange → end
-    return interpolateColor(mid, end, (t - 0.5) / 0.5);
+    return interpolateHex(mid, end, (t - 0.5) / 0.5);
   }
 }

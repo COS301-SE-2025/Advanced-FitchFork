@@ -1,28 +1,124 @@
-use crate::execution_config::ExecutionConfig;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::{fs, io::Write, path::PathBuf};
+
+use crate::execution_config::{ExecutionConfig, MarkingScheme};
 use crate::paths::{mark_allocator_dir, mark_allocator_path};
-use serde_json::{Value, from_str, json};
-use std::fs::{self, File};
-use std::io::{self, ErrorKind, Write};
-use std::path::PathBuf;
 
-pub enum SaveError {
-    DirectoryNotFound,
-    IoError(io::Error),
-    JsonError(serde_json::Error),
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MarkAllocator {
+    pub generated_at: DateTime<Utc>,
+    pub tasks: Vec<Task>,
+    pub total_value: i64,
 }
 
-impl From<io::Error> for SaveError {
-    fn from(err: io::Error) -> Self {
-        SaveError::IoError(err)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Task {
+    pub task_number: i64,
+    pub name: String,
+    pub value: i64,
+    #[serde(default)]
+    pub code_coverage: Option<bool>,
+    pub subsections: Vec<Subsection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Subsection {
+    pub name: String,
+    pub value: i64,
+    #[serde(default)]
+    pub regex: Option<Vec<String>>,
+    #[serde(default)]
+    pub feedback: Option<String>,
+}
+
+impl MarkAllocator {
+    pub fn recompute_total(&mut self) -> i64 {
+        self.total_value = self.tasks.iter().map(|t| t.value).sum();
+        self.total_value
+    }
+    pub fn new_now(tasks: Vec<Task>) -> Self {
+        let mut me = MarkAllocator {
+            generated_at: Utc::now(),
+            total_value: tasks.iter().map(|t| t.value).sum(),
+            tasks,
+        };
+        me.recompute_total();
+        me
     }
 }
 
-impl From<serde_json::Error> for SaveError {
-    fn from(err: serde_json::Error) -> Self {
-        SaveError::JsonError(err)
-    }
+/// Read allocator.json as **normalized**.
+pub fn load_allocator(module_id: i64, assignment_id: i64) -> Result<MarkAllocator, String> {
+    use std::io::ErrorKind;
+
+    let path = mark_allocator_path(module_id, assignment_id);
+
+    // Short, standardized I/O errors
+    let s = match fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = match e.kind() {
+                ErrorKind::NotFound => "File not found".to_string(),
+                ErrorKind::PermissionDenied => {
+                    "Permission denied reading mark allocator".to_string()
+                }
+                ErrorKind::InvalidData => "Allocator file is not valid UTF-8".to_string(),
+                _ => format!("Failed to read mark allocator ({})", e.kind()),
+            };
+            return Err(msg);
+        }
+    };
+
+    // Short parse error
+    serde_json::from_str::<MarkAllocator>(&s)
+        .map_err(|_| "Invalid allocator JSON (normalized expected)".to_string())
 }
 
+/// Save allocator.json as **normalized** (atomic-ish write).
+pub fn save_allocator(
+    module_id: i64,
+    assignment_id: i64,
+    alloc: &MarkAllocator,
+) -> Result<(), String> {
+    use std::io::ErrorKind;
+
+    let dir = mark_allocator_dir(module_id, assignment_id);
+    fs::create_dir_all(&dir).map_err(|e| match e.kind() {
+        ErrorKind::PermissionDenied => "Permission denied creating allocator directory".to_string(),
+        _ => "Failed to prepare allocator directory".to_string(),
+    })?;
+
+    let path = mark_allocator_path(module_id, assignment_id);
+    let pretty = serde_json::to_string_pretty(alloc)
+        .map_err(|_| "Failed to serialize allocator".to_string())?;
+
+    let tmp = temp_path(&path);
+    {
+        let mut f = fs::File::create(&tmp).map_err(|e| match e.kind() {
+            ErrorKind::PermissionDenied => "Permission denied creating temp file".to_string(),
+            _ => "Failed to create temp file".to_string(),
+        })?;
+        f.write_all(pretty.as_bytes())
+            .map_err(|_| "Failed to write temp file".to_string())?;
+        f.flush()
+            .map_err(|_| "Failed to flush temp file".to_string())?;
+    }
+    fs::rename(&tmp, &path).map_err(|_| "Failed to move temp file into place".to_string())?;
+    Ok(())
+}
+
+fn temp_path(final_path: &PathBuf) -> PathBuf {
+    let mut tmp = final_path.clone();
+    let fname = final_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("allocator.json");
+    tmp.set_file_name(format!("{fname}.tmp"));
+    tmp
+}
+
+// Carry-over type used by generators
 #[derive(Debug, Clone)]
 pub struct TaskInfo {
     pub id: i64,
@@ -31,75 +127,72 @@ pub struct TaskInfo {
     pub name: String,
 }
 
-/// Generates a mark allocator JSON structure by reading memo output files from
-/// the specified module and assignment directories.
-///
-/// Reads all files in the `memo_output` folder corresponding to the module and assignment,
-/// parses lines to count marks and subsections, and constructs a JSON structure with
-/// tasks and their subsections. The resulting JSON is saved to an `allocator.json` file
-/// in the `mark_allocator` folder.
-///
-/// # Arguments
-///
-/// * `module` - The module id.
-/// * `assignment` - The assignment id.
-///
-/// # Returns
-///
-/// * `Ok(Value)` - A JSON `Value` representing the generated allocator data.
-/// * `Err(SaveError)` - An error if directory/file operations or JSON serialization fail.
-///
-/// # JSON Schema
-///
-/// ```json
-/// {
-///   "generated_at": "2025-08-17T22:00:00Z",
-///   "tasks": [
-///     {
-///       "task_number": 1,
-///       "value": 10,
-///       "subsections": [
-///         { "name": "Correctness", "value": 6 },
-///         { "name": "Style", "value": 4 }
-///       ]
-///     }
-///   ],
-///   "total_value": 10
-/// }
-/// ```
-#[allow(dead_code)]
+/// Generator: builds a **normalized** allocator (regex arrays only when scheme=Regex).
 pub async fn generate_allocator(
-    module: i64,
-    assignment: i64,
+    module_id: i64,
+    assignment_id: i64,
     tasks_info: &[(TaskInfo, PathBuf)],
-) -> Result<Value, SaveError> {
-    let separator = ExecutionConfig::get_execution_config(module, assignment)
-        .map(|config| config.marking.deliminator)
-        .unwrap_or_else(|_| "&-=-&".to_string());
+) -> Result<MarkAllocator, String> {
+    // Read config once up-front
+    let (separator, want_regex, cover_weight_frac) =
+        match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+            Ok(cfg) => {
+                let want_regex = matches!(cfg.marking.marking_scheme, MarkingScheme::Regex);
 
-    let allocator_dir_path = mark_allocator_dir(module, assignment);
-    fs::create_dir_all(&allocator_dir_path).map_err(SaveError::IoError)?;
+                // Normalize weight: treat >= 1.0 as percent; otherwise assume fraction.
+                // e.g. 10.0 -> 0.10; 0.10 -> 0.10
+                let mut w = cfg.code_coverage.code_coverage_weight as f64;
+                if w >= 1.0 {
+                    w /= 100.0;
+                }
+                // Clamp to sane range [0.0, 0.95] to avoid division blow-ups (you can choose a different cap)
+                let w = w.clamp(0.0, 0.95);
 
-    let mut tasks_json = vec![];
-    let mut total_value = 0;
+                (cfg.marking.deliminator, want_regex, w)
+            }
+            Err(_) => ("&-=-&".to_string(), false, 0.10), // fallback: 10%
+        };
 
-    for (info, maybe_path) in tasks_info {
-        let mut subsections = vec![];
-        let mut task_value = 0;
+    let dir = mark_allocator_dir(module_id, assignment_id);
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create allocator dir {:?}: {}", dir, e))?;
 
-        if info.code_coverage {
-            // skip coverage tasks from point allocation
-        } else if maybe_path.exists() {
-            let content = fs::read_to_string(maybe_path)?;
+    // -------- Pass 1: build all tasks (with parsed values for non-coverage) --------
+    let mut tasks: Vec<Task> = Vec::with_capacity(tasks_info.len());
+    let mut base_total: i64 = 0; // sum of non-coverage tasks
+    let mut coverage_indices: Vec<usize> = Vec::new();
+
+    for (idx, (info, maybe_path)) in tasks_info.iter().enumerate() {
+        let mut subsections = Vec::new();
+        let mut task_value: i64 = 0;
+
+        if !info.code_coverage && maybe_path.exists() {
+            // Parse memo output to derive marks per section
+            let content = fs::read_to_string(maybe_path)
+                .map_err(|e| format!("Failed reading {:?}: {}", maybe_path, e))?;
 
             let mut current_section = String::new();
-            let mut mark_counter = 0;
+            let mut mark_counter: i64 = 0;
 
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
                 if split.len() > 1 {
+                    // end prior section
                     if !current_section.is_empty() {
-                        subsections.push(json!({ "name": current_section, "value": mark_counter }));
+                        subsections.push(Subsection {
+                            name: current_section.clone(),
+                            value: mark_counter,
+                            regex: if want_regex {
+                                Some(
+                                    std::iter::repeat(String::new())
+                                        .take(mark_counter.max(0) as usize)
+                                        .collect(),
+                                )
+                            } else {
+                                None
+                            },
+                            feedback: None,
+                        });
                         task_value += mark_counter;
                     }
                     current_section = split.last().unwrap().trim().to_string();
@@ -110,87 +203,76 @@ pub async fn generate_allocator(
             }
 
             if !current_section.is_empty() {
-                subsections.push(json!({ "name": current_section, "value": mark_counter }));
+                subsections.push(Subsection {
+                    name: current_section,
+                    value: mark_counter,
+                    regex: if want_regex {
+                        Some(
+                            std::iter::repeat(String::new())
+                                .take(mark_counter.max(0) as usize)
+                                .collect(),
+                        )
+                    } else {
+                        None
+                    },
+                    feedback: None,
+                });
                 task_value += mark_counter;
             }
+
+            base_total += task_value;
+        } else if info.code_coverage {
+            // For coverage tasks we set a placeholder now; we'll fill value in Pass 2.
+            coverage_indices.push(idx);
         }
 
-        let task_key = format!("task{}", info.task_number);
-        let task_body = json!({
-            "name": info.name.clone(),
-            "task_number": info.task_number,
-            "value": task_value,
-            "subsections": subsections,
-            "code_coverage": info.code_coverage
+        tasks.push(Task {
+            task_number: info.task_number,
+            name: if info.name.trim().is_empty() {
+                format!("Task {}", info.task_number)
+            } else {
+                info.name.clone()
+            },
+            value: task_value,
+            code_coverage: Some(info.code_coverage),
+            subsections, // coverage tasks will keep empty subsections
         });
-        tasks_json.push(json!({ task_key: task_body }));
-        total_value += task_value;
     }
 
-    let now = chrono::Utc::now().to_rfc3339();
-    let final_json = json!({
-        "generated_at": now,
-        "tasks": tasks_json,
-        "total_value": total_value
-    });
-
-    let output_path = mark_allocator_path(module, assignment);
-    let mut file = File::create(&output_path)?;
-    write!(file, "{}", serde_json::to_string_pretty(&final_json)?)?;
-    file.flush()?;
-
-    Ok(final_json)
-}
-
-/// Loads the allocator JSON file for the given module and assignment.
-///
-/// # Arguments
-///
-/// * `module` - The module id.
-/// * `assignment` - The assignment id.
-///
-/// # Returns
-///
-/// * `Ok(Value)` - The parsed JSON allocator data.
-/// * `Err(SaveError)` - If the file or directory does not exist or parsing JSON fails.
-pub async fn load_allocator(module: i64, assignment: i64) -> Result<Value, SaveError> {
-    let path = mark_allocator_path(module, assignment);
-
-    let json_str = fs::read_to_string(&path).map_err(|err| {
-        if err.kind() == ErrorKind::NotFound {
-            SaveError::DirectoryNotFound
+    // -------- Pass 2: assign coverage marks based on base_total & weight --------
+    if !coverage_indices.is_empty() && cover_weight_frac > 0.0 {
+        // C = round(B * w / (1 - w))
+        let c = if cover_weight_frac >= 1.0 {
+            0 // (shouldn’t happen due to clamp) – but keep safe
         } else {
-            SaveError::IoError(err)
+            let c_f = (base_total as f64) * (cover_weight_frac / (1.0 - cover_weight_frac));
+            c_f.round() as i64
+        };
+
+        let n = coverage_indices.len() as i64;
+        let per = c.div_euclid(n.max(1)); // even split
+        let rem = c.rem_euclid(n.max(1)); // distribute remainder +1 to first 'rem' tasks
+
+        for (j, &ti) in coverage_indices.iter().enumerate() {
+            let mut v = per;
+            if (j as i64) < rem {
+                v += 1;
+            }
+            // Ensure non-negative
+            if v < 0 {
+                v = 0;
+            }
+            if let Some(t) = tasks.get_mut(ti) {
+                t.value = v;
+                // Keep subsections empty for coverage tasks
+                t.subsections.clear();
+            }
         }
-    })?;
+    } else {
+        // No coverage tasks or weight == 0: nothing to do.
+    }
 
-    let json_value = from_str::<Value>(&json_str)?;
-    Ok(json_value)
-}
-
-/// Saves a JSON allocator object to the allocator.json file for the specified module and assignment.
-/// This will overwrite any existing allocator.json file at the target path.
-///
-/// # Arguments
-///
-/// * `module` - The module number.
-/// * `assignment` - The assignment number.
-/// * `json` - The JSON data to save.
-///
-/// # Returns
-///
-/// * `Ok(())` - On successful write.
-/// * `Err(SaveError)` - If file creation fails or JSON serialization fails.
-pub async fn save_allocator(module: i64, assignment: i64, json: Value) -> Result<(), SaveError> {
-    let dir_path = mark_allocator_dir(module, assignment);
-    fs::create_dir_all(&dir_path)?;
-
-    let file_path = mark_allocator_path(module, assignment);
-
-    let mut file = File::create(&file_path)?;
-    let content = serde_json::to_string_pretty(&json)?;
-    file.write_all(content.as_bytes())?;
-    file.flush()?;
-
-    Ok(())
+    let mut alloc = MarkAllocator::new_now(tasks);
+    alloc.recompute_total();
+    Ok(alloc)
 }

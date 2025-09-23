@@ -1,22 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { List, Typography, Segmented, Empty, Tooltip, Progress, message } from 'antd';
+import { List, Typography, Segmented, Empty, Tooltip, Progress, message, Tag } from 'antd';
 import { BookOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
 import type { ModuleRole } from '@/types/modules';
-import type { AssignmentStatus, AssignmentType } from '@/types/modules/assignments';
-import AssignmentTypeTag from './AssignmentTypeTag';
-import AssignmentStatusTag from './AssignmentStatusTag';
+import type { AssignmentReadiness, AssignmentStatus, AssignmentType } from '@/types/modules/assignments';
 import { getMyAssignments } from '@/services/me/assignments/get';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { PercentageTag } from '../common';
 
 dayjs.extend(relativeTime);
 
 const { Text, Title } = Typography;
 const now = () => dayjs();
 
-type Props = { role?: ModuleRole };
+type Props = {
+  role?: ModuleRole;
+  viewLabels?: {
+    due: string;
+    upcoming: string;
+  };
+  moduleId?: number;
+};
 
 type DisplayAssignment = {
   id: number;
@@ -28,6 +35,16 @@ type DisplayAssignment = {
   updated_at: string;
   module: { id: number; code: string };
   assignment_type?: AssignmentType;
+  grade: {
+    percentage: number;
+    earned: number;
+    total: number;
+  } | null;
+  submissionSummary: {
+    submitted: number;
+    totalStudents: number;
+  } | null;
+  readiness: AssignmentReadiness | null;
 };
 
 function progressPercent(a: DisplayAssignment): number | null {
@@ -48,18 +65,21 @@ function progressColor(pct: number): string {
   return '#ff4d4f';
 }
 
-const AssignmentsPanel: React.FC<Props> = ({ role }) => {
+const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
   const [view, setView] = useState<'due' | 'upcoming'>('due');
   const [items, setItems] = useState<DisplayAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { isStudent, isStaff, isTutor, isAssistantLecturer, isLecturer } = useAuth();
+
+  const labels = viewLabels ?? { due: 'Due', upcoming: 'Upcoming' };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await getMyAssignments({ role, page: 1, per_page: 50 });
+        const res = await getMyAssignments({ role, module_id: moduleId, page: 1, per_page: 50 });
         if (!res?.data) throw new Error('Empty response');
         if (!res.success) throw new Error(res.message || 'Request failed');
 
@@ -73,6 +93,20 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
           updated_at: a.updated_at,
           module: a.module,
           assignment_type: 'assignment', // fallback so tag renders
+          grade: a.grade
+            ? {
+                percentage: a.grade.percentage,
+                earned: a.grade.earned,
+                total: a.grade.total,
+              }
+            : null,
+          submissionSummary: a.submission_summary
+            ? {
+                submitted: a.submission_summary.submitted,
+                totalStudents: a.submission_summary.total_students,
+              }
+            : null,
+          readiness: a.readiness ?? null,
         }));
 
         if (!cancelled) setItems(mapped);
@@ -88,7 +122,7 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
     return () => {
       cancelled = true;
     };
-  }, [role]);
+  }, [role, moduleId]);
 
   const filtered = useMemo(() => {
     const n = now();
@@ -120,8 +154,8 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
             value={view}
             onChange={(v) => setView(v as 'due' | 'upcoming')}
             options={[
-              { label: 'Due', value: 'due' },
-              { label: 'Upcoming', value: 'upcoming' },
+              { label: labels.due, value: 'due' },
+              { label: labels.upcoming, value: 'upcoming' },
             ]}
             size="small"
             className="role-seg"
@@ -138,7 +172,13 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={
-                view === 'due' ? 'No assignments currently open.' : 'No assignments opening soon.'
+                view === 'due'
+                  ? labels.due === 'Due'
+                    ? 'No assignments currently open.'
+                    : `No ${labels.due.toLowerCase()} assignments.`
+                  : labels.upcoming === 'Upcoming'
+                    ? 'No assignments opening soon.'
+                    : `No ${labels.upcoming.toLowerCase()} assignments.`
               }
             />
           ),
@@ -148,6 +188,14 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
           const due = dayjs(a.due_date);
           const opens = dayjs(a.available_from);
           const pct = progressPercent(a);
+          const gradePercentage = a.grade ? Math.round(a.grade.percentage) : null;
+          const showGrade = gradePercentage !== null && isStudent(a.module.id);
+          const showSubmissions =
+            a.submissionSummary != null &&
+            (isLecturer(a.module.id) ||
+              isAssistantLecturer(a.module.id) ||
+              isTutor(a.module.id) ||
+              isStaff(a.module.id));
 
           const timing =
             view === 'upcoming' ? (
@@ -191,14 +239,17 @@ const AssignmentsPanel: React.FC<Props> = ({ role }) => {
                   <Text strong className="truncate">
                     {a.name}
                   </Text>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="hidden sm:block">
-                      <AssignmentTypeTag type={a.assignment_type ?? 'assignment'} />
-                    </div>
-                    <AssignmentStatusTag status={a.status as AssignmentStatus} />
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {showGrade && <PercentageTag value={gradePercentage!} />}
+                    {showSubmissions && a.submissionSummary && (
+                      <Tag color="blue" className="!m-0">
+                        {a.submissionSummary.submitted}/{a.submissionSummary.totalStudents}{' '}
+                        submitted
+                      </Tag>
+                    )}
                   </div>
                 </div>
-                {timing}
+                <div className="flex flex-col gap-0.5">{timing}</div>
                 {typeof pct === 'number' && (
                   <div className="pt-1">
                     <Progress

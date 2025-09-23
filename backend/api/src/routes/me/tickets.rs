@@ -42,6 +42,8 @@ pub struct FilterReq {
     pub status: Option<String>,
     /// Sort fields (comma-separated, prefix with `-` for descending)
     pub sort: Option<String>,
+    /// Filter tickets for a specific module
+    pub module_id: Option<i64>,
 }
 
 /// Response for a single ticket
@@ -174,7 +176,18 @@ pub async fn get_my_tickets(
             .into_response();
     }
 
-    let module_ids: Vec<i64> = memberships.iter().map(|m| m.module_id).collect();
+    let module_ids: Vec<i64> = memberships
+        .iter()
+        .filter(|m| {
+            if let Some(module_filter) = params.module_id {
+                if m.module_id != module_filter {
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|m| m.module_id)
+        .collect();
 
     let assignments = assignment::Entity::find()
         .filter(assignment::Column::ModuleId.is_in(module_ids.clone()))
