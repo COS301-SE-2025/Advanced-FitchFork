@@ -38,8 +38,8 @@ impl MigrationTrait for Migration {
                             .boolean()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Alias::new("earned")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("total")).integer().not_null())
+                    .col(ColumnDef::new(Alias::new("earned")).float().not_null())
+                    .col(ColumnDef::new(Alias::new("total")).float().not_null())
                     .col(
                         ColumnDef::new(Alias::new("ignored"))
                             .boolean()

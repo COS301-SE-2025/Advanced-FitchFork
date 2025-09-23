@@ -98,8 +98,8 @@ mod tests {
         name: &str,
         matched: &[&str],
         missed: &[&str],
-        awarded: i64,
-        possible: i64,
+        awarded: f32,
+        possible: f32,
         student_output: &[&str],
         memo_output: &[&str],
         stderr: Option<&str>,
@@ -125,8 +125,8 @@ mod tests {
             "Task1",
             &["a", "b"],
             &[],
-            2,
-            2,
+            2.0,
+            2.0,
             &vec![],
             &vec![],
             None,
@@ -148,8 +148,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b", "c"],
-            1,
-            3,
+            1.0,
+            3.0,
             &["a"],
             &["a", "b", "c"],
             None,
@@ -171,8 +171,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b"],
-            1,
-            2,
+            1.0,
+            2.0,
             &["a", "b", "extra"],
             &["a", "b"],
             None,
@@ -194,8 +194,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b", "c"],
-            1,
-            3,
+            1.0,
+            3.0,
             &["a", "x"],
             &["a", "b", "c"],
             None,
@@ -217,8 +217,8 @@ mod tests {
             "Task3",
             &[],
             &["x", "y"],
-            0,
-            2,
+            0.0,
+            2.0,
             &[],
             &["x", "y"],
             None,
@@ -236,7 +236,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_patterns() {
-        let task = make_task("Task4", &[], &[], 0, 0, &vec![], &vec![], None, None);
+        let task = make_task("Task4", &[], &[], 0.0, 0.0, &vec![], &vec![], None, None);
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
         assert_eq!(
             feedback,
@@ -249,9 +249,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_tasks() {
-        let t1 = make_task("T1", &["a"], &[], 1, 1, &vec![], &vec![], None, None);
-        let t2 = make_task("T2", &[], &["b"], 0, 1, &[], &["b"], None, None);
-        let t3 = make_task("T3", &["x"], &["y"], 1, 2, &["x"], &["x", "y"], None, None);
+        let t1 = make_task("T1", &["a"], &[], 1.0, 1.0, &vec![], &vec![], None, None);
+        let t2 = make_task("T2", &[], &["b"], 0.0, 1.0, &[], &["b"], None, None);
+        let t3 = make_task("T3", &["x"], &["y"], 1.0, 2.0, &["x"], &["x", "y"], None, None);
         let feedback = AutoFeedback.assemble_feedback(&[t1, t2, t3]).await.unwrap();
         assert_eq!(
             feedback,
@@ -278,8 +278,8 @@ mod tests {
             "CrashTask",
             &[],
             &["expected_output"],
-            0,
-            10,
+            0.0,
+            10.0,
             &[],
             &["expected_output"],
             Some(
@@ -303,8 +303,8 @@ mod tests {
             "CrashTask",
             &[],
             &["expected_output"],
-            0,
-            10,
+            0.0,
+            10.0,
             &[],
             &["expected_output"],
             None,

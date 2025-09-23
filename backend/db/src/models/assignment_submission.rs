@@ -92,9 +92,9 @@ pub struct Model {
     /// Attempt number
     pub attempt: i64,
     /// The score earned by the user.
-    pub earned: i64,
+    pub earned: f32,
     /// The total possible score.
-    pub total: i64,
+    pub total: f32,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// The hash of the submitted files.
@@ -163,8 +163,8 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        earned: i64,
-        total: i64,
+        earned: f32,
+        total: f32,
         is_practice: bool,
         filename: &str,
         file_hash: &str,
@@ -335,7 +335,11 @@ impl Model {
 
         match cfg.marking.grading_policy {
             GradingPolicy::Best => {
-                subs.sort_by_key(|s| std::cmp::Reverse(s.earned * 1000 / s.total));
+                subs.sort_by(|a, b| {
+                    let score_a = a.earned / a.total;
+                    let score_b = b.earned / b.total;
+                    score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+                });
                 Ok(subs.into_iter().next())
             }
             GradingPolicy::Last => {
@@ -512,8 +516,8 @@ mod tests {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
-            earned: Set(10),
-            total: Set(10),
+            earned: Set(10.0),
+            total: Set(10.0),
             filename: Set("solution.zip".to_string()),
             file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
@@ -535,8 +539,8 @@ mod tests {
             assignment.id,
             user.id,
             6,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "solution.zip",
             "hash123#",
@@ -612,8 +616,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "test.zip",
             "test_hash",
@@ -674,8 +678,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "status_test.zip",
             "status_hash",
@@ -768,8 +772,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "helper_test.zip",
             "helper_hash",

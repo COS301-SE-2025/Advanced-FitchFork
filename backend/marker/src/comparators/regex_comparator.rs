@@ -43,7 +43,7 @@ impl OutputComparator for RegexComparator {
                 awarded: if student_lines.is_empty() {
                     section.value
                 } else {
-                    0
+                    0.0
                 },
                 possible: section.value,
                 matched_patterns: vec![],
@@ -111,17 +111,17 @@ impl OutputComparator for RegexComparator {
             if student_lines.is_empty() {
                 section.value
             } else {
-                0
+                0.0
             }
         } else {
             let ratio = awarded_marks as f32 / total_patterns as f32;
-            (section.value as f32 * ratio).round() as i64
+            section.value * ratio
         };
 
         // Extra-lines penalty
         if student_lines.len() > memo_norm.len() && !student_lines.is_empty() {
             let penalty = memo_norm.len() as f32 / student_lines.len() as f32;
-            awarded = (awarded as f32 * penalty).round() as i64;
+            awarded = awarded * penalty;
         }
 
         TaskResult {
@@ -149,7 +149,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: i64) -> Subsection {
+    fn mock_subsection(value: f32) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
@@ -163,10 +163,10 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"number: \d+", r"item: \w+"]);
         let student_lines = to_string_vec(&["number: 123", "item: abc"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
 
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 10);
+        assert_eq!(result.awarded, 10.0);
     }
 
     #[test]
@@ -174,9 +174,9 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"apple", r"banana"]);
         let student_lines = to_string_vec(&["apple", "orange"]);
-        let section = mock_subsection(20);
+        let section = mock_subsection(20.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 10);
+        assert_eq!(result.awarded, 10.0);
     }
 
     #[test]
@@ -184,9 +184,9 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"item-\d"]);
         let student_lines = to_string_vec(&["item-1", "item-2", "item-3"]);
-        let section = mock_subsection(5);
+        let section = mock_subsection(5.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 2);
+        assert_eq!(result.awarded, 2.0);
     }
 
     #[test]
@@ -194,9 +194,9 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"email: \S+@\S+\.\S+"]);
         let student_lines = to_string_vec(&["not an email", "another one"]);
-        let section = mock_subsection(15);
+        let section = mock_subsection(15.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
     }
 
     #[test]
@@ -204,9 +204,9 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"pattern-that-matches-nothing"]);
         let student_lines = to_string_vec(&["123", "456"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
     }
 
     #[test]
@@ -214,19 +214,19 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"pattern-that-matches-nothing"]);
         let student_lines = to_string_vec(&["abc", "def"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
     }
 
     #[test]
     fn test_invalid_regex_pattern() {
         let comparator = RegexComparator;
-        let memo_lines = to_string_vec(&[r"[", r"valid-pattern"]); // Invalid and valid regex
+        let memo_lines = to_string_vec(&[r"[", r"valid-pattern"]);
         let student_lines = to_string_vec(&["some content", "valid-pattern"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 5);
+        assert_eq!(result.awarded, 5.0);
         assert!(!result.missed_patterns.is_empty());
         assert!(
             result
@@ -241,9 +241,9 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"tag\d"]);
         let student_lines = to_string_vec(&["tag1 tag2"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 10);
+        assert_eq!(result.awarded, 10.0);
     }
 
     #[test]
@@ -251,10 +251,10 @@ mod tests {
         let comparator = RegexComparator;
         let memo_lines = to_string_vec(&[r"^a$", r"^b$"]);
         let student_lines = to_string_vec(&["a", "b", "extra"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         // All memo patterns are matched, but there is an extra line, so the score should be less than 10.
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert!(result.awarded < 10);
-        assert!(result.awarded > 0);
+        assert!(result.awarded < 10.0);
+        assert!(result.awarded > 0.0);
     }
 }

@@ -36,6 +36,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{collections::HashMap, fs, path::PathBuf};
 use util::state::AppState;
+use std::cmp::Ordering;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
@@ -228,9 +229,9 @@ async fn get_user_submissions(
             match field {
                 "mark" => {
                     items.sort_by(|a, b| {
-                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let ord = a_mark.cmp(&b_mark);
+                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0.0);
+                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0.0);
+                        let ord = a_mark.partial_cmp(&b_mark).unwrap_or(Ordering::Equal);
                         if desc { ord.reverse() } else { ord }
                     });
                 }
@@ -490,9 +491,9 @@ async fn get_list_submissions(
                 }
                 "mark" => {
                     items.sort_by(|a, b| {
-                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0);
-                        let ord = a_mark.cmp(&b_mark);
+                        let a_mark = a.mark.as_ref().map(|m| m.earned).unwrap_or(0.0);
+                        let b_mark = b.mark.as_ref().map(|m| m.earned).unwrap_or(0.0);
+                        let ord = a_mark.partial_cmp(&b_mark).unwrap_or(Ordering::Equal);
                         if desc { ord.reverse() } else { ord }
                     });
                 }
@@ -776,8 +777,8 @@ pub async fn get_submission(
         .get("mark")
         .and_then(|m| serde_json::from_value::<MarkSummary>(m.clone()).ok())
         .unwrap_or(MarkSummary {
-            earned: 0,
-            total: 0,
+            earned: 0.0,
+            total: 0.0,
         });
 
     let is_practice = parsed

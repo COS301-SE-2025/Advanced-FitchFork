@@ -48,7 +48,7 @@ pub async fn save(
             .into_response();
     }
 
-    let mut sum_task_values: i64 = 0;
+    let mut sum_task_values: f32 = 0.0;
     for (tidx, t) in alloc.tasks.iter().enumerate() {
         if t.task_number <= 0 {
             return (
@@ -70,7 +70,7 @@ pub async fn save(
             )
                 .into_response();
         }
-        if t.value < 0 {
+        if t.value < 0.0 {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
@@ -81,7 +81,7 @@ pub async fn save(
                 .into_response();
         }
 
-        let mut sum_sub_values: i64 = 0;
+        let mut sum_sub_values: f32 = 0.0;
         for (sidx, s) in t.subsections.iter().enumerate() {
             if s.name.trim().is_empty() {
                 return (
@@ -93,7 +93,7 @@ pub async fn save(
                 )
                     .into_response();
             }
-            if s.value < 0 {
+            if s.value < 0.0 {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<()>::error(&format!(

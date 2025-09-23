@@ -98,23 +98,23 @@ mod tests {
 
         let allocator = MarkAllocator {
             generated_at: Utc::now(),
-            total_value: 55,
+            total_value: 55.0,
             tasks: vec![
                 Task {
                     task_number: 1,
                     name: "Task 1 Name".to_string(),
-                    value: 25,
+                    value: 25.0,
                     code_coverage: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Subsection A".to_string(),
-                            value: 10,
+                            value: 10.0,
                             regex: None,
                             feedback: None,
                         },
                         Subsection {
                             name: "Subsection B".to_string(),
-                            value: 15,
+                            value: 15.0,
                             regex: None,
                             feedback: None,
                         },
@@ -123,18 +123,18 @@ mod tests {
                 Task {
                     task_number: 2,
                     name: "Task 2 Name".to_string(),
-                    value: 30,
+                    value: 30.0,
                     code_coverage: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Part 1".to_string(),
-                            value: 20,
+                            value: 20.0,
                             regex: None,
                             feedback: None,
                         },
                         Subsection {
                             name: "Part 2".to_string(),
-                            value: 10,
+                            value: 10.0,
                             regex: None,
                             feedback: None,
                         },

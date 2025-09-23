@@ -37,7 +37,7 @@ pub struct AssignmentStatsResponse {
     pub worst: i64, // %
 
     // extras
-    pub total_marks: i64, // sum of "total" across subs
+    pub total_marks: f32, // sum of "total" across subs
     pub num_students_submitted: usize,
     pub num_passed: usize,
     pub num_failed: usize,
@@ -246,7 +246,7 @@ pub async fn get_assignment_stats(
             stddev: 0.0,
             best: 0,
             worst: 0,
-            total_marks: 0,
+            total_marks: 0.0,
             num_students_submitted: 0,
             num_passed: 0,
             num_failed: 0,
@@ -382,7 +382,7 @@ pub async fn get_assignment_stats(
     };
 
     // totals across counted rows only
-    let total_marks: i64 = rows.iter().map(|s| s.total).sum();
+    let total_marks: f32 = rows.iter().map(|s| s.total).sum();
     let num_students_submitted = rows.iter().map(|s| s.user_id).collect::<HashSet<_>>().len();
 
     // aggregates on effective marks

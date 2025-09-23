@@ -44,7 +44,7 @@ impl OutputComparator for ExactComparator {
             }
             return TaskResult {
                 name: section.name.clone(),
-                awarded: 0,
+                awarded: 0.0,
                 possible: section.value,
                 matched_patterns,
                 missed_patterns,
@@ -66,7 +66,7 @@ impl OutputComparator for ExactComparator {
             }
         }
 
-        let awarded = if all_match { section.value } else { 0 };
+        let awarded = if all_match { section.value } else { 0.0 };
 
         TaskResult {
             name: section.name.clone(),
@@ -93,7 +93,7 @@ mod tests {
         lines.iter().map(|s| s.to_string()).collect()
     }
 
-    fn mock_subsection(value: i64) -> Subsection {
+    fn mock_subsection(value: f32) -> Subsection {
         Subsection {
             name: "Mock Subsection".to_string(),
             value,
@@ -107,9 +107,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&["line 1", "line 2"]);
         let student_lines = to_string_vec(&["line 1", "line 2"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 10);
+        assert_eq!(result.awarded, 10.0);
         assert!(result.missed_patterns.is_empty());
     }
 
@@ -118,9 +118,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&["line 1", "line 2"]);
         let student_lines = to_string_vec(&["line 1", "line 3"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
         assert_eq!(result.missed_patterns, vec!["line 2"]);
     }
 
@@ -129,9 +129,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&["line 1", "line 2"]);
         let student_lines = to_string_vec(&["line 1"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
         assert_eq!(result.missed_patterns, vec!["line 2"]);
     }
 
@@ -140,9 +140,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&[]);
         let student_lines = to_string_vec(&[]);
-        let section = mock_subsection(5);
+        let section = mock_subsection(5.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 5);
+        assert_eq!(result.awarded, 5.0);
         assert!(result.matched_patterns.is_empty());
         assert!(result.missed_patterns.is_empty());
     }
@@ -152,9 +152,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&[]);
         let student_lines = to_string_vec(&["extra line"]);
-        let section = mock_subsection(5);
+        let section = mock_subsection(5.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
     }
 
     #[test]
@@ -162,9 +162,9 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&["required line"]);
         let student_lines = to_string_vec(&[]);
-        let section = mock_subsection(5);
+        let section = mock_subsection(5.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
         assert_eq!(result.missed_patterns, vec!["required line"]);
     }
 
@@ -173,8 +173,8 @@ mod tests {
         let comparator = ExactComparator;
         let memo_lines = to_string_vec(&["a", "b"]);
         let student_lines = to_string_vec(&["a", "b", "extra"]);
-        let section = mock_subsection(10);
+        let section = mock_subsection(10.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 0);
+        assert_eq!(result.awarded, 0.0);
     }
 }

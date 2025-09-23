@@ -58,6 +58,15 @@ pub struct MarkingJob<'a> {
     config: ExecutionConfig,
 }
 
+/// Round a float to two decimal places in an efficient manner.
+///
+/// Uses the common multiply / round / divide trick. Kept local to this module
+/// so it's cheap to inline and obvious where rounding is happening.
+#[inline]
+fn round2(x: f32) -> f32 {
+    (x * 100.0).round() / 100.0
+}
+
 impl<'a> MarkingJob<'a> {
     /// Create a new marking job with required files.
     ///
@@ -183,7 +192,7 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
         let mut per_task_subsections: Vec<Vec<crate::report::ReportSubsection>> = Vec::new();
         let mut per_task_names: Vec<String> = Vec::new();
-        let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
+        let mut per_task_scores: Vec<(f32, f32)> = Vec::new();
 
         for task_entry in allocator.tasks.iter() {
             if task_entry.code_coverage.unwrap_or(false) {
@@ -199,7 +208,7 @@ impl<'a> MarkingJob<'a> {
                 .find(|t| t.task_id.eq_ignore_ascii_case(&expected_id));
 
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-            let mut task_earned = 0;
+            let mut task_earned = 0.0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
@@ -228,11 +237,12 @@ impl<'a> MarkingJob<'a> {
                     result.stderr = task_output.stderr.clone();
                     result.return_code = task_output.return_code;
 
+                    result.awarded = round2(result.awarded);
                     task_earned += result.awarded;
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
-                        total: subsection.value,
+                        total: round2(subsection.value),
                         feedback: String::new(),
                     });
                     task_results.push(result.clone());
@@ -248,7 +258,7 @@ impl<'a> MarkingJob<'a> {
             per_task_results.push(task_results);
             per_task_subsections.push(subsections);
             per_task_names.push(task_entry.name.clone());
-            per_task_scores.push((task_earned, task_entry.value));
+            per_task_scores.push((round2(task_earned), round2(task_entry.value)));
         }
 
         // Feedback
@@ -257,7 +267,7 @@ impl<'a> MarkingJob<'a> {
 
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
         let mut task_counter = 1;
-        let mut total_earned = 0;
+        let mut total_earned = 0.0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in
             per_task_results
                 .into_iter()
@@ -286,19 +296,19 @@ impl<'a> MarkingJob<'a> {
         }
 
         // Coverage buckets (optional)
-        let mut coverage_total_earned: i64 = 0;
-        let mut coverage_total_possible: i64 = 0;
+        let mut coverage_total_earned: f32 = 0.0;
+        let mut coverage_total_possible: f32 = 0.0;
         if let Some(cov_raw) = coverage_raw.as_ref() {
             let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
                 .parse(cov_raw, self.config.clone())?;
 
-            let bucket_percent: i64 = match coverage_report.coverage_percent {
-                p if p < 5.0 => 0,
-                p if p < 20.0 => 20,
-                p if p < 40.0 => 40,
-                p if p < 60.0 => 60,
-                p if p < 80.0 => 80,
-                _ => 100,
+            let bucket_percent: f32 = match coverage_report.coverage_percent {
+                p if p < 5.0 => 0.0,
+                p if p < 20.0 => 20.0,
+                p if p < 40.0 => 40.0,
+                p if p < 60.0 => 60.0,
+                p if p < 80.0 => 80.0,
+                _ => 100.0,
             };
 
             let coverage_value = allocator
@@ -306,25 +316,25 @@ impl<'a> MarkingJob<'a> {
                 .iter()
                 .filter(|t| t.code_coverage.unwrap_or(false))
                 .map(|t| t.value)
-                .sum::<i64>();
+                .sum::<f32>();
 
-            coverage_total_earned = bucket_percent * coverage_value / 100;
-            coverage_total_possible = coverage_value;
+            coverage_total_earned = round2(bucket_percent * coverage_value / 100.0);
+            coverage_total_possible = round2(coverage_value);
             total_earned += coverage_total_earned;
 
             // attach to report later
         }
 
         let mark = crate::report::Score {
-            earned: total_earned,
-            total: allocator.total_value,
+            earned: round2(total_earned),
+            total: round2(allocator.total_value),
         };
 
         let now = Utc::now().to_rfc3339();
         let mut report =
             crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
 
-        if coverage_total_possible > 0 {
+        if coverage_total_possible > 0.0 {
             // add coverage files if we had a report parsed above
             if let Some(cov_raw) = coverage_raw {
                 let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
@@ -340,8 +350,8 @@ impl<'a> MarkingJob<'a> {
                         .iter()
                         .map(|f| crate::report::CoverageFile {
                             path: f.path.clone(),
-                            earned: f.covered_lines as i64,
-                            total: f.total_lines as i64,
+                            earned: round2(f.covered_lines as f32),
+                            total: round2(f.total_lines as f32),
                         })
                         .collect(),
                 });
@@ -391,20 +401,20 @@ mod tests {
         assert!(is_valid_iso8601(&report.created_at));
         assert!(is_valid_iso8601(&report.updated_at));
 
-        assert_eq!(report.mark.earned, 10);
-        assert_eq!(report.mark.total, 10);
+        assert_eq!(report.mark.earned, 10.0);
+        assert_eq!(report.mark.total, 10.0);
 
         assert_eq!(report.tasks.len(), 1);
         let task = &report.tasks[0];
         assert_eq!(task.name, "Task 1");
-        assert_eq!(task.score.earned, 10);
-        assert_eq!(task.score.total, 10);
+        assert_eq!(task.score.earned, 10.0);
+        assert_eq!(task.score.total, 10.0);
 
         assert_eq!(task.subsections.len(), 1);
         let sub = &task.subsections[0];
         assert_eq!(sub.label, "Sub1");
-        assert_eq!(sub.earned, 10);
-        assert_eq!(sub.total, 10);
+        assert_eq!(sub.earned, 10.0);
+        assert_eq!(sub.total, 10.0);
         assert!(!sub.feedback.is_empty(), "Feedback should not be empty");
     }
 
@@ -438,8 +448,8 @@ mod tests {
         assert!(is_valid_iso8601(&report.created_at));
         assert!(is_valid_iso8601(&report.updated_at));
 
-        assert_eq!(report.mark.earned, 20);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.earned, 20.0);
+        assert_eq!(report.mark.total, 30.0);
 
         assert_eq!(report.tasks.len(), 2);
 
@@ -447,24 +457,24 @@ mod tests {
         assert_eq!(task1.name, "Task 1");
         assert_eq!(task1.subsections.len(), 2);
         assert_eq!(task1.subsections[0].label, "Sub1.1");
-        assert_eq!(task1.subsections[0].earned, 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         assert_eq!(task1.subsections[1].label, "Sub1.2");
-        assert_eq!(task1.subsections[1].earned, 5);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 5.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
         assert_eq!(task2.name, "Task 2");
         assert_eq!(task2.subsections.len(), 2);
         assert_eq!(task2.subsections[0].label, "Sub2.1");
-        assert_eq!(task2.subsections[0].earned, 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert_eq!(task2.subsections[0].earned, 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         assert_eq!(task2.subsections[1].label, "Sub2.2");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
     }
 
@@ -501,29 +511,29 @@ mod tests {
         assert_eq!(task1.name, "FizzBuzz");
         assert_eq!(task1.subsections.len(), 2);
         assert_eq!(task1.subsections[0].label, "Output Fizz");
-        assert_eq!(task1.subsections[0].earned, 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         assert_eq!(task1.subsections[1].label, "Output Buzz");
-        assert_eq!(task1.subsections[1].earned, 0);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 0.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
         assert_eq!(task2.name, "Sum");
         assert_eq!(task2.subsections.len(), 2);
         assert_eq!(task2.subsections[0].label, "Sum correct");
-        assert_eq!(task2.subsections[0].earned, 0);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert_eq!(task2.subsections[0].earned, 0.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         assert_eq!(task2.subsections[1].label, "Handles negatives");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall
-        assert_eq!(report.mark.earned, 5);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.earned, 5.0);
+        assert_eq!(report.mark.total, 30.0);
     }
 
     #[tokio::test]
@@ -561,13 +571,13 @@ mod tests {
         assert_eq!(task1.subsections.len(), 2);
         // Sub1: correct output with extra line, expect partial credit (likely 0 with strict comparator)
         assert_eq!(task1.subsections[0].label, "Reverse abc");
-        assert!(task1.subsections[0].earned < 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert!(task1.subsections[0].earned < 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         // Sub2: incorrect order, expect 0
         assert_eq!(task1.subsections[1].label, "Reverse xyz");
-        assert_eq!(task1.subsections[1].earned, 0);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 0.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
@@ -575,13 +585,13 @@ mod tests {
         assert_eq!(task2.subsections.len(), 2);
         // Sub1: output split across two lines, expect partial credit
         assert_eq!(task2.subsections[0].label, "Sort ascending");
-        assert!(task2.subsections[0].earned < 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert!(task2.subsections[0].earned < 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         // Sub2: out of order, expect 0
         assert_eq!(task2.subsections[1].label, "Sort descending");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall: sum of all earned points
@@ -590,7 +600,7 @@ mod tests {
             + task2.subsections[0].earned
             + task2.subsections[1].earned;
         assert_eq!(report.mark.earned, total_earned);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.total, 30.0);
     }
 
     #[tokio::test]
@@ -628,13 +638,13 @@ mod tests {
         assert_eq!(task1.subsections.len(), 2);
         // Sub1: wrong case, should be 0
         assert_eq!(task1.subsections[0].label, "Echo Hello");
-        assert_eq!(task1.subsections[0].earned, 0);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 0.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         // Sub2: extra whitespace and duplicate, should be penalized
         assert_eq!(task1.subsections[1].label, "Echo World");
-        assert!(task1.subsections[1].earned < 5);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert!(task1.subsections[1].earned < 5.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
@@ -642,13 +652,13 @@ mod tests {
         assert_eq!(task2.subsections.len(), 2);
         // Sub1: duplicate correct line, should be penalized
         assert_eq!(task2.subsections[0].label, "Repeat Yes");
-        assert!(task2.subsections[0].earned < 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert!(task2.subsections[0].earned < 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         // Sub2: missing output, should be 0
         assert_eq!(task2.subsections[1].label, "Repeat No");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall: sum of all earned points
@@ -657,7 +667,7 @@ mod tests {
             + task2.subsections[0].earned
             + task2.subsections[1].earned;
         assert_eq!(report.mark.earned, total_earned);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.total, 30.0);
     }
 
     #[tokio::test]
@@ -742,10 +752,10 @@ mod tests {
                 let task = &report.tasks[0];
                 assert_eq!(task.name, "EmptyStudent");
                 assert_eq!(task.subsections.len(), 2);
-                assert_eq!(task.subsections[0].earned, 0);
-                assert_eq!(task.subsections[1].earned, 0);
-                assert_eq!(report.mark.earned, 0);
-                assert_eq!(report.mark.total, 10);
+                assert_eq!(task.subsections[0].earned, 0.0);
+                assert_eq!(task.subsections[1].earned, 0.0);
+                assert_eq!(report.mark.earned, 0.0);
+                assert_eq!(report.mark.total, 10.0);
             }
             Err(err) => {
                 let err_str = format!("{err:?}");

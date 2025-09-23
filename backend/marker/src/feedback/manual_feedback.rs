@@ -19,8 +19,8 @@ impl Feedback for ManualFeedback {
         let mut feedback_entries = Vec::new();
 
         for result in results {
-            let percentage = if result.possible > 0 {
-                (result.awarded as f64 / result.possible as f64) * 100.0
+            let percentage = if result.possible > 0.0 {
+                (result.awarded / result.possible) * 100.0
             } else {
                 0.0
             };

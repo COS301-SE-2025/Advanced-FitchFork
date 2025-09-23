@@ -37,8 +37,8 @@ pub struct UserResponse {
 /// Represents the mark of a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mark {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 /// Single item in a submissions list response.
@@ -84,16 +84,16 @@ pub struct SubmissionResponse {
 /// Represents a summary of earned vs total marks.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 /// Represents code coverage for a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverageFile {
     pub path: String,
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

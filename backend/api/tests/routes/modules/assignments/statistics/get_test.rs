@@ -101,8 +101,8 @@ mod tests {
         user_id: i64,
         attempt: i64,
         created_at: DateTime<Utc>,
-        earned: i64,
-        total: i64,
+        earned: f32,
+        total: f32,
         is_practice: bool,
         is_late: bool,
     ) {
@@ -135,7 +135,7 @@ mod tests {
         module_id: i64,
         assignment: &AssignmentModel,
         user: &UserModel,
-        marks: &[(i64, i64)],
+        marks: &[(f32, f32)],
         offsets_min: &[i64],
     ) -> Vec<AssignmentSubmissionModel> {
         assert_eq!(marks.len(), offsets_min.len());
@@ -181,8 +181,8 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: i64,
-        total: i64,
+        earned: f32,
+        total: f32,
         offset_min: i64,
         is_practice: bool,
         ignored: bool,
@@ -419,7 +419,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student1,
-            &[(80, 100), (60, 100), (90, 100)],
+            &[(80.0, 100.0), (60.0, 100.0), (90.0, 100.0)],
             &[-120, 10, -30],
         )
         .await;
@@ -430,7 +430,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student2,
-            &[(30, 100), (50, 100)],
+            &[(30.0, 100.0), (50.0, 100.0)],
             &[-240, -60],
         )
         .await;
@@ -441,7 +441,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student3,
-            &[(100, 100), (100, 100)],
+            &[(100.0, 100.0), (100.0, 100.0)],
             &[-10, 120],
         )
         .await;
@@ -513,7 +513,7 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student1,
-            &[(40, 100), (65, 100), (70, 100)],
+            &[(40.0, 100.0), (65.0, 100.0), (70.0, 100.0)],
             &[-120, -110, 10],
         )
         .await;
@@ -524,7 +524,7 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student2,
-            &[(55, 100), (45, 100)],
+            &[(55.0, 100.0), (45.0, 100.0)],
             &[-60, 30],
         )
         .await;
@@ -535,7 +535,7 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student3,
-            &[(80, 100), (90, 100)],
+            &[(80.0, 100.0), (90.0, 100.0)],
             &[-5, -1],
         )
         .await;
@@ -627,7 +627,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student1,
-            &[(80, 100), (60, 100), (90, 100)],
+            &[(80.0, 100.0), (60.0, 100.0), (90.0, 100.0)],
             &[-120, 10, -30],
         )
         .await;
@@ -636,7 +636,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student2,
-            &[(30, 100), (50, 100)],
+            &[(30.0, 100.0), (50.0, 100.0)],
             &[-240, -60],
         )
         .await;
@@ -645,7 +645,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student3,
-            &[(100, 100), (100, 100)],
+            &[(100.0, 100.0), (100.0, 100.0)],
             &[-10, 120],
         )
         .await;
@@ -656,7 +656,7 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student1,
-            &[(40, 100), (65, 100), (70, 100)],
+            &[(40.0, 100.0), (65.0, 100.0), (70.0, 100.0)],
             &[-120, -110, 10],
         )
         .await;
@@ -665,7 +665,7 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student2,
-            &[(55, 100), (45, 100)],
+            &[(55.0, 100.0), (45.0, 100.0)],
             &[-60, 30],
         )
         .await;
@@ -674,13 +674,13 @@ mod tests {
             data.module.id,
             &data.assignment_last,
             &data.student3,
-            &[(80, 100), (90, 100)],
+            &[(80.0, 100.0), (90.0, 100.0)],
             &[-5, -1],
         )
         .await;
 
         // ----- Seed STAFF submissions that should be ignored in stats -----
-        let staff_marks = &[(1, 100), (100, 100)];
+        let staff_marks = &[(1.0, 100.0), (100.0, 100.0)];
         let staff_offsets = &[-1, 1];
 
         // admin (already in data.admin_user)
@@ -852,7 +852,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student1,
-            &[(80, 100), (90, 100)],
+            &[(80.0, 100.0), (90.0, 100.0)],
             &[-60, -30],
         )
         .await;
@@ -861,7 +861,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student2,
-            &[(50, 100)],
+            &[(50.0, 100.0)],
             &[-40],
         )
         .await;
@@ -870,7 +870,7 @@ mod tests {
             data.module.id,
             &data.assignment_best,
             &data.student3,
-            &[(100, 100), (100, 100)],
+            &[(100.0, 100.0), (100.0, 100.0)],
             &[-10, 10],
         )
         .await;
@@ -883,8 +883,8 @@ mod tests {
             &data.assignment_best,
             &data.student1,
             99,
-            5,
-            100,
+            5.0,
+            100.0,
             -5,
             true,
             false,
@@ -896,8 +896,8 @@ mod tests {
             &data.assignment_best,
             &data.student2,
             98,
-            100,
-            100,
+            100.0,
+            100.0,
             -3,
             true,
             false,
@@ -909,8 +909,8 @@ mod tests {
             &data.assignment_best,
             &data.student3,
             97,
-            0,
-            100,
+            0.0,
+            100.0,
             -1,
             true,
             false,
@@ -925,8 +925,8 @@ mod tests {
             &data.assignment_best,
             &data.student1,
             96,
-            0,
-            100,
+            0.0,
+            100.0,
             -2,
             false,
             true,
@@ -938,8 +938,8 @@ mod tests {
             &data.assignment_best,
             &data.student2,
             95,
-            100,
-            100,
+            100.0,
+            100.0,
             -2,
             false,
             true,
@@ -951,8 +951,8 @@ mod tests {
             &data.assignment_best,
             &data.student3,
             94,
-            100,
-            100,
+            100.0,
+            100.0,
             -2,
             false,
             true,

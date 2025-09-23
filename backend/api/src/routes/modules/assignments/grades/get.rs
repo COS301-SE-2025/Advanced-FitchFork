@@ -57,8 +57,8 @@ fn default_per_page() -> u64 {
 pub struct TaskBreakdown {
     pub task_number: Option<i64>,
     pub name: Option<String>,
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
     pub score: f32, // percentage 0..100
 }
 
@@ -86,8 +86,8 @@ pub struct PaginatedGradeResponse {
 /// Minimal shapes we need from submission_report.json
 #[derive(Debug, Deserialize)]
 struct ReportScore {
-    earned: i64,
-    total: i64,
+    earned: f32,
+    total: f32,
 }
 
 #[derive(Debug, Deserialize)]

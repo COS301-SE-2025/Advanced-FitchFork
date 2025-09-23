@@ -49,8 +49,8 @@ pub struct GradeItem {
 
 #[derive(Debug, Serialize)]
 pub struct Score {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 #[derive(Debug, Serialize)]
