@@ -170,6 +170,34 @@ impl Model {
         Ok(None)
     }
 
+    /// Retrieves all email addresses of users assigned to a specific module.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection.
+    /// * `module_id` - The module ID to query.
+    ///
+    /// # Returns
+    /// A list of email addresses.
+    pub async fn get_emails_by_module_id(db: &DatabaseConnection, module_id: i64) -> Vec<String> {
+        let roles = RoleEntity::find()
+            .filter(RoleColumn::ModuleId.eq(module_id))
+            .all(db)
+            .await
+            .unwrap_or_default();
+
+        let mut emails: Vec<String> = Vec::new();
+        for role in roles {
+            if let Some(user) = UserEntity::find_by_id(role.user_id)
+                .one(db)
+                .await
+                .unwrap_or(None)
+            {
+                emails.push(user.email.clone());
+            }
+        }
+        emails
+    }
+
     /// Retrieves all module roles associated with the user.
     ///
     /// # Arguments
