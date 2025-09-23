@@ -6,6 +6,7 @@ use util::languages::Language;
 /// crash was due to a safety violation, segmentation fault, or exception.
 /// The default implementation returns false for all heuristics. As a language cannot be found
 pub trait EvaluationStrategy: Send + Sync {
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
     fn violates_safety(&self, _stderr: &str) -> bool {
         false

@@ -197,4 +197,56 @@ impl EmailService {
             Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
         }
     }
+
+    pub async fn send_marking_done_email(
+        to_email: &str,
+        display_name: &str,
+        submission_id: i64,
+        module_id: i64,
+        assignment_id: i64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let from_email = config::gmail_username();
+        let from_name = config::email_from_name();
+
+        let text = format!(
+        "Hello {display_name},\n\n\
+         Your submission #{submission_id} for module #{module_id}, assignment #{assignment_id} has finished marking.\n\n\
+         You can now view your results on FitchFork.\n\n\
+         — {from_name}"
+        );
+
+        let html = format!(
+            r#"<!doctype html>
+            <html><body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;">
+            <p>Hello {display_name},</p>
+            <p>Your submission <b>#{submission_id}</b> for module <b>#{module_id}</b>, assignment <b>#{assignment_id}</b> has finished marking.</p>
+            <p>You can now view your results on FitchFork.</p>
+            <p>— {from_name}</p>
+            </body></html>"#
+        );
+
+        let email = Message::builder()
+            .from(format!("{} <{}>", from_name, from_email).parse().unwrap())
+            .to(to_email.parse().unwrap())
+            .subject(format!("Submission #{} – Marking complete", submission_id))
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_PLAIN)
+                            .body(text),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_HTML)
+                            .body(html),
+                    ),
+            )?;
+
+        SMTP_CLIENT
+            .send(email)
+            .await
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as _)
+    }
 }

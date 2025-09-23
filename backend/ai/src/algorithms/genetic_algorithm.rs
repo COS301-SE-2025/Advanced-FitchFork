@@ -339,7 +339,7 @@ impl GeneticAlgorithm {
                     let i = rng.gen_range(0..len); // pick first index
                     let mut j = rng.gen_range(0..len); // pick second index
                     while j == i {
-                        j = rng.gen_range(0..len); // ensure j ≠ i
+                        j = rng.gen_range(0..len); // ensure j =/ i
                     }
                     genes.swap(i, j); // swap
                 }

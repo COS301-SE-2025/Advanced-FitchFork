@@ -12,12 +12,14 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
+use crate::{services::email::EmailService};
 use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
 };
 use db::models::{assignment_memo_output, assignment_submission::SubmissionStatus};
+use db::models::user::Entity as UserEntity;
 use marker::MarkingJob;
 use marker::comparators::{
     exact_comparator::ExactComparator, percentage_comparator::PercentageComparator,
@@ -780,9 +782,39 @@ async fn process_submission_code(
         }
 
         SubmissionMode::GATLAM => {
-            ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+            let res = ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
                 .await
-                .map_err(|e| format!("GATLAM failed: {}", e))
+                .map_err(|e| format!("GATLAM failed: {}", e));
+
+            if res.is_ok() {
+                if let Some(sub) = assignment_submission::Entity::find_by_id(submission_id)
+                    .one(db)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    if let Some(user) = UserEntity::find_by_id(sub.user_id)
+                        .one(db)
+                        .await
+                        .map_err(|e| e.to_string())?
+                    {
+                        let to_email = user.email.clone();
+                        let display_name = user.email.clone();
+
+                        if let Err(e) = EmailService::send_marking_done_email(
+                            &to_email,
+                            &display_name,
+                            submission_id,
+                            module_id,
+                            assignment_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!("send_marking_done_email failed: {}", e);
+                        }
+                    }
+                }
+            }
+            res
         }
 
         SubmissionMode::CodeCoverage => {
@@ -792,12 +824,13 @@ async fn process_submission_code(
         }
 
         SubmissionMode::RNG => {
-            ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
+            ai::run_rng_job(db, submission_id, &config)
                 .await
                 .map_err(|e| format!("RNG run failed: {}", e))
         }
     }
 }
+
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
