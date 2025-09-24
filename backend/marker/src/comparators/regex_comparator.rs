@@ -186,7 +186,7 @@ mod tests {
         let student_lines = to_string_vec(&["item-1", "item-2", "item-3"]);
         let section = mock_subsection(5.0);
         let result = comparator.compare(&section, &memo_lines, &student_lines);
-        assert_eq!(result.awarded, 2.0);
+        assert_eq!(result.awarded, 1.6666666666666665);
     }
 
     #[test]

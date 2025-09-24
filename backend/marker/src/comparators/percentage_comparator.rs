@@ -72,11 +72,11 @@ impl OutputComparator for PercentageComparator {
             missed_patterns.push(memo_lines[i].clone());
         }
 
-        let percentage = (matched_count / memo_lines.len()) as f64;
+        let percentage = matched_count as f64 / memo_lines.len() as f64;
         let mut awarded = section.value * percentage;
 
         if student_lines.len() > memo_lines.len() && !student_lines.is_empty() {
-            let penalty = (memo_lines.len() / student_lines.len()) as f64;
+            let penalty = memo_lines.len() as f64 / student_lines.len() as f64;
             awarded = awarded * penalty;
         }
 

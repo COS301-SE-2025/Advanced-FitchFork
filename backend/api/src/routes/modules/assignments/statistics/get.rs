@@ -52,9 +52,9 @@ pub struct AssignmentStatsResponse {
 // ---------- Helpers ----------
 
 #[inline]
-fn to_pct(earned: Option<i64>, total: Option<i64>) -> Option<i64> {
+fn to_pct(earned: Option<f64>, total: Option<f64>) -> Option<i64> {
     match (earned, total) {
-        (Some(e), Some(t)) if t > 0 => Some(((e as f64 / t as f64) * 100.0).round() as i64),
+        (Some(e), Some(t)) if t > 0.0 => Some(((e / t) * 100.0).round() as i64),
         _ => None,
     }
 }
@@ -331,11 +331,11 @@ pub async fn get_assignment_stats(
                 let earned = json
                     .get("mark")
                     .and_then(|m| m.get("earned"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 let total = json
                     .get("mark")
                     .and_then(|m| m.get("total"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 if let Some(p) = to_pct(earned, total) {
                     user_marks
                         .entry(s.user_id)

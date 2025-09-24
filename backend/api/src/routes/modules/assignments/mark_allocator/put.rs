@@ -3,7 +3,7 @@ use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use util::execution_config::{ExecutionConfig, MarkingScheme};
 use util::paths::assignment_dir;
 
-use util::mark_allocator::{MarkAllocator, save_allocator, load_allocator};
+use util::mark_allocator::{MarkAllocator, load_allocator, save_allocator};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -105,7 +105,7 @@ pub async fn save(
             }
             sum_sub_values += s.value;
         }
-        
+
         if !t.code_coverage.unwrap_or(false) && sum_sub_values != t.value {
             return (
                 StatusCode::BAD_REQUEST,
@@ -133,16 +133,17 @@ pub async fn save(
 
     // 2) Load existing allocator to preserve code coverage task values
     let existing_alloc = load_allocator(module_id, assignment_id);
-    
+
     // 3) Preserve code coverage task values from existing allocator
     if let Ok(existing) = existing_alloc {
-        let mut coverage_values: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+        let mut coverage_values: std::collections::HashMap<i64, f64> =
+            std::collections::HashMap::new();
         for task in &existing.tasks {
             if task.code_coverage.unwrap_or(false) {
                 coverage_values.insert(task.task_number, task.value);
             }
         }
-        
+
         for task in &mut alloc.tasks {
             if task.code_coverage.unwrap_or(false) {
                 if let Some(&existing_value) = coverage_values.get(&task.task_number) {

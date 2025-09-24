@@ -368,12 +368,12 @@ mod tests {
 
         let subsec1 = &subsections_array[0];
         assert_eq!(subsec1["name"], "Subsection A");
-        assert_eq!(subsec1["value"], 10);
+        assert_eq!(subsec1["value"], 10.0);
         assert_eq!(subsec1["memo_output"], "Feedback for Subsection A");
 
         let subsec2 = &subsections_array[1];
         assert_eq!(subsec2["name"], "Subsection B");
-        assert_eq!(subsec2["value"], 15);
+        assert_eq!(subsec2["value"], 15.0);
         assert_eq!(subsec2["memo_output"], "Feedback for Subsection B");
     }
 

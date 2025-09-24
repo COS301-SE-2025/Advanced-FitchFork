@@ -123,12 +123,12 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["total_value"], 10);
+        assert_eq!(json["data"]["total_value"], 10.0);
         assert_eq!(json["data"]["tasks"][0]["task_number"], 1);
         assert_eq!(json["data"]["tasks"][0]["name"], "Task 1");
-        assert_eq!(json["data"]["tasks"][0]["value"], 10);
+        assert_eq!(json["data"]["tasks"][0]["value"], 10.0);
         assert_eq!(json["data"]["tasks"][0]["subsections"][0]["name"], "Sub1");
-        assert_eq!(json["data"]["tasks"][0]["subsections"][0]["value"], 10);
+        assert_eq!(json["data"]["tasks"][0]["subsections"][0]["value"], 10.0);
     }
 
     #[tokio::test]

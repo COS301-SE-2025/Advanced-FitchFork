@@ -253,8 +253,8 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 80);
-        assert_eq!(grades[1]["score"]["earned"], 90);
+        assert_eq!(grades[0]["score"]["earned"], 80.0);
+        assert_eq!(grades[1]["score"]["earned"], 90.0);
     }
 
     #[tokio::test]
@@ -279,8 +279,8 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 90);
-        assert_eq!(grades[1]["score"]["earned"], 80);
+        assert_eq!(grades[0]["score"]["earned"], 90.0);
+        assert_eq!(grades[1]["score"]["earned"], 80.0);
     }
 
     #[tokio::test]

@@ -522,9 +522,9 @@ mod tests {
         // Verify sorting by score descending
         let mut sorted_submissions = submissions.clone();
         sorted_submissions.sort_by(|a, b| {
-            let score_a = a["score"]["earned"].as_i64().unwrap();
-            let score_b = b["score"]["earned"].as_i64().unwrap();
-            score_b.cmp(&score_a) // Descending
+            let score_a = a["score"]["earned"].as_f64().unwrap();
+            let score_b = b["score"]["earned"].as_f64().unwrap();
+            score_b.partial_cmp(&score_a).unwrap() // Descending
         });
         assert_eq!(submissions, &sorted_submissions);
     }

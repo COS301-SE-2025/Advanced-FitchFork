@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(d["num_full_marks"], 1); // only student3 has 100
 
         // total_marks is sum of per-row totals: 7 * 100
-        assert_eq!(d["total_marks"], 700);
+        assert_eq!(d["total_marks"], 700.0);
         assert_eq!(d["num_students_submitted"], 3);
     }
 
@@ -586,7 +586,7 @@ mod tests {
         assert_eq!(d["num_full_marks"], 0);
 
         // total_marks = 7 * 100
-        assert_eq!(d["total_marks"], 700);
+        assert_eq!(d["total_marks"], 700.0);
         assert_eq!(d["num_students_submitted"], 3);
     }
 
@@ -796,7 +796,7 @@ mod tests {
         assert_eq!(d["num_passed"], 3);
         assert_eq!(d["num_failed"], 0);
         assert_eq!(d["num_full_marks"], 1);
-        assert_eq!(d["total_marks"], 700);
+        assert_eq!(d["total_marks"], 700.0);
         assert_eq!(d["num_students_submitted"], 3);
 
         // ----- Assert LAST stats unchanged (i.e., staff ignored) -----
@@ -832,7 +832,7 @@ mod tests {
         assert_eq!(d["num_passed"], 2);
         assert_eq!(d["num_failed"], 1);
         assert_eq!(d["num_full_marks"], 0);
-        assert_eq!(d["total_marks"], 700);
+        assert_eq!(d["total_marks"], 700.0);
         assert_eq!(d["num_students_submitted"], 3);
     }
 
@@ -1002,7 +1002,7 @@ mod tests {
         assert_eq!(d["num_full_marks"], 1);
 
         // totals computed only over counted attempts (5 * 100)
-        assert_eq!(d["total_marks"], 500);
+        assert_eq!(d["total_marks"], 500.0);
         assert_eq!(d["num_students_submitted"], 3);
     }
 }

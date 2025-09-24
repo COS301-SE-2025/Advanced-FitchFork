@@ -222,13 +222,13 @@ impl<'a> MarkingJob<'a> {
 
                     let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
                     {
-                        MarkingScheme::Regex => {
-                            match subsection.regex.clone() {
-                                Some(patterns) => patterns,
-                                None => {
-                                    let pattern_count = subsection.value.max(0.0).round() as usize;
-                                    std::iter::repeat(String::new()).take(pattern_count).collect()
-                                }
+                        MarkingScheme::Regex => match subsection.regex.clone() {
+                            Some(patterns) => patterns,
+                            None => {
+                                let pattern_count = subsection.value.max(0.0).round() as usize;
+                                std::iter::repeat(String::new())
+                                    .take(pattern_count)
+                                    .collect()
                             }
                         },
                         _ => task_output
