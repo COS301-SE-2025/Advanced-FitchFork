@@ -74,6 +74,7 @@ mod tests {
             "echo 'Initial Command'",
             "Initial Task Name",
             false,
+            false,
         )
         .await
         .expect("Failed to create initial task");
@@ -213,6 +214,7 @@ mod tests {
             1,
             "echo 'Other Assignment'",
             "Other Task",
+            false,
             false,
         )
         .await

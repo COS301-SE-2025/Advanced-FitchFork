@@ -95,7 +95,7 @@ mod tests {
         active_assignment.updated_at = Set(now);
         let assignment = active_assignment.update(db).await.unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false)
+        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
             .await
             .unwrap();
 
@@ -1384,7 +1384,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "Failed to run code for submission");
     }
 
     // Helper function to create a submission with an output file wired via path utilities.
@@ -2667,7 +2667,7 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "Failed to mark submission");
+        assert_eq!(json["message"], "Failed to run code for submission");
 
         // Check if a submission was created and has failed status
         use db::models::assignment_submission::{Column as SubCol, Entity as SubmissionEntity};

@@ -1,4 +1,5 @@
 use super::common::{MarkSummary, SubmissionDetailResponse};
+use crate::services::email::EmailService;
 use crate::{
     auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
     ws::modules::assignments::submissions::topics::submission_topic,
@@ -13,6 +14,7 @@ use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
 use db::models::assignment_task;
+use db::models::user::Entity as UserEntity;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
@@ -828,9 +830,39 @@ async fn process_submission_code(
         }
 
         SubmissionMode::GATLAM => {
-            ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+            let res = ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
                 .await
-                .map_err(|e| format!("GATLAM failed: {}", e))
+                .map_err(|e| format!("GATLAM failed: {}", e));
+
+            if res.is_ok() {
+                if let Some(sub) = assignment_submission::Entity::find_by_id(submission_id)
+                    .one(db)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    if let Some(user) = UserEntity::find_by_id(sub.user_id)
+                        .one(db)
+                        .await
+                        .map_err(|e| e.to_string())?
+                    {
+                        let to_email = user.email.clone();
+                        let display_name = user.email.clone();
+
+                        if let Err(e) = EmailService::send_marking_done_email(
+                            &to_email,
+                            &display_name,
+                            submission_id,
+                            module_id,
+                            assignment_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!("send_marking_done_email failed: {}", e);
+                        }
+                    }
+                }
+            }
+            res
         }
 
         SubmissionMode::CodeCoverage => {
@@ -839,13 +871,12 @@ async fn process_submission_code(
                 .map_err(|e| format!("Coverage GA failed: {}", e))
         }
 
-        SubmissionMode::RNG => {
-            ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
-                .await
-                .map_err(|e| format!("RNG run failed: {}", e))
-        }
+        SubmissionMode::RNG => ai::run_rng_job(db, submission_id, &config)
+            .await
+            .map_err(|e| format!("RNG run failed: {}", e)),
     }
 }
+
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
@@ -1031,7 +1062,7 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 /// ```
 /// or
 /// ```json
-/// { "success": false, "message": "Failed to mark submission" }
+/// { "success": false, "message": "Failed to run code for submission" }
 /// ```
 ///
 /// ### Side Effects
@@ -1458,7 +1489,8 @@ async fn run_submission_pipeline(
         )
         .await;
 
-        return Err("Failed to run code for submission".to_string());
+        // return Err("Failed to run code for submission".to_string());
+        return Err(format!("Failed to run code for submission: {}", exec_err));
     }
 
     // grading start
@@ -1550,7 +1582,7 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            Err("Failed to mark submission".to_string())
+            Err("Failed to run code for submission".to_string())
         }
     }
 }

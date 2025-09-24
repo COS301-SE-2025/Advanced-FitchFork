@@ -124,8 +124,6 @@ pub async fn run_rng_job(
     db: &DatabaseConnection,
     submission_id: i64,
     config: &ExecutionConfig,
-    module_id: i64,
-    assignment_id: i64,
 ) -> Result<(), String> {
     let seed: u64 = random::<u64>();
 
@@ -137,28 +135,16 @@ pub async fn run_rng_job(
     let rng_cfgs = exec_to_rng_configs(config);
     let mut generation = RngGen::new(seed);
 
-    let submission = AssignmentSubmission::find_by_id(submission_id)
+    // check if its there
+    let _submission = AssignmentSubmission::find_by_id(submission_id)
         .one(db)
         .await
         .map_err(|e| format!("Failed to fetch submission: {}", e))?
         .ok_or_else(|| format!("Submission {} not found", submission_id))?;
-    let user_id = submission.user_id;
-    let attempt_number = submission.attempt;
 
-    for i in 0..iterations {
+    for _i in 0..iterations {
         let payload = generation.generate_string(&rng_cfgs);
         run_interpreter(db, submission_id, &payload).await?;
-
-        // optional sanity: confirm outputs arrived
-        let outs = Output::get_submission_output_no_coverage(
-            db,
-            module_id,
-            assignment_id,
-            user_id,
-            attempt_number,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -184,7 +170,7 @@ pub async fn run_coverage_ga_job(
 
     let gens = ga.config().number_of_generations;
 
-    for generation in 0..gens {
+    for _generation in 0..gens {
         let mut fitness_scores = Vec::with_capacity(ga.population().len());
 
         for chrom in ga.population().iter() {
@@ -240,7 +226,7 @@ where
     // Same as mentioned earlier, not used
     F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
-    let _ = &mut fetch_outputs; // suppress unused
+    let _ = &mut fetch_outputs;
 
     let gens = ga.config().number_of_generations;
     let bits_per_gene = ga.bits_per_gene();

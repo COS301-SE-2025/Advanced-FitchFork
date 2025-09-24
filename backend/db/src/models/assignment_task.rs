@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use sea_orm::ActiveValue;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
@@ -16,6 +17,7 @@ pub struct Model {
     pub name: String,
     pub command: String,
     pub code_coverage: bool,
+    pub valgrind: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -33,6 +35,14 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
+    fn enforce_exclusive_flags(code_coverage: bool, valgrind: bool) -> bool {
+        if code_coverage && valgrind {
+            false
+        } else {
+            valgrind
+        }
+    }
+
     /// Create a new task in the database.
     pub async fn create(
         db: &DatabaseConnection,
@@ -41,13 +51,16 @@ impl Model {
         name: &str,
         command: &str,
         code_coverage: bool,
+        valgrind: bool,
     ) -> Result<Self, DbErr> {
+        let valgrind = Self::enforce_exclusive_flags(code_coverage, valgrind);
         let active = ActiveModel {
             assignment_id: Set(assignment_id),
             task_number: Set(task_number),
             name: Set(name.to_string()),
             command: Set(command.to_string()),
             code_coverage: Set(code_coverage),
+            valgrind: Set(valgrind),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -77,6 +90,7 @@ impl Model {
         name: Option<&str>,
         command: Option<&str>,
         code_coverage: Option<bool>,
+        valgrind: Option<bool>,
     ) -> Result<Self, DbErr> {
         let Some(task) = Self::get_by_id(db, id).await? else {
             return Err(DbErr::RecordNotFound("Task not found".into()));
@@ -92,6 +106,13 @@ impl Model {
         if let Some(cc) = code_coverage {
             active.code_coverage = Set(cc);
         }
+        if let Some(vg) = valgrind {
+            let cc = match active.code_coverage {
+                ActiveValue::Set(val) | ActiveValue::Unchanged(val) => val,
+                ActiveValue::NotSet => false,
+            };
+            active.valgrind = Set(Self::enforce_exclusive_flags(cc, vg));
+        }
         active.updated_at = Set(Utc::now());
         active.update(db).await
     }
@@ -103,7 +124,7 @@ impl Model {
         new_name: &str,
         new_command: &str,
     ) -> Result<Self, DbErr> {
-        Self::edit(db, id, Some(new_name), Some(new_command), None).await
+        Self::edit(db, id, Some(new_name), Some(new_command), None, None).await
     }
 
     /// Delete a task by ID.

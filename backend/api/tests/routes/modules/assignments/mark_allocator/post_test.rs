@@ -85,6 +85,7 @@ mod tests {
             "",        // name -> will default to "Task 1" in allocator
             "echo ok", // <-- provide any command string (NOT NULL)
             false,     // code_coverage
+            false,     // valgrind
         )
         .await
         .unwrap();

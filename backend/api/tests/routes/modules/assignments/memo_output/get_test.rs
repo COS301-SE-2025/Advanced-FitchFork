@@ -94,6 +94,7 @@ mod tests {
             &format!("Task {}", task_number),
             "echo Hello", // dummy command
             false,
+            false,
         )
         .await
         .unwrap();

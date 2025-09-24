@@ -81,6 +81,7 @@ mod tests {
             "echo 'Task 1'",
             "Task 1 Name",
             false,
+            false,
         )
         .await
         .expect("Failed to create task 1");
@@ -91,6 +92,7 @@ mod tests {
             2,
             "echo 'Task 2'",
             "Task 2 Name",
+            false,
             false,
         )
         .await
@@ -105,6 +107,7 @@ mod tests {
                     name: "Task 1 Name".to_string(),
                     value: 25.0,
                     code_coverage: Some(false),
+                    valgrind: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Subsection A".to_string(),
@@ -125,6 +128,7 @@ mod tests {
                     name: "Task 2 Name".to_string(),
                     value: 30.0,
                     code_coverage: Some(false),
+                    valgrind: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Part 1".to_string(),
@@ -450,6 +454,7 @@ mod tests {
             1,
             "echo 'Other'",
             "Task in Ass 2",
+            false,
             false,
         )
         .await
