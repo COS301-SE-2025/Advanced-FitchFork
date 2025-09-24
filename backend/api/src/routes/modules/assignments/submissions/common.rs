@@ -122,6 +122,7 @@ pub struct SubmissionDetailResponse {
     pub code_coverage: Option<CodeCoverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<serde_json::Value>,
+    pub plagiarism: PlagiarismInfo,
 }
 
 // ---- instant ACK (client will GET /submissions/{id} and attach WS) ----
@@ -134,4 +135,13 @@ pub struct SubmitAck {
     pub filename: String,
     pub hash: String,
     pub created_at: String, // RFC3339
+}
+
+/// Represents plagiarism-related information for a submission.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlagiarismInfo {
+    pub flagged: bool,
+    pub similarity: f32,
+    pub lines_matched: i64,
+    pub description: String,
 }

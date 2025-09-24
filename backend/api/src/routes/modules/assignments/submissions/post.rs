@@ -1,4 +1,4 @@
-use super::common::{MarkSummary, SubmissionDetailResponse};
+use super::common::{MarkSummary, PlagiarismInfo, SubmissionDetailResponse};
 use crate::services::email::EmailService;
 use crate::{
     auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
@@ -323,6 +323,12 @@ pub async fn check_disallowed_code(
                 tasks: vec![],
                 code_coverage: None,
                 user: None,
+                plagiarism: PlagiarismInfo {
+                    flagged: false,
+                    similarity: 0.0,
+                    lines_matched: 0,
+                    description: "".to_string(),
+                },
             };
 
             let report_path = submission_report_path(
@@ -797,6 +803,12 @@ async fn grade_submission(
         tasks,
         code_coverage,
         user: None, // just ignore this lol
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
     };
 
     let report_path = submission_report_path(
@@ -1024,6 +1036,13 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 ///     "status": "graded",
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
+///     "user": null,
+///     "plagiarism": {
+///         "flagged": false,
+///         "similarity": 0.0,
+///         "lines_matched": 0,
+///         "description": ""
+///     },
 ///   }
 /// }
 /// ```

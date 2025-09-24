@@ -3,7 +3,7 @@ use crate::models::assignment::Model as AssignmentModel;
 use crate::models::user;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseConnection, EntityTrait, QueryOrder};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -454,6 +454,23 @@ impl Model {
             self.status,
             SubmissionStatus::Queued | SubmissionStatus::Running | SubmissionStatus::Grading
         )
+    }
+
+    /// Zeros out the `earned` mark for a submission.
+    pub async fn zero_out_marks<C>(db: &C, submission_id: i64) -> Result<Self, sea_orm::DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let submission = Entity::find_by_id(submission_id)
+            .one(db)
+            .await?
+            .ok_or_else(|| {
+                sea_orm::DbErr::Custom(format!("Submission {} not found", submission_id))
+            })?;
+
+        let mut active_model: ActiveModel = submission.into();
+        active_model.earned = Set(0.0);
+        active_model.update(db).await
     }
 }
 

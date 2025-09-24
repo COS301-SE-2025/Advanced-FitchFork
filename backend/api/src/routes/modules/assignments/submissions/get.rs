@@ -8,8 +8,8 @@
 //! code coverage.
 
 use super::common::{
-    CodeCoverage, ListSubmissionsQuery, MarkSummary, SubmissionDetailResponse, SubmissionListItem,
-    SubmissionsListResponse, UserResponse,
+    CodeCoverage, ListSubmissionsQuery, MarkSummary, PlagiarismInfo, SubmissionDetailResponse,
+    SubmissionListItem, SubmissionsListResponse, UserResponse,
 };
 use crate::{auth::AuthUser, response::ApiResponse};
 use axum::{
@@ -26,6 +26,7 @@ use db::models::{
     assignment_submission_output::Model as SubmissionOutput,
     assignment_task, user,
     user_module_role::{self, Role},
+    plagiarism_case::{Entity as PlagiarismCaseEntity, Column as PlagiarismCaseColumn, Status as PlagiarismStatus},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
@@ -611,7 +612,13 @@ pub async fn list_submissions(
 ///       "user_id": 456,
 ///       "username": "student1",
 ///       "email": "student1@example.com"
-///     }
+///     },
+///     "plagiarism": {
+///         "flagged": true,
+///         "similarity": 92.5,
+///         "lines_matched": 15,
+///         "description": "Similar to submission 789"
+///     },
 ///   }
 /// }
 /// ```
@@ -878,6 +885,36 @@ pub async fn get_submission(
         }
     }
 
+    let plagiarism_info = match PlagiarismCaseEntity::find()
+        .filter(
+            Condition::any()
+                .add(PlagiarismCaseColumn::SubmissionId1.eq(submission.id))
+                .add(PlagiarismCaseColumn::SubmissionId2.eq(submission.id))
+        )
+        .filter(PlagiarismCaseColumn::Status.eq(PlagiarismStatus::Flagged))
+        .all(db)
+        .await
+    {
+        Ok(cases) if !cases.is_empty() => {
+            let highest_similarity_case = cases.into_iter()
+                .max_by(|a, b| a.similarity.partial_cmp(&b.similarity).unwrap_or(Ordering::Equal))
+                .unwrap();
+            
+            PlagiarismInfo {
+                flagged: true,
+                similarity: highest_similarity_case.similarity,
+                lines_matched: highest_similarity_case.lines_matched,
+                description: highest_similarity_case.description,
+            }
+        },
+        _ => PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
+    };
+
     let response = SubmissionDetailResponse {
         id: submission.id,
         attempt: submission.attempt,
@@ -893,6 +930,7 @@ pub async fn get_submission(
         tasks,
         code_coverage,
         user: user_info,
+        plagiarism: plagiarism_info,
     };
 
     (
