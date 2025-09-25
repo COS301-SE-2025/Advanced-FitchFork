@@ -268,14 +268,44 @@ impl<'a> MarkingJob<'a> {
                             .unwrap_or_default(),
                     };
 
-                    let mut result =
-                        self.comparator
-                            .compare(subsection, &memo_or_regex_lines, &student_lines);
-                    result.stderr = task_output.stderr.clone();
-                    result.return_code = task_output.return_code;
+                    let has_error = task_output.return_code
+                        .map(|code| code != 0)
+                        .unwrap_or(false);
+
+                    let mut result = if has_error {
+                        // If there are compilation or runtime errors, award 0 marks
+                        // and skip comparison and memory leak checks
+                        TaskResult {
+                            name: subsection.name.clone(),
+                            awarded: 0.0,
+                            possible: subsection.value,
+                            matched_patterns: Vec::new(),
+                            missed_patterns: Vec::new(),
+                            student_output: student_lines.clone(),
+                            memo_output: memo_or_regex_lines.clone(),
+                            stderr: task_output.stderr.clone(),
+                            return_code: task_output.return_code,
+                            manual_feedback: None,
+                        }
+                    } else {
+                        // No errors detected, proceed with normal comparison
+                        let mut comparison_result =
+                            self.comparator
+                                .compare(subsection, &memo_or_regex_lines, &student_lines);
+                        comparison_result.stderr = task_output.stderr.clone();
+                        comparison_result.return_code = task_output.return_code;
+                        comparison_result
+                    };
 
                     let mut section_feedback = String::new();
-                    if task_entry.valgrind.unwrap_or(false) {
+                    
+                    if has_error {
+                        // Use stderr content as feedback for compilation/runtime errors
+                        section_feedback = task_output.stderr.as_ref()
+                            .map(|stderr| stderr.trim().to_string())
+                            .unwrap_or_else(|| format!("Runtime error (exit code: {})", task_output.return_code.unwrap_or(0)));
+                    } else if task_entry.valgrind.unwrap_or(false) {
+                        // Only check for memory leaks if there are no compilation/runtime errors
                         let is_memory_leak_section = subsection.name.to_lowercase().contains("memory leak") 
                             || subsection.feedback.as_ref()
                                 .map(|f| f.to_lowercase().contains("valgrind"))
