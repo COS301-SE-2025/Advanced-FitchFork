@@ -202,10 +202,168 @@ pub enum DisallowedCodeCheckResult {
     CheckFailed(String),
 }
 
-/// Centralized disallowed code checker that endpoints can easily use
+/// Builds a SubmissionDetailResponse for disallowed code submissions
+fn build_disallowed_submission_response(
+    submission: &AssignmentSubmissionModel,
+    total_marks: f64,
+    assignment: &db::models::assignment::Model,
+) -> SubmissionDetailResponse {
+    let now = Utc::now();
+    SubmissionDetailResponse {
+        id: submission.id,
+        attempt: submission.attempt,
+        filename: submission.filename.clone(),
+        hash: submission.file_hash.clone(),
+        created_at: now.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
+        mark: MarkSummary {
+            earned: 0.0,
+            total: total_marks,
+        },
+        is_practice: submission.is_practice,
+        is_late: is_late(submission.created_at, assignment.due_date),
+        ignored: submission.ignored,
+        status: SubmissionStatus::FailedDisallowedCode.to_string(),
+        tasks: vec![],
+        code_coverage: None,
+        user: None,
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
+    }
+}
+
+/// Saves the submission report to disk
+fn save_submission_report(
+    response: &SubmissionDetailResponse,
+    module_id: i64,
+    assignment_id: i64,
+    user_id: i64,
+    attempt: i64,
+) -> Result<(), String> {
+    let report_path = submission_report_path(module_id, assignment_id, user_id, attempt);
+    if let Some(parent) = report_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(response) {
+        let _ = fs::write(&report_path, json);
+    }
+    Ok(())
+}
+
+/// Checks disallowed code for an existing submission by ID
 ///
-/// This function handles the temp file creation and scanning logic,
-/// returning a result that can be easily matched against.
+/// This function loads an existing submission and checks if it contains disallowed code.
+/// If disallowed code is found, it updates the submission status and returns the response.
+///
+/// # Arguments
+/// * `submission_id` - ID of the existing submission to check
+/// * `file_bytes` - The file bytes to scan for disallowed code
+/// * `config` - The execution configuration containing disallowed patterns
+/// * `db` - Database connection
+/// * `assignment` - Assignment model for metadata
+///
+/// # Returns
+/// * `DisallowedCodeCheckResult` indicating the scan result
+pub async fn check_disallowed_code_existing(
+    submission_id: i64,
+    file_bytes: &[u8],
+    config: &ExecutionConfig,
+    db: &sea_orm::DatabaseConnection,
+    assignment: &db::models::assignment::Model,
+) -> DisallowedCodeCheckResult {
+    println!("Checking existing submission {} for disallowed code...", submission_id);
+    
+    // First, load the existing submission
+    let submission = match assignment_submission::Entity::find_by_id(submission_id).one(db).await {
+        Ok(Some(sub)) => sub,
+        Ok(None) => {
+            return DisallowedCodeCheckResult::CheckFailed(format!(
+                "Submission {} not found",
+                submission_id
+            ));
+        }
+        Err(e) => {
+            return DisallowedCodeCheckResult::CheckFailed(format!(
+                "Database error loading submission: {}",
+                e
+            ));
+        }
+    };
+
+    // Check if the file contains disallowed code
+    match scan_code_content::contains_dissalowed_code(file_bytes, config) {
+        Ok(true) => {
+            // Load allocator for total marks
+            let allocator = match mark_allocator::load_allocator(assignment.module_id, assignment.id) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("Failed to load allocator: {}", e);
+                    return DisallowedCodeCheckResult::CheckFailed(format!(
+                        "Failed to load mark allocator: {}",
+                        e
+                    ));
+                }
+            };
+
+            // Update submission status to ignored and failed_disallowed_code
+            let updated = match AssignmentSubmissionModel::set_ignored(db, submission.id, true).await {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set ignored flag: {:?}", e);
+                    submission.clone()
+                }
+            };
+
+            let updated = match AssignmentSubmissionModel::update_status(
+                db,
+                updated.id,
+                assignment_submission::SubmissionStatus::FailedDisallowedCode,
+            )
+            .await
+            {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set failed_disallowed_code: {:?}", e);
+                    updated
+                }
+            };
+
+            // Build response using shared helper
+            let response = build_disallowed_submission_response(
+                &updated,
+                allocator.total_value,
+                assignment,
+            );
+
+            // Save report using shared helper
+            if let Err(e) = save_submission_report(
+                &response,
+                assignment.module_id,
+                assignment.id,
+                updated.user_id,
+                updated.attempt,
+            ) {
+                eprintln!("Failed to save submission report: {}", e);
+            }
+
+            DisallowedCodeCheckResult::DisallowedFound(response)
+        }
+        Ok(false) => DisallowedCodeCheckResult::Clean,
+        Err(e) => {
+            eprintln!("Disallowed scan error: {}", e);
+            DisallowedCodeCheckResult::CheckFailed(format!("Scan error: {}", e))
+        }
+    }
+}
+
+/// Checks disallowed code for a new submission and creates it if disallowed code is found
+///
+/// This function scans the file bytes for disallowed code. If found, it creates a new submission
+/// with zero marks and FailedDisallowedCode status.
 ///
 /// # Arguments
 /// * `file_bytes` - The uploaded file bytes to scan
@@ -221,24 +379,7 @@ pub enum DisallowedCodeCheckResult {
 ///
 /// # Returns
 /// * `DisallowedCodeCheckResult` indicating the scan result, with complete response if disallowed
-///
-/// # Example
-/// ```rust
-/// match check_disallowed_code(&file_bytes, &config, db, assignment_id, user_id, attempt, is_practice, &file_name, &file_hash, &assignment).await {
-///     DisallowedCodeCheckResult::Clean => {
-///         // Continue with normal processing
-///     }
-///     DisallowedCodeCheckResult::DisallowedFound(response) => {
-///         // Return the pre-built response
-///         return (StatusCode::FORBIDDEN, Json(ApiResponse::success(response, message)));
-///     }
-///     DisallowedCodeCheckResult::CheckFailed(e) => {
-///         // Log error but continue (best-effort policy)
-///         eprintln!("Disallowed code check failed: {}", e);
-///     }
-/// }
-/// ```
-pub async fn check_disallowed_code(
+pub async fn check_disallowed_code_new(
     file_bytes: &[u8],
     config: &ExecutionConfig,
     db: &sea_orm::DatabaseConnection,
@@ -250,19 +391,21 @@ pub async fn check_disallowed_code(
     file_hash: &str,
     assignment: &db::models::assignment::Model,
 ) -> DisallowedCodeCheckResult {
+    println!("Checking new submission for disallowed code...");
+    
     match scan_code_content::contains_dissalowed_code(file_bytes, config) {
         Ok(true) => {
-            let allocator =
-                match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        eprintln!("Failed to load allocator: {}", e);
-                        return DisallowedCodeCheckResult::CheckFailed(format!(
-                            "Failed to load mark allocator: {}",
-                            e
-                        ));
-                    }
-                };
+            // Load allocator for total marks
+            let allocator = match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("Failed to load allocator: {}", e);
+                    return DisallowedCodeCheckResult::CheckFailed(format!(
+                        "Failed to load mark allocator: {}",
+                        e
+                    ));
+                }
+            };
 
             // Save the submission with zero mark and total from allocator
             let saved = match AssignmentSubmissionModel::save_file(
@@ -289,7 +432,7 @@ pub async fn check_disallowed_code(
                 }
             };
 
-            // Mark as ignored and set status to graded (since it has been processed with 0 marks)
+            // Update submission status to ignored and failed_disallowed_code
             let updated = match AssignmentSubmissionModel::set_ignored(db, saved.id, true).await {
                 Ok(u) => u,
                 Err(e) => {
@@ -298,7 +441,6 @@ pub async fn check_disallowed_code(
                 }
             };
 
-            // Set status to graded since we've processed it with a 0 mark
             let updated = match AssignmentSubmissionModel::update_status(
                 db,
                 updated.id,
@@ -313,49 +455,26 @@ pub async fn check_disallowed_code(
                 }
             };
 
-            let now = Utc::now();
-            let response = SubmissionDetailResponse {
-                id: updated.id,
-                attempt: updated.attempt,
-                filename: updated.filename.clone(),
-                hash: updated.file_hash.clone(),
-                created_at: now.to_rfc3339(),
-                updated_at: now.to_rfc3339(),
-                mark: MarkSummary {
-                    earned: 0.0,
-                    total: allocator.total_value,
-                },
-                is_practice: updated.is_practice,
-                is_late: is_late(updated.created_at, assignment.due_date),
-                ignored: updated.ignored,
-                status: SubmissionStatus::FailedDisallowedCode.to_string(),
-                tasks: vec![],
-                code_coverage: None,
-                user: None,
-                plagiarism: PlagiarismInfo {
-                    flagged: false,
-                    similarity: 0.0,
-                    lines_matched: 0,
-                    description: "".to_string(),
-                },
-            };
+            // Build response using shared helper
+            let response = build_disallowed_submission_response(
+                &updated,
+                allocator.total_value,
+                assignment,
+            );
 
-            let report_path = submission_report_path(
+            // Save report using shared helper
+            if let Err(e) = save_submission_report(
+                &response,
                 assignment.module_id,
                 assignment.id,
                 updated.user_id,
                 updated.attempt,
-            );
-            if let Some(parent) = report_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&response) {
-                let _ = fs::write(&report_path, json);
+            ) {
+                eprintln!("Failed to save submission report: {}", e);
             }
 
             DisallowedCodeCheckResult::DisallowedFound(response)
         }
-
         Ok(false) => DisallowedCodeCheckResult::Clean,
         Err(e) => {
             eprintln!("Disallowed scan error: {}", e);
@@ -1274,7 +1393,7 @@ pub async fn submit_assignment(
     };
 
     // disallowed code scan
-    match check_disallowed_code(
+    match check_disallowed_code_new(
         &file_bytes,
         &config,
         db,
@@ -1748,15 +1867,28 @@ pub async fn remark_submissions(
             let memo_outputs = memo_outputs.clone();
             let config = config.clone();
             async move {
+                // Extract extension from submission filename
+                let ext = std::path::PathBuf::from(&submission.filename)
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string());
+                
                 if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
                     assignment.module_id,
                     assignment.id,
                     submission.user_id,
                     submission.attempt,
                     submission.id,
-                    None,
+                    ext.as_deref(),
                 )) {
-                    match check_disallowed_code(&file_bytes, &config, db, assignment_id, submission.user_id, submission.attempt, submission.is_practice, &submission.filename, &submission.file_hash, &assignment).await {
+                    match check_disallowed_code_existing(
+                        submission.id,
+                        &file_bytes,
+                        &config,
+                        db,
+                        &assignment,
+                    )
+                    .await
+                    {
                         DisallowedCodeCheckResult::Clean => {
                             // Continue with normal processing
                         }
@@ -1768,6 +1900,8 @@ pub async fn remark_submissions(
                             return Err("Failed to scan submission for disallowed code patterns".to_string());
                         }
                     }
+                } else {
+                    return Err("Failed to read submission file from disk".to_string());
                 }
 
                 grade_submission(
@@ -1968,15 +2102,26 @@ pub async fn resubmit_submissions(
                 );
             }
 
+            // Extract extension from submission filename
+            let ext = std::path::PathBuf::from(&submission.filename)
+                .extension()
+                .map(|e| e.to_string_lossy().to_string());
+
             if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
                 assignment.module_id,
                 assignment.id,
                 submission.user_id,
                 submission.attempt,
                 submission.id,
-                None,
+                ext.as_deref(),
             )) {
-                match check_disallowed_code(&file_bytes, &config, &db, assignment.id, submission.user_id, submission.attempt, submission.is_practice, &submission.filename, &submission.file_hash, &assignment).await {
+                match check_disallowed_code_existing(
+                    submission.id,
+                    &file_bytes,
+                    &config,
+                    &db,
+                    &assignment,
+                ).await {
                     DisallowedCodeCheckResult::Clean => {
                         // Continue with normal processing
                     }
@@ -1988,6 +2133,8 @@ pub async fn resubmit_submissions(
                         return (sid, Err("Failed to scan submission for disallowed code patterns".to_string()));
                     }
                 }
+            } else {
+                return (sid, Err("Failed to read submission file from disk".to_string()));
             }
 
             if let Err(e) =
