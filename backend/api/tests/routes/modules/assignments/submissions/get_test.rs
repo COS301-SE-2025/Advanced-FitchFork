@@ -11,10 +11,11 @@ mod tests {
         assignment::Model as AssignmentModel,
         assignment_submission::Model as AssignmentSubmissionModel,
         module::Model as ModuleModel,
+        plagiarism_case::{self, Entity as PlagiarismCaseEntity, Status},
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use sea_orm::{ActiveModelTrait, Set};
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
     use serde_json::{Value, json};
     use serial_test::serial;
     use std::fs;
@@ -69,8 +70,8 @@ mod tests {
             assignment.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "ontime.txt",
             "hash123#",
@@ -97,8 +98,8 @@ mod tests {
             assignment.id,
             student_user.id,
             2,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "late.txt",
             "hash123#",
@@ -125,8 +126,8 @@ mod tests {
             assignment.id,
             student_user.id,
             3,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "practice.txt",
             "hash123#",
@@ -153,8 +154,8 @@ mod tests {
             assignment.id,
             forbidden_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "forbidden.txt",
             "hash123#",
@@ -515,9 +516,10 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["id"], sub.id);
-
-        // If your single-item endpoint injects `ignored`, assert it:
-        // assert!(json["data"]["ignored"].is_boolean());
+        assert_eq!(json["data"]["plagiarism"]["flagged"], false);
+        assert_eq!(json["data"]["plagiarism"]["similarity"], 0.0);
+        assert_eq!(json["data"]["plagiarism"]["lines_matched"], 0);
+        assert_eq!(json["data"]["plagiarism"]["description"], "");
     }
 
     #[tokio::test]
@@ -548,9 +550,10 @@ mod tests {
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["id"], sub.id);
         assert!(json["data"]["user"].is_object());
-
-        // If your single-item endpoint injects `ignored`, assert it:
-        // assert!(json["data"]["ignored"].is_boolean());
+        assert_eq!(json["data"]["plagiarism"]["flagged"], false);
+        assert_eq!(json["data"]["plagiarism"]["similarity"], 0.0);
+        assert_eq!(json["data"]["plagiarism"]["lines_matched"], 0);
+        assert_eq!(json["data"]["plagiarism"]["description"], "");
     }
 
     #[tokio::test]
@@ -826,5 +829,155 @@ mod tests {
                 submission_id
             );
         }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_submission_with_flagged_plagiarism_case() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let sub1 = &data.submissions[0];
+        let sub2 = &data.submissions[1];
+
+        let _ = plagiarism_case::Model::create_case(
+            app_state.db(),
+            data.assignment.id,
+            sub1.id,
+            sub2.id,
+            "Plagiarism detected between sub1 and sub2",
+            75.5,
+            150,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let mut active_case = PlagiarismCaseEntity::find()
+            .filter(plagiarism_case::Column::SubmissionId1.eq(sub1.id))
+            .one(app_state.db())
+            .await
+            .unwrap()
+            .unwrap()
+            .into_active_model();
+        active_case.status = Set(Status::Flagged);
+        active_case.update(app_state.db()).await.unwrap();
+
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions/{}",
+            data.module.id, data.assignment.id, sub1.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["id"], sub1.id);
+        assert_eq!(json["data"]["plagiarism"]["flagged"], true);
+        assert_eq!(json["data"]["plagiarism"]["similarity"], 75.5);
+        assert_eq!(json["data"]["plagiarism"]["lines_matched"], 150);
+        assert_eq!(
+            json["data"]["plagiarism"]["description"],
+            "Plagiarism detected between sub1 and sub2"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_submission_with_multiple_flagged_plagiarism_cases_highest_similarity() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let sub1 = &data.submissions[0];
+        let sub2 = &data.submissions[1];
+        let sub3 = &data.submissions[2];
+
+        let case1 = plagiarism_case::Model::create_case(
+            app_state.db(),
+            data.assignment.id,
+            sub1.id,
+            sub2.id,
+            "Plagiarism case 1",
+            75.5,
+            150,
+            None,
+        )
+        .await
+        .unwrap();
+        let mut active_case1 = case1.into_active_model();
+        active_case1.status = Set(Status::Flagged);
+        active_case1.update(app_state.db()).await.unwrap();
+
+        let case2 = plagiarism_case::Model::create_case(
+            app_state.db(),
+            data.assignment.id,
+            sub1.id,
+            sub3.id,
+            "Plagiarism case 2 (higher similarity)",
+            85.0,
+            200,
+            None,
+        )
+        .await
+        .unwrap();
+        let mut active_case2 = case2.into_active_model();
+        active_case2.status = Set(Status::Flagged);
+        active_case2.update(app_state.db()).await.unwrap();
+
+        let case3 = plagiarism_case::Model::create_case(
+            app_state.db(),
+            data.assignment.id,
+            sub1.id,
+            data.submissions[3].id,
+            "Plagiarism case 3 (lower similarity)",
+            60.0,
+            100,
+            None,
+        )
+        .await
+        .unwrap();
+        let mut active_case3 = case3.into_active_model();
+        active_case3.status = Set(Status::Flagged);
+        active_case3.update(app_state.db()).await.unwrap();
+
+        let (token, _) = generate_jwt(data.lecturer_user.id, data.lecturer_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions/{}",
+            data.module.id, data.assignment.id, sub1.id
+        );
+        let req = Request::builder()
+            .uri(&uri)
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["id"], sub1.id);
+        assert_eq!(json["data"]["plagiarism"]["flagged"], true);
+        assert_eq!(json["data"]["plagiarism"]["similarity"], 85.0);
+        assert_eq!(json["data"]["plagiarism"]["lines_matched"], 200);
+        assert_eq!(
+            json["data"]["plagiarism"]["description"],
+            "Plagiarism case 2 (higher similarity)"
+        );
     }
 }

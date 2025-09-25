@@ -1,6 +1,7 @@
-use super::common::{MarkSummary, SubmissionDetailResponse};
+use super::common::{MarkSummary, SubmissionDetailResponse, PlagiarismInfo};
 use crate::ws::submissions::{emit as sub_emit, payload as sub_payload};
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
+use crate::services::email::EmailService;
 use axum::{
     Json,
     extract::{Extension, Multipart, Path, Query, State},
@@ -11,6 +12,7 @@ use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
 use db::models::assignment_task;
+use db::models::user::Entity as UserEntity;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
@@ -104,7 +106,7 @@ async fn emit_status_minimal(
     submission_id: i64,
     attempt: i64,
     status: SubmissionStatus,
-    mark: Option<(i64, i64)>, // (earned, total)
+    mark: Option<(f64, f64)>, // (earned, total)
     message: Option<String>,
 ) {
     let username_opt = user::Entity::find_by_id(user_id)
@@ -143,8 +145,8 @@ fn within_late_window(
 }
 
 /// Returns (adjusted_earned, capped_to_opt)
-fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i64>) {
-    let cap = ((max_percent as i128) * (total as i128) / 100) as i64;
+fn cap_late_earned(earned: f64, total: f64, max_percent: f64) -> (f64, Option<f64>) {
+    let cap = max_percent * total / 100.0;
     if earned > cap {
         (cap, Some(cap))
     } else {
@@ -249,7 +251,7 @@ pub async fn check_disallowed_code(
                 assignment_id,
                 user_id,
                 attempt,
-                0,
+                0.0,
                 allocator.total_value,
                 is_practice,
                 file_name,
@@ -292,7 +294,7 @@ pub async fn check_disallowed_code(
                 created_at: now.to_rfc3339(),
                 updated_at: now.to_rfc3339(),
                 mark: MarkSummary {
-                    earned: 0,
+                    earned: 0.0,
                     total: allocator.total_value,
                 },
                 is_practice: updated.is_practice,
@@ -302,6 +304,12 @@ pub async fn check_disallowed_code(
                 tasks: vec![],
                 code_coverage: None,
                 user: None,
+                plagiarism: PlagiarismInfo {
+                    flagged: false,
+                    similarity: 0.0,
+                    lines_matched: 0,
+                    description: "".to_string(),
+                },
             };
 
             let report_path = submission_report_path(
@@ -701,7 +709,7 @@ async fn grade_submission(
 
     // Apply late cap if applicable
     let is_late_now = submission.created_at > assignment.due_date;
-    let mut _late_capped_to: Option<i64> = None;
+    let mut _late_capped_to: Option<f64> = None;
     if is_late_now && config.marking.late.allow_late_submissions {
         if within_late_window(
             submission.created_at,
@@ -728,10 +736,16 @@ async fn grade_submission(
         .code_coverage
         .as_ref()
         .map(|cov| {
-            let summary = cov.summary.as_ref().map(|s| MarkSummary {
-                earned: s.earned,
-                total: s.total,
-            });
+            let summary = cov
+                .summary
+                .as_ref()
+                .map(|s| super::common::CodeCoverageSummary {
+                    earned: s.earned,
+                    total: s.total,
+                    total_lines: s.total_lines as u32,
+                    covered_lines: s.covered_lines as u32,
+                    coverage_percent: s.coverage_percent,
+                });
             let files: Vec<serde_json::Value> = cov
                 .files
                 .iter()
@@ -776,6 +790,12 @@ async fn grade_submission(
         tasks,
         code_coverage,
         user: None, // just ignore this lol
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
     };
 
     let report_path = submission_report_path(
@@ -809,9 +829,39 @@ async fn process_submission_code(
         }
 
         SubmissionMode::GATLAM => {
-            ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+            let res = ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
                 .await
-                .map_err(|e| format!("GATLAM failed: {}", e))
+                .map_err(|e| format!("GATLAM failed: {}", e));
+
+            if res.is_ok() {
+                if let Some(sub) = assignment_submission::Entity::find_by_id(submission_id)
+                    .one(db)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    if let Some(user) = UserEntity::find_by_id(sub.user_id)
+                        .one(db)
+                        .await
+                        .map_err(|e| e.to_string())?
+                    {
+                        let to_email = user.email.clone();
+                        let display_name = user.email.clone();
+
+                        if let Err(e) = EmailService::send_marking_done_email(
+                            &to_email,
+                            &display_name,
+                            submission_id,
+                            module_id,
+                            assignment_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!("send_marking_done_email failed: {}", e);
+                        }
+                    }
+                }
+            }
+            res
         }
 
         SubmissionMode::CodeCoverage => {
@@ -820,13 +870,12 @@ async fn process_submission_code(
                 .map_err(|e| format!("Coverage GA failed: {}", e))
         }
 
-        SubmissionMode::RNG => {
-            ai::run_rng_job(db, submission_id, &config, module_id, assignment_id)
-                .await
-                .map_err(|e| format!("RNG run failed: {}", e))
-        }
+        SubmissionMode::RNG => ai::run_rng_job(db, submission_id, &config)
+            .await
+            .map_err(|e| format!("RNG run failed: {}", e)),
     }
 }
+
 /// Clears the submission output directory
 fn clear_submission_output(
     submission: &AssignmentSubmissionModel,
@@ -974,6 +1023,13 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 ///     "status": "graded",
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
+///     "user": null,
+///     "plagiarism": {
+///         "flagged": false,
+///         "similarity": 0.0,
+///         "lines_matched": 0,
+///         "description": ""
+///     },
 ///   }
 /// }
 /// ```
@@ -1012,7 +1068,7 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 /// ```
 /// or
 /// ```json
-/// { "success": false, "message": "Failed to mark submission" }
+/// { "success": false, "message": "Failed to run code for submission" }
 /// ```
 ///
 /// ### Side Effects
@@ -1226,7 +1282,7 @@ pub async fn submit_assignment(
                 attempt: response.attempt,
                 status: SubmissionStatus::FailedUpload.to_string(),
                 mark: Some(sub_payload::MarkSummary {
-                    earned: 0,
+                    earned: 0.0,
                     total: response.mark.total,
                 }),
                 message: Some("Disallowed code patterns detected".into()),
@@ -1266,8 +1322,8 @@ pub async fn submit_assignment(
         assignment_id,
         claims.sub,
         attempt,
-        0,
-        0,
+        0.0,
+        0.0,
         is_practice,
         &file_name,
         &file_hash,
@@ -1573,7 +1629,7 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            Err("Failed to mark submission".to_string())
+            Err("Failed to run code for submission".to_string())
         }
     }
 }

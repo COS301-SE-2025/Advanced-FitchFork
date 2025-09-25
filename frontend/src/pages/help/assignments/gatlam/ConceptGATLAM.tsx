@@ -24,19 +24,19 @@ const toc = [
 ];
 
 // --- small samples for the viewer ---
-const SAMPLE_STDOUT = `&-=-& Task1:Step1
+const SAMPLE_STDOUT = `### Task1:Step1
 12
 34
-&-=-& Task1:Step2
+### Task1:Step2
 OK
 RUNTIME_MS: 250
 Retcode: 0
 `;
 
-const SAMPLE_MEMO = `&-=-& Task1:Step1
+const SAMPLE_MEMO = `### Task1:Step1
 12
 34
-&-=-& Task1:Step2
+### Task1:Step2
 OK
 `;
 
@@ -211,7 +211,7 @@ export default function ConceptGATLAM() {
             matches.
           </li>
           <li>
-            Use the <Text code>&-=-&</Text> delimiter to label subsections in stdout.
+            Use the <Text code>###</Text> delimiter to label subsections in stdout.
           </li>
           <li>
             Outputs must include <Text code>Retcode:</Text> and (optionally){' '}
@@ -318,7 +318,7 @@ export default function ConceptGATLAM() {
       <section id="labels" className="scroll-mt-24" />
       <Title level={3}>Labeled output (delimiter)</Title>
       <Paragraph className="mb-1">
-        Use the delimiter (default <Text code>&-=-&</Text>) to name subsections in <b>stdout</b>.
+        Use the delimiter (default <Text code>###</Text>) to name subsections in <b>stdout</b>.
         The interpreter compares the lines inside each label to the Memo’s lines for the same label
         (both exact and contains).
       </Paragraph>
@@ -486,7 +486,7 @@ export default function ConceptGATLAM() {
             children: (
               <ul className="list-disc pl-5">
                 <li>
-                  Print the delimiter (default <Text code>&-=-&</Text>) before each subsection name.
+                  Print the delimiter (default <Text code>###</Text>) before each subsection name.
                 </li>
                 <li>
                   Make sure you write labels to <b>stdout</b>, not stderr.

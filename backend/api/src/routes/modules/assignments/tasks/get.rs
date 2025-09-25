@@ -23,13 +23,23 @@ use util::paths::memo_output_dir;
 use util::paths::storage_root;
 use util::{execution_config::ExecutionConfig, state::AppState};
 
+/// Filters out system information that appears after the &FITCHFORK& marker.
+/// This information is for internal use only and should not be returned to the frontend.
+fn filter_system_info(content: &str) -> String {
+    if let Some(pos) = content.find("&FITCHFORK&") {
+        content[..pos].trim_end().to_string()
+    } else {
+        content.to_string()
+    }
+}
+
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
 pub struct SubsectionDetail {
     /// The name of the subsection.
     pub name: String,
     /// The value value assigned to this subsection.
-    pub value: i64,
+    pub value: f64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
     pub feedback: Option<String>,
@@ -128,7 +138,7 @@ pub struct TaskDetailResponse {
 /// - The mark allocator is **optional**. If absent or if the task is not defined within it, the
 ///   endpoint still returns `200 OK` with `"subsections": []`.
 /// - `code_coverage: true` marks this task as a **coverage-type** task (special handling by the evaluator).
-/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"&-=-&"`).
+/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"###"`).
 pub async fn get_task_details(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
@@ -202,13 +212,15 @@ pub async fn get_task_details(
     {
         Ok(Some(mo)) => {
             let full = storage_root().join(&mo.path); // relative to storage root
-            fs::read_to_string(full).ok()
+            fs::read_to_string(full)
+                .ok()
+                .map(|content| filter_system_info(&content))
         }
         _ => {
             let dir = memo_output_dir(module_id, assignment_id);
             let conventional = dir.join(format!("task_{}.txt", task.task_number));
             if let Ok(s) = fs::read_to_string(&conventional) {
-                Some(s)
+                Some(filter_system_info(&s))
             } else {
                 // Otherwise first *.txt by name
                 let mut picked: Option<String> = None;
@@ -221,7 +233,7 @@ pub async fn get_task_details(
                     txts.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
                     for p in txts {
                         if let Ok(s) = fs::read_to_string(&p) {
-                            picked = Some(s);
+                            picked = Some(filter_system_info(&s));
                             break;
                         }
                     }
@@ -234,7 +246,7 @@ pub async fn get_task_details(
     // Load ExecutionConfig delimiter
     let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(cfg) => cfg.marking.deliminator,
-        Err(_) => "&-=-&".to_string(),
+        Err(_) => "###".to_string(),
     };
 
     // Split memo into chunks per subsection; drop the leading chunk before the first delimiter

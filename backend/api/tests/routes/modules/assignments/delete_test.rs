@@ -135,7 +135,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello", false)
+        let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello", false, false)
             .await
             .unwrap();
         let memo_output =
@@ -147,8 +147,8 @@ mod tests {
             a1.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "sub.txt",
             "hash123#",

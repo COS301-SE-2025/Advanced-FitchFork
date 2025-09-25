@@ -259,7 +259,7 @@ export default function FitchforkOverview() {
             title: 'Create Tasks & Subsections',
             icon: <BranchesOutlined />,
             description:
-              'Define commands per task and print labeled blocks in code using the delimiter (&-=-&).',
+              'Define commands per task and print labeled blocks in code using the delimiter (###).',
           },
           {
             title: 'Generate Memo Output',
@@ -316,7 +316,7 @@ export default function FitchforkOverview() {
         message="Labels drive marking"
         description={
           <>
-            Print <Text code>&-=-&</Text> followed by the subsection name on its own line to start
+            Print <Text code>###</Text> followed by the subsection name on its own line to start
             each labeled block. Marks are assigned per subsection; totals roll up automatically.
           </>
         }

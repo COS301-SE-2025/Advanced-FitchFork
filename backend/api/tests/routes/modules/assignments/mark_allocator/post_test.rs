@@ -85,6 +85,7 @@ mod tests {
             "",        // name -> will default to "Task 1" in allocator
             "echo ok", // <-- provide any command string (NOT NULL)
             false,     // code_coverage
+            false,     // valgrind
         )
         .await
         .unwrap();
@@ -93,11 +94,7 @@ mod tests {
         let memo_dir = memo_output_dir(data.module.id, data.assignment.id);
         std::fs::create_dir_all(&memo_dir).unwrap();
         let memo_file_name = "task_1.txt";
-        std::fs::write(
-            memo_dir.join(memo_file_name),
-            "&-=-& Sub1\nline A\nline B\n",
-        )
-        .unwrap();
+        std::fs::write(memo_dir.join(memo_file_name), "### Sub1\nline A\nline B\n").unwrap();
 
         // 3) Insert memo-output DB row pointing to the file (path relative to storage_root)
         let rel_path = format!(
@@ -146,7 +143,7 @@ mod tests {
         // top-level
         assert!(json.get("generated_at").is_some(), "missing generated_at");
         assert_eq!(
-            json["total_value"], 2,
+            json["total_value"], 2.0,
             "total_value should match sum of task values"
         );
 
@@ -155,7 +152,7 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0]["task_number"], 1);
         assert_eq!(tasks[0]["name"], "Task 1"); // defaulted
-        assert_eq!(tasks[0]["value"], 2);
+        assert_eq!(tasks[0]["value"], 2.0);
         assert_eq!(tasks[0]["code_coverage"], false);
 
         // subsections
@@ -164,7 +161,7 @@ mod tests {
             .expect("subsections not array");
         assert_eq!(subs.len(), 1);
         assert_eq!(subs[0]["name"], "Sub1");
-        assert_eq!(subs[0]["value"], 2);
+        assert_eq!(subs[0]["value"], 2.0);
 
         // Note: regex/feedback may be omitted (None) unless scheme=Regex; don't assert presence.
     }

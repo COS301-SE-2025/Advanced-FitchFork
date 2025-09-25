@@ -280,10 +280,10 @@ mod tests {
     #[test]
     fn test_parse_task_output_valid_format() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
+###Subtask1
 line1
 line2
-&-=-&Subtask2
+###Subtask2
 line3"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
@@ -298,8 +298,8 @@ line3"#;
     #[test]
     fn test_parse_task_output_empty_subtask_content() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
-&-=-&Subtask2
+###Subtask1
+###Subtask2
 line1
 line2"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());

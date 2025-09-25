@@ -1,8 +1,8 @@
 import os
 import sys
 
-# ExecutionConfig.default_deliminator() == "&-=-&"
-DELIM = "&-=-&"
+# ExecutionConfig.default_deliminator() == "###"
+DELIM = "###"
 
 # Prefer student's LinkedList.py, then memo/, then spec/
 ROOT = os.path.abspath(".")

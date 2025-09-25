@@ -24,7 +24,7 @@ use util::mark_allocator::{
 ///
 /// ### Behavior
 /// - Parses each task’s memo output and groups lines by the memo section delimiter
-///   from `ExecutionConfig.marking.deliminator` (default: `&-=-&`).
+///   from `ExecutionConfig.marking.deliminator` (default: `###`).
 /// - Counts non-empty lines per subsection to produce `value`.
 /// - **Regex prepopulation:** If `ExecutionConfig.marking.marking_scheme == "regex"`,
 ///   each subsection’s `regex` field is `Some(Vec<String>)` with one **empty string** per
@@ -90,6 +90,7 @@ pub async fn generate(
             id: t.id,
             task_number: t.task_number,
             code_coverage: t.code_coverage,
+            valgrind: t.valgrind,
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {

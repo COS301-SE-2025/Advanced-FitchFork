@@ -37,8 +37,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                 assignment_id,
                 user.id,
                 attempt_number,
-                80,
-                100,
+                80.0,
+                100.0,
                 false,
                 &filename,
                 "hash123#",
@@ -82,8 +82,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id,
                         user.id,
                         counter,
-                        rand::random::<i64>() % 100,
-                        100,
+                        rand::random::<f64>() % 100.0,
+                        100.0,
                         false,
                         dummy_filename,
                         "hash123#",
@@ -142,6 +142,31 @@ public class HelperThree {
 }
 "#;
 
+                let main_java = r#"
+public class Main {
+    public static void main(String[] args) {
+        runTask1();
+        runTask2();
+        runTask3();
+    }
+
+    static void runTask1() {
+        System.out.println(HelperOne.subtaskA());
+        System.out.println(HelperTwo.subtaskB());
+    }
+
+    static void runTask2() {
+        System.out.println(HelperOne.subtaskZ());
+    }
+
+    static void runTask3() {
+        System.out.println(HelperOne.subtaskBeta());
+        System.out.println(HelperTwo.subtaskGamma());
+    }
+}
+
+"#;
+
                 zip.start_file("HelperOne.java", options).unwrap();
                 zip.write_all(helper_one.as_bytes()).unwrap();
 
@@ -150,6 +175,9 @@ public class HelperThree {
 
                 zip.start_file("HelperThree.java", options).unwrap();
                 zip.write_all(helper_three.as_bytes()).unwrap();
+
+                zip.start_file("Main.java", options).unwrap();
+                zip.write_all(main_java.as_bytes()).unwrap();
 
                 zip.finish().unwrap();
             }
@@ -197,6 +225,7 @@ std::string HelperThree::subtaskY() {
     return "HelperThree: Subtask for Task2\nThis as well\nAnd this\nAdditional wrong line";
 }
 std::string HelperThree::subtaskAlpha() {
+    char* leak = new char[100]; // memory leak
     return "HelperThree: Subtask for Task3\nThis as well";
 }
 "#;
@@ -237,6 +266,35 @@ struct HelperThree {
 #endif
 "#;
 
+                let main_cpp = r####"
+#include <iostream>
+#include <string>
+#include "HelperOne.h"
+#include "HelperTwo.h"
+#include "HelperThree.h"
+
+void runTask1() {
+    std::cout << "###Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+}
+
+void runTask2() {
+    std::cout << "###Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+        std::cout << "###Task3Subtask2\n" << HelperOne::subtaskZ() << std::endl;
+}
+
+void runTask3() {
+    std::cout << "###Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "###Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+}
+
+int main() {
+    runTask1();
+    runTask2();
+    runTask3();
+    return 0;
+}
+"####;
+
                 zip.start_file("HelperOne.cpp", options).unwrap();
                 zip.write_all(helper_one_cpp.as_bytes()).unwrap();
 
@@ -255,6 +313,9 @@ struct HelperThree {
                 zip.start_file("HelperThree.h", options).unwrap();
                 zip.write_all(helper_three_h.as_bytes()).unwrap();
 
+                zip.start_file("Main.cpp", options).unwrap();
+                zip.write_all(main_cpp.as_bytes()).unwrap();
+
                 zip.finish().unwrap();
             }
             buf.into_inner()
@@ -271,8 +332,8 @@ struct HelperThree {
             assignment_id_java,
             user_id,
             attempt_number,
-            80,
-            100,
+            80.0,
+            100.0,
             false,
             filename_java,
             "hash123#",
@@ -298,8 +359,8 @@ struct HelperThree {
             assignment_id_cpp,
             user_id,
             attempt_number,
-            90,
-            100,
+            90.0,
+            100.0,
             false,
             filename_cpp,
             "hash123#",

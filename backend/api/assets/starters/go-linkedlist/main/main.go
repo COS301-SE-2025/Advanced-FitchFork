@@ -5,7 +5,7 @@ import (
     "os"
 )
 
-const DELIM = "&-=-&"
+const DELIM = "###"
 
 func section(name string) { fmt.Printf("%s %s\n", DELIM, name) }
 

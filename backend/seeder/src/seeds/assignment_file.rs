@@ -55,7 +55,7 @@ impl Seeder for AssignmentFileSeeder {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let main_java = r#"
+                let main_java = r####"
 public class Main {
     public static void main(String[] args) {
         String task = args.length > 0 ? args[0] : "task1";
@@ -76,33 +76,33 @@ public class Main {
     }
 
     static void runTask1() {
-        System.out.println("" + "&-=-&Task1Subtask1");
+        System.out.println("" + "###Task1Subtask1");
         System.out.println(HelperOne.subtaskA());
-        System.out.println("&-=-&Task1Subtask2");
+        System.out.println("###Task1Subtask2");
         System.out.println(HelperTwo.subtaskB());
-        System.out.println("&-=-&Task1Subtask3");
+        System.out.println("###Task1Subtask3");
         System.out.println(HelperThree.subtaskC());
     }
 
     static void runTask2() {
-        System.out.println("&-=-&Task2Subtask1");
+        System.out.println("###Task2Subtask1");
         System.out.println(HelperTwo.subtaskX());
-        System.out.println("&-=-&Task2Subtask2");
+        System.out.println("###Task2Subtask2");
         System.out.println(HelperThree.subtaskY());
-        System.out.println("&-=-&Task2Subtask3");
+        System.out.println("###Task2Subtask3");
         System.out.println(HelperOne.subtaskZ());
     }
 
     static void runTask3() {
-        System.out.println("&-=-&Task3Subtask1");
-        System.out.println(HelperThree.subtaskAlpha())
-        System.out.println("&-=-&Task3Subtask2");
+        System.out.println("###Task3Subtask1");
+        System.out.println(HelperThree.subtaskAlpha());
+        System.out.println("###Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
-        System.out.println("&-=-&Task3Subtask3");
+        System.out.println("###Task3Subtask3");
         System.out.println(HelperTwo.subtaskGamma());
     }
 }
-"#;
+"####;
 
                 zip.start_file("Main.java", options).unwrap();
                 zip.write_all(main_java.as_bytes()).unwrap();
@@ -179,16 +179,44 @@ public class HelperThree {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let makefile_content = r#"
-task1:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task1
+                let makefile_content = r###"
+JACOCO_AGENT=/opt/jacoco/lib/jacocoagent.jar
+JACOCO_CLI=/opt/jacoco/lib/jacococli.jar
+JAVA_OUTPUT=/output
+COVERAGE_FILE=$(JAVA_OUTPUT)/jacoco.exec
+REPORT_DIR=$(JAVA_OUTPUT)/jacoco-report
 
-task2:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task2
+SOURCES=Main.java HelperOne.java HelperTwo.java HelperThree.java
+CLASSES=$(JAVA_OUTPUT)/Main.class $(JAVA_OUTPUT)/HelperOne.class $(JAVA_OUTPUT)/HelperTwo.class $(JAVA_OUTPUT)/HelperThree.class
 
-task3:
-	javac -d /output Main.java HelperOne.java HelperTwo.java HelperThree.java && java -cp /output Main task3
-"#;
+all: task1 task2 task3 task4
+
+compile:
+	mkdir -p $(JAVA_OUTPUT)
+	javac -d $(JAVA_OUTPUT) $(SOURCES)
+
+task1: compile
+	java -cp $(JAVA_OUTPUT) Main task1
+
+task2: compile
+	java -cp $(JAVA_OUTPUT) Main task2
+
+task3: compile
+	java -cp $(JAVA_OUTPUT) Main task3
+
+task4: compile
+	java -javaagent:$(JACOCO_AGENT)=destfile=$(COVERAGE_FILE) -cp $(JAVA_OUTPUT) Main task1
+	java -javaagent:$(JACOCO_AGENT)=destfile=$(COVERAGE_FILE),append=true -cp $(JAVA_OUTPUT) Main task2
+	java -javaagent:$(JACOCO_AGENT)=destfile=$(COVERAGE_FILE),append=true -cp $(JAVA_OUTPUT) Main task3
+	mkdir -p $(REPORT_DIR)
+	java -jar $(JACOCO_CLI) report $(COVERAGE_FILE) \
+		--classfiles $(JAVA_OUTPUT) \
+		--sourcefiles . \
+		--csv $(REPORT_DIR)/jacoco.csv \
+		--html $(REPORT_DIR) \
+		--xml $(REPORT_DIR)/jacoco.xml
+	cat $(REPORT_DIR)/jacoco.csv
+"###;
 
                 zip.start_file("Makefile", options).unwrap();
                 zip.write_all(makefile_content.as_bytes()).unwrap();
@@ -198,10 +226,10 @@ task3:
         }
 
         // New config file content
-        let config_json = r#"
+        let config_json = r####"
 {
   "execution": {
-    "timeout_secs": 10,
+    "timeout_secs": 30,
     "max_memory": 8589934592,
     "max_cpus": 2,
     "max_uncompressed_size": 100000000,
@@ -210,17 +238,72 @@ task3:
   "marking": {
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
-    "deliminator": "&-=-&"
+    "deliminator": "###",
+    "grading_policy": "last",
+    "max_attempts": 10,
+    "limit_attempts": false,
+    "pass_mark": 50,
+    "allow_practice_submissions": false,
+    "dissalowed_code": []
   },
   "project": {
-    "language": "cpp"
+    "language": "java",
+    "submission_mode": "manual"
   },
   "output": {
     "stdout": true,
-    "stderr": true
+    "stderr": true,
+    "retcode": false
+  },
+  "gatlam": {
+    "population_size": 100,
+    "number_of_generations": 50,
+    "selection_size": 20,
+    "reproduction_probability": 0.8,
+    "crossover_probability": 0.9,
+    "mutation_probability": 0.01,
+    "genes": [
+      {
+        "min_value": -5,
+        "max_value": 5
+      },
+      {
+        "min_value": -4,
+        "max_value": 9
+      }
+    ],
+    "crossover_type": "onepoint",
+    "mutation_type": "bitflip",
+    "omega1": 0.5,
+    "omega2": 0.3,
+    "omega3": 0.2,
+    "task_spec": {
+      "valid_return_codes": [
+        0
+      ],
+      "max_runtime_ms": null,
+      "forbidden_outputs": []
+    },
+    "max_parallel_chromosomes": 4,
+    "verbose": false
+  },
+  "security": {
+    "password_enabled": false,
+    "password_pin": null,
+    "cookie_ttl_minutes": 480,
+    "bind_cookie_to_user": true,
+    "allowed_cidrs": []
+  },
+  "code_coverage": {
+    "code_coverage_weight": 10.0,
+    "whitelist": [
+      "HelperOne.java",
+      "HelperTwo.java",
+      "HelperThree.java"
+    ]
   }
 }
-"#;
+"####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_main_zip()),
@@ -255,7 +338,7 @@ task3:
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let main_cpp = r#"
+                let main_cpp = r####"
 #include <iostream>
 #include <string>
 #include "HelperOne.h"
@@ -263,21 +346,21 @@ task3:
 #include "HelperThree.h"
 
 void runTask1() {
-    std::cout << "&-=-&Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
-    std::cout << "&-=-&Task1Subtask2\n" << HelperTwo::subtaskB() << std::endl;
-    std::cout << "&-=-&Task1Subtask3\n" << HelperThree::subtaskC() << std::endl;
+    std::cout << "###Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+    std::cout << "###Task1Subtask2\n" << HelperTwo::subtaskB() << std::endl;
+    std::cout << "###Task1Subtask3\n" << HelperThree::subtaskC() << std::endl;
 }
 
 void runTask2() {
-    std::cout << "&-=-&Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
-    std::cout << "&-=-&Task2Subtask2\n" << HelperThree::subtaskY() << std::endl;
-    std::cout << "&-=-&Task2Subtask3\n" << HelperOne::subtaskZ() << std::endl;
+    std::cout << "###Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+    std::cout << "###Task2Subtask2\n" << HelperThree::subtaskY() << std::endl;
+    std::cout << "###Task2Subtask3\n" << HelperOne::subtaskZ() << std::endl;
 }
 
 void runTask3() {
-    std::cout << "&-=-&Task3Subtask1\n" << HelperThree::subtaskAlpha() << std::endl;
-    std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
-    std::cout << "&-=-&Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+    std::cout << "###Task3Subtask1\n" << HelperThree::subtaskAlpha() << std::endl;
+    std::cout << "###Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "###Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -290,7 +373,7 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-"#;
+"####;
 
                 zip.start_file("Main.cpp", options).unwrap();
                 zip.write_all(main_cpp.as_bytes()).unwrap();
@@ -343,6 +426,7 @@ std::string HelperThree::subtaskY() {
 std::string HelperThree::subtaskAlpha() {
     return "HelperThree: Subtask for Task3\nThis as well\nAnd this";
 }
+
 "#;
 
                 let helper_one_h = r#"
@@ -410,7 +494,7 @@ struct HelperThree {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let makefile_content = r#"
+                let makefile_content = r####"
 CXX = g++
 CXXFLAGS = -fprofile-arcs -ftest-coverage -O0 -std=c++17
 LDFLAGS = -lgcov
@@ -430,17 +514,17 @@ task1: main
 	./main task1
 
 task2: main
-	./main task2
+	valgrind --leak-check=full ./main task2
 
 task3: main
-	./main task3
+	valgrind --leak-check=full ./main task3
 
 task4: main
 	./main task1
 	./main task2
 	./main task3
 	gcov $(SRC)
-"#;
+"####;
 
                 zip.start_file("Makefile", options).unwrap();
                 zip.write_all(makefile_content.as_bytes()).unwrap();
@@ -449,10 +533,10 @@ task4: main
             buf.into_inner()
         }
 
-        let config_json_cpp = r#"
+        let config_json_cpp = r####"
 {
   "execution": {
-    "timeout_secs": 10,
+    "timeout_secs": 30,
     "max_memory": 8589934592,
     "max_cpus": 2,
     "max_uncompressed_size": 100000000,
@@ -461,17 +545,72 @@ task4: main
   "marking": {
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
-    "deliminator": "&-=-&"
+    "deliminator": "###",
+    "grading_policy": "last",
+    "max_attempts": 10,
+    "limit_attempts": false,
+    "pass_mark": 50,
+    "allow_practice_submissions": false,
+    "dissalowed_code": []
   },
   "project": {
-    "language": "cpp"
+    "language": "cpp",
+    "submission_mode": "manual"
   },
   "output": {
     "stdout": true,
-    "stderr": true
+    "stderr": true,
+    "retcode": false
+  },
+  "gatlam": {
+    "population_size": 100,
+    "number_of_generations": 50,
+    "selection_size": 20,
+    "reproduction_probability": 0.8,
+    "crossover_probability": 0.9,
+    "mutation_probability": 0.01,
+    "genes": [
+      {
+        "min_value": -5,
+        "max_value": 5
+      },
+      {
+        "min_value": -4,
+        "max_value": 9
+      }
+    ],
+    "crossover_type": "onepoint",
+    "mutation_type": "bitflip",
+    "omega1": 0.5,
+    "omega2": 0.3,
+    "omega3": 0.2,
+    "task_spec": {
+      "valid_return_codes": [
+        0
+      ],
+      "max_runtime_ms": null,
+      "forbidden_outputs": []
+    },
+    "max_parallel_chromosomes": 4,
+    "verbose": false
+  },
+  "security": {
+    "password_enabled": false,
+    "password_pin": null,
+    "cookie_ttl_minutes": 480,
+    "bind_cookie_to_user": true,
+    "allowed_cidrs": []
+  },
+  "code_coverage": {
+    "code_coverage_weight": 10.0,
+    "whitelist": [
+      "HelperOne.cpp",
+      "HelperTwo.cpp",
+      "HelperThree.cpp"
+    ]
   }
 }
-"#;
+"####;
 
         let zipped_files_cpp = vec![
             (FileType::Main, "main.zip", create_main_zip_cpp()),
@@ -512,7 +651,7 @@ task4: main
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 // Minimal C++ main that calls into StudentSolution (in memo zip)
-                let main_cpp = r#"
+                let main_cpp = r####"
         #include <iostream>
         #include <string>
         #include "StudentSolution.h"
@@ -521,14 +660,14 @@ task4: main
             std::string task = argc > 1 ? argv[1] : "task1";
 
             if (task == "task1") {
-                std::cout << "&-=-&Task1Subtask1\n" << student::StudentSolution::hello() << std::endl;
+                std::cout << "###Task1Subtask1\n" << student::StudentSolution::hello() << std::endl;
             } else {
                 std::cout << task << " is not a valid task" << std::endl;
             }
 
             return 0;
         }
-        "#;
+        "####;
 
                 zip.start_file("Main.cpp", options).unwrap();
                 zip.write_all(main_cpp.as_bytes()).unwrap();
@@ -610,7 +749,7 @@ task4: main
         }
 
         // Config now explicitly cpp
-        let config_json_cpp_plag = r#"
+        let config_json_cpp_plag = r####"
         {
         "execution": {
             "timeout_secs": 10,
@@ -622,7 +761,7 @@ task4: main
         "marking": {
             "marking_scheme": "exact",
             "feedback_scheme": "auto",
-            "deliminator": "&-=-&"
+            "deliminator": "###"
         },
         "project": {
             "language": "cpp"
@@ -632,7 +771,7 @@ task4: main
             "stderr": true
         }
         }
-        "#;
+        "####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_plag_main_zip_cpp()),
@@ -760,7 +899,7 @@ task1:
         }
 
         // New config file content
-        let config_json = r#"
+        let config_json = r####"
 {
   "execution": {
     "max_cpus": 2,
@@ -802,7 +941,7 @@ task1:
     "verbose": false
   },
   "marking": {
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "feedback_scheme": "auto",
     "marking_scheme": "exact"
   },
@@ -815,7 +954,7 @@ task1:
     "submission_mode": "gatlam"
   }
 }
-"#;
+"####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_interpreter_main_zip()),

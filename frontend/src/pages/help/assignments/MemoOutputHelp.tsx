@@ -19,21 +19,21 @@ const toc = [
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' }, // keep last
 ];
 
-const SAMPLE_STDOUT = `&-=-& Step 1
+const SAMPLE_STDOUT = `### Step 1
 42
-&-=-& Step 2
+### Step 2
 OK
 Retcode: 0
 `;
 
-const SAMPLE_LABELED_TASKS = `&-=-& task1/Step 1
+const SAMPLE_LABELED_TASKS = `### task1/Step 1
 hello
-&-=-& task1/Step 2
+### task1/Step 2
 12
 
-&-=-& task2/Step 1
+### task2/Step 1
 init
-&-=-& task2/Step 2
+### task2/Step 2
 done
 `;
 
@@ -235,7 +235,7 @@ export default function MemoOutputHelp() {
       <section id="labels" className="scroll-mt-24" />
       <Title level={3}>Subsections &amp; labels</Title>
       <Paragraph className="mb-0">
-        Inside <b>Main</b>, print the delimiter <Text code>&-=-&</Text> followed by the subsection
+        Inside <b>Main</b>, print the delimiter <Text code>###</Text> followed by the subsection
         name. The text after the delimiter becomes the label used for per-section comparisons and
         reporting. Keep labels stable (e.g., <Text code>task1/Step 1</Text>) so marks line up.
       </Paragraph>
@@ -310,7 +310,7 @@ export default function MemoOutputHelp() {
                   Open <b>Tasks</b>, then pick the exact task and subsection label.
                 </li>
                 <li>
-                  Confirm your Main prints the delimiter <Text code>&-=-&</Text> + label.
+                  Confirm your Main prints the delimiter <Text code>###</Text> + label.
                 </li>
               </ul>
             ),

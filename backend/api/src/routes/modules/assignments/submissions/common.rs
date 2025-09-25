@@ -38,8 +38,8 @@ pub struct UserResponse {
 /// Represents the mark of a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mark {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 /// Single item in a submissions list response.
@@ -85,22 +85,32 @@ pub struct SubmissionResponse {
 /// Represents a summary of earned vs total marks.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
+}
+
+/// Represents a code coverage summary with coverage statistics.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverageSummary {
+    pub earned: f64,
+    pub total: f64,
+    pub total_lines: u32,
+    pub covered_lines: u32,
+    pub coverage_percent: f64,
 }
 
 /// Represents code coverage for a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverageFile {
     pub path: String,
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverage {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<MarkSummary>,
+    pub summary: Option<CodeCoverageSummary>,
     pub files: Vec<CodeCoverageFile>,
 }
 
@@ -123,6 +133,7 @@ pub struct SubmissionDetailResponse {
     pub code_coverage: Option<CodeCoverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<serde_json::Value>,
+    pub plagiarism: PlagiarismInfo,
 }
 
 // ---- instant ACK (client will GET /submissions/{id} and attach WS) ----
@@ -135,4 +146,13 @@ pub struct SubmitAck {
     pub filename: String,
     pub hash: String,
     pub created_at: String, // RFC3339
+}
+
+/// Represents plagiarism-related information for a submission.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlagiarismInfo {
+    pub flagged: bool,
+    pub similarity: f32,
+    pub lines_matched: i64,
+    pub description: String,
 }

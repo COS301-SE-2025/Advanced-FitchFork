@@ -8,7 +8,7 @@ mod patch_plagiarism_tests {
     use chrono::{Datelike, TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::Model as SubmissionModel,
+        assignment_submission::{Entity as AssignmentSubmissionEntity, Model as SubmissionModel},
         module::Model as ModuleModel,
         plagiarism_case::{Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status},
         user::Model as UserModel,
@@ -92,8 +92,8 @@ mod patch_plagiarism_tests {
             assignment.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "sub1.txt",
             "hash123#",
@@ -107,8 +107,8 @@ mod patch_plagiarism_tests {
             assignment.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "sub2.txt",
             "hash456#",
@@ -287,6 +287,61 @@ mod patch_plagiarism_tests {
             .unwrap();
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_flag_plagiarism_case_zeros_out_submission_marks() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let submission1_before =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        let submission2_before =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_2)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+
+        assert!(submission1_before.earned > 0.0);
+        assert!(submission2_before.earned > 0.0);
+
+        let req = make_patch_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            data.plagiarism_case.id,
+        );
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
+            .one(app_state.db())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated_case.status, Status::Flagged);
+
+        let submission1_after =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        let submission2_after =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_2)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(submission1_after.earned, 0.0);
+        assert_eq!(submission2_after.earned, 0.0);
     }
 }
 

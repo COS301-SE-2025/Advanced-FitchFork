@@ -1,7 +1,6 @@
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::collections::HashSet;
-use util::execution_config::ExecutionConfig;
 
 #[derive(Debug, Clone)]
 pub struct GeneConfig {

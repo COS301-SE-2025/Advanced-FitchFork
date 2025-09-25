@@ -6,8 +6,13 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::{DateTime, Utc};
-use db::models::plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+use db::models::{
+    assignment_submission::Model as SubmissionModel,
+    plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status},
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set, TransactionTrait,
+};
 use serde::Serialize;
 use util::state::AppState;
 
@@ -80,10 +85,20 @@ pub async fn patch_plagiarism_flag(
     State(app_state): State<AppState>,
     Path((_, assignment_id, case_id)): Path<(i64, i64, i64)>,
 ) -> impl IntoResponse {
+    let txn = match app_state.db().begin().await {
+        Ok(txn) => txn,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
     let case = match PlagiarismEntity::find()
         .filter(PlagiarismColumn::Id.eq(case_id))
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(&txn)
         .await
     {
         Ok(Some(case)) => case,
@@ -101,11 +116,11 @@ pub async fn patch_plagiarism_flag(
         }
     };
 
-    let mut active_case = case.into_active_model();
+    let mut active_case = case.clone().into_active_model();
     active_case.status = Set(Status::Flagged);
     active_case.updated_at = Set(Utc::now());
 
-    let updated_case = match active_case.update(app_state.db()).await {
+    let updated_case = match active_case.update(&txn).await {
         Ok(case) => case,
         Err(e) => {
             return (
@@ -117,6 +132,35 @@ pub async fn patch_plagiarism_flag(
             );
         }
     };
+
+    if let Err(e) = SubmissionModel::zero_out_marks(&txn, case.submission_id_1).await {
+        let _ = txn.rollback().await;
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!(
+                "Failed to zero out marks for submission 1: {}",
+                e
+            ))),
+        );
+    }
+
+    if let Err(e) = SubmissionModel::zero_out_marks(&txn, case.submission_id_2).await {
+        let _ = txn.rollback().await;
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!(
+                "Failed to zero out marks for submission 2: {}",
+                e
+            ))),
+        );
+    }
+
+    if let Err(e) = txn.commit().await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!("Database error: {}", e))),
+        );
+    }
 
     let response_data = FlaggedCaseResponse {
         id: updated_case.id as i64,

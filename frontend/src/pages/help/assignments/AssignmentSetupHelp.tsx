@@ -49,7 +49,7 @@ const filesRows: Row[] = [
     key: 'main',
     item: 'Main file',
     purpose:
-      'Entry point your build/run uses. Prints labeled sections for each subsection using your delimiter (default: &-=-&).',
+      'Entry point your build/run uses. Prints labeled sections for each subsection using your delimiter (default: ###).',
     required: 'Yes (except GATLAM mode)',
     where: 'Assignments → Files → Main File',
   },
@@ -330,7 +330,7 @@ export default function AssignmentSetupHelp() {
         description={
           <>
             Subsections are matched by labels printed in your program. By default, print the
-            delimiter <Text code>&-=-&</Text> followed by the label name on its own line, then the
+            delimiter <Text code>###</Text> followed by the label name on its own line, then the
             lines that belong to that label. See{' '}
             <a href="/help/assignments/memo-output">Memo Output</a> for how labels are compared.
           </>
@@ -356,7 +356,7 @@ export default function AssignmentSetupHelp() {
         </li>
         <li>
           Names should match the labels printed by your Main (or Interpreter in GATLAM) using{' '}
-          <Text code>&-=-&</Text>.
+          <Text code>###</Text>.
         </li>
         <li>
           Need per-task fixtures? Upload an <b>overwrite</b> archive on the task; those files are
@@ -502,7 +502,7 @@ export default function AssignmentSetupHelp() {
               <ul className="list-disc pl-5">
                 <li>
                   Confirm your Main (or Interpreter) prints labels using the delimiter{' '}
-                  <Text code>&-=-&</Text> and that each label appears at least once in memo output.
+                  <Text code>###</Text> and that each label appears at least once in memo output.
                 </li>
                 <li>
                   Re-run <b>Generate Memo Output</b> after changing code, labels, or config.

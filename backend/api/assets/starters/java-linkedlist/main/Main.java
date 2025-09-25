@@ -1,8 +1,8 @@
 import java.util.*;
 
 public class Main {
-	// ExecutionConfig.default_deliminator() => "&-=-&"
-	private static final String DELIM = "&-=-&";
+	// ExecutionConfig.default_deliminator() => "###"
+	private static final String DELIM = "###";
 
 	private static void printSection(String name) {
 		System.out.println(DELIM + " " + name);

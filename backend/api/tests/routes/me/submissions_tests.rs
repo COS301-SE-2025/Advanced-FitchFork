@@ -93,8 +93,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            80,
-            100,
+            80.0,
+            100.0,
             false,
             "s1.zip",
             "hash1",
@@ -112,8 +112,8 @@ mod tests {
             assignment1.id,
             student2.id,
             1,
-            90,
-            100,
+            90.0,
+            100.0,
             false,
             "s2.zip",
             "hash2",
@@ -127,8 +127,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            85,
-            100,
+            85.0,
+            100.0,
             false,
             "s1_v2.zip",
             "hash4",
@@ -146,8 +146,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            75,
-            100,
+            75.0,
+            100.0,
             false,
             "s1_v3.zip",
             "hash5",
@@ -165,8 +165,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            95,
-            100,
+            95.0,
+            100.0,
             false,
             "s1_v4.zip",
             "hash6",
@@ -184,8 +184,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            60,
-            100,
+            60.0,
+            100.0,
             false,
             "s1_v5.zip",
             "hash7",
@@ -204,8 +204,8 @@ mod tests {
             assignment1.id,
             student1.id,
             2,
-            70,
-            100,
+            70.0,
+            100.0,
             false,
             "s1_late.zip",
             "hash3",
@@ -522,9 +522,9 @@ mod tests {
         // Verify sorting by score descending
         let mut sorted_submissions = submissions.clone();
         sorted_submissions.sort_by(|a, b| {
-            let score_a = a["score"]["earned"].as_i64().unwrap();
-            let score_b = b["score"]["earned"].as_i64().unwrap();
-            score_b.cmp(&score_a) // Descending
+            let score_a = a["score"]["earned"].as_f64().unwrap();
+            let score_b = b["score"]["earned"].as_f64().unwrap();
+            score_b.partial_cmp(&score_a).unwrap() // Descending
         });
         assert_eq!(submissions, &sorted_submissions);
     }

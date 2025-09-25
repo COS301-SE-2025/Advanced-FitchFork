@@ -3,8 +3,8 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

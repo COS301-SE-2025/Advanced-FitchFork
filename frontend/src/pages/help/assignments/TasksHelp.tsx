@@ -85,7 +85,7 @@ export default function TasksHelp() {
           <li>Set them up after uploading Makefile/Main (or Interpreter) and Memo files.</li>
           <li>
             Commands must print labeled sections using your delimiter (default{' '}
-            <Text code>&-=-&</Text>).
+            <Text code>###</Text>).
           </li>
           <li>Each task stores its own memo output text file and optional overwrite archive.</li>
         </ul>
@@ -232,7 +232,7 @@ export default function TasksHelp() {
       <Title level={3}>Subsections (labels)</Title>
       <Paragraph className="mb-0">
         Inside a task, create subsections that mirror the labels your program prints. In your{' '}
-        <b>Main</b> (or <b>Interpreter</b> for GATLAM), print the delimiter <Text code>&-=-&</Text>{' '}
+        <b>Main</b> (or <b>Interpreter</b> for GATLAM), print the delimiter <Text code>###</Text>{' '}
         followed by the subsection name on its own line, then the lines that belong to that label.
         These labeled blocks are what get compared to the task’s Memo Output. See{' '}
         <a href="/help/assignments/memo-output">Memo Output</a> for examples and{' '}
@@ -339,7 +339,7 @@ export default function TasksHelp() {
             children: (
               <ul className="list-disc pl-5">
                 <li>
-                  Verify your program prints labels with <Text code>&-=-&</Text> and the subsection
+                  Verify your program prints labels with <Text code>###</Text> and the subsection
                   name.
                 </li>
                 <li>
