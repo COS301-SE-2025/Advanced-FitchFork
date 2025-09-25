@@ -1408,7 +1408,17 @@ mod tests {
             false,
             &filename,
             "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
-            b"dummy",
+            &{
+                let mut buf = Vec::new();
+                let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+                let options = SimpleFileOptions::default();
+
+                zip.start_file("test.txt", options).unwrap();
+                zip.write_all(b"test content").unwrap();
+
+                zip.finish().unwrap();
+                buf
+            },
         )
         .await
         .unwrap();

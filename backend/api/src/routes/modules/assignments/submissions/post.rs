@@ -275,10 +275,16 @@ pub async fn check_disallowed_code_existing(
     db: &sea_orm::DatabaseConnection,
     assignment: &db::models::assignment::Model,
 ) -> DisallowedCodeCheckResult {
-    println!("Checking existing submission {} for disallowed code...", submission_id);
-    
+    println!(
+        "Checking existing submission {} for disallowed code...",
+        submission_id
+    );
+
     // First, load the existing submission
-    let submission = match assignment_submission::Entity::find_by_id(submission_id).one(db).await {
+    let submission = match assignment_submission::Entity::find_by_id(submission_id)
+        .one(db)
+        .await
+    {
         Ok(Some(sub)) => sub,
         Ok(None) => {
             return DisallowedCodeCheckResult::CheckFailed(format!(
@@ -298,25 +304,27 @@ pub async fn check_disallowed_code_existing(
     match scan_code_content::contains_dissalowed_code(file_bytes, config) {
         Ok(true) => {
             // Load allocator for total marks
-            let allocator = match mark_allocator::load_allocator(assignment.module_id, assignment.id) {
-                Ok(a) => a,
-                Err(e) => {
-                    eprintln!("Failed to load allocator: {}", e);
-                    return DisallowedCodeCheckResult::CheckFailed(format!(
-                        "Failed to load mark allocator: {}",
-                        e
-                    ));
-                }
-            };
+            let allocator =
+                match mark_allocator::load_allocator(assignment.module_id, assignment.id) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        eprintln!("Failed to load allocator: {}", e);
+                        return DisallowedCodeCheckResult::CheckFailed(format!(
+                            "Failed to load mark allocator: {}",
+                            e
+                        ));
+                    }
+                };
 
             // Update submission status to ignored and failed_disallowed_code
-            let updated = match AssignmentSubmissionModel::set_ignored(db, submission.id, true).await {
-                Ok(u) => u,
-                Err(e) => {
-                    eprintln!("Failed to set ignored flag: {:?}", e);
-                    submission.clone()
-                }
-            };
+            let updated =
+                match AssignmentSubmissionModel::set_ignored(db, submission.id, true).await {
+                    Ok(u) => u,
+                    Err(e) => {
+                        eprintln!("Failed to set ignored flag: {:?}", e);
+                        submission.clone()
+                    }
+                };
 
             let updated = match AssignmentSubmissionModel::update_status(
                 db,
@@ -333,11 +341,8 @@ pub async fn check_disallowed_code_existing(
             };
 
             // Build response using shared helper
-            let response = build_disallowed_submission_response(
-                &updated,
-                allocator.total_value,
-                assignment,
-            );
+            let response =
+                build_disallowed_submission_response(&updated, allocator.total_value, assignment);
 
             // Save report using shared helper
             if let Err(e) = save_submission_report(
@@ -352,7 +357,20 @@ pub async fn check_disallowed_code_existing(
 
             DisallowedCodeCheckResult::DisallowedFound(response)
         }
-        Ok(false) => DisallowedCodeCheckResult::Clean,
+        Ok(false) => {
+            if submission.ignored {
+                if let Err(e) =
+                    AssignmentSubmissionModel::set_ignored(db, submission.id, false).await
+                {
+                    eprintln!("Failed to unignore submission: {:?}", e);
+                    return DisallowedCodeCheckResult::CheckFailed(format!(
+                        "Failed to unignore submission: {}",
+                        e
+                    ));
+                }
+            }
+            DisallowedCodeCheckResult::Clean
+        }
         Err(e) => {
             eprintln!("Disallowed scan error: {}", e);
             DisallowedCodeCheckResult::CheckFailed(format!("Scan error: {}", e))
@@ -392,20 +410,21 @@ pub async fn check_disallowed_code_new(
     assignment: &db::models::assignment::Model,
 ) -> DisallowedCodeCheckResult {
     println!("Checking new submission for disallowed code...");
-    
+
     match scan_code_content::contains_dissalowed_code(file_bytes, config) {
         Ok(true) => {
             // Load allocator for total marks
-            let allocator = match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
-                Ok(a) => a,
-                Err(e) => {
-                    eprintln!("Failed to load allocator: {}", e);
-                    return DisallowedCodeCheckResult::CheckFailed(format!(
-                        "Failed to load mark allocator: {}",
-                        e
-                    ));
-                }
-            };
+            let allocator =
+                match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        eprintln!("Failed to load allocator: {}", e);
+                        return DisallowedCodeCheckResult::CheckFailed(format!(
+                            "Failed to load mark allocator: {}",
+                            e
+                        ));
+                    }
+                };
 
             // Save the submission with zero mark and total from allocator
             let saved = match AssignmentSubmissionModel::save_file(
@@ -456,11 +475,8 @@ pub async fn check_disallowed_code_new(
             };
 
             // Build response using shared helper
-            let response = build_disallowed_submission_response(
-                &updated,
-                allocator.total_value,
-                assignment,
-            );
+            let response =
+                build_disallowed_submission_response(&updated, allocator.total_value, assignment);
 
             // Save report using shared helper
             if let Err(e) = save_submission_report(
@@ -1871,7 +1887,7 @@ pub async fn remark_submissions(
                 let ext = std::path::PathBuf::from(&submission.filename)
                     .extension()
                     .map(|e| e.to_string_lossy().to_string());
-                
+
                 if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
                     assignment.module_id,
                     assignment.id,
@@ -1893,27 +1909,21 @@ pub async fn remark_submissions(
                             // Continue with normal processing
                         }
                         DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                            return Err("Submission rejected: disallowed code patterns detected (marked as 0)".to_string());
+                            return Ok(());
                         }
                         DisallowedCodeCheckResult::CheckFailed(e) => {
                             eprintln!("Disallowed code check failed: {}", e);
-                            return Err("Failed to scan submission for disallowed code patterns".to_string());
+                            return Err("Failed to scan submission for disallowed code patterns"
+                                .to_string());
                         }
                     }
                 } else {
                     return Err("Failed to read submission file from disk".to_string());
                 }
 
-                grade_submission(
-                    submission,
-                    &assignment,
-                    &memo_outputs,
-                    &config,
-                    db,
-                    true,
-                )
-                .await
-                .map(|_| ())
+                grade_submission(submission, &assignment, &memo_outputs, &config, db, true)
+                    .await
+                    .map(|_| ())
             }
         })
         .await;
@@ -2121,20 +2131,29 @@ pub async fn resubmit_submissions(
                     &config,
                     &db,
                     &assignment,
-                ).await {
+                )
+                .await
+                {
                     DisallowedCodeCheckResult::Clean => {
                         // Continue with normal processing
                     }
                     DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                        return (sid, Err("Submission rejected: disallowed code patterns detected (marked as 0)".to_string()));
+                        return (sid, Ok(()));
                     }
                     DisallowedCodeCheckResult::CheckFailed(e) => {
                         eprintln!("Disallowed code check failed: {}", e);
-                        return (sid, Err("Failed to scan submission for disallowed code patterns".to_string()));
+                        return (
+                            sid,
+                            Err("Failed to scan submission for disallowed code patterns"
+                                .to_string()),
+                        );
                     }
                 }
             } else {
-                return (sid, Err("Failed to read submission file from disk".to_string()));
+                return (
+                    sid,
+                    Err("Failed to read submission file from disk".to_string()),
+                );
             }
 
             if let Err(e) =
@@ -2158,15 +2177,7 @@ pub async fn resubmit_submissions(
                 );
             }
 
-            match grade_submission(
-                submission,
-                &assignment,
-                &memo_outputs,
-                &config,
-                &db,
-                true,
-            )
-            .await
+            match grade_submission(submission, &assignment, &memo_outputs, &config, &db, true).await
             {
                 Ok(_) => (sid, Ok(())),
                 Err(e) => (sid, Err(e)),

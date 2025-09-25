@@ -268,7 +268,8 @@ impl<'a> MarkingJob<'a> {
                             .unwrap_or_default(),
                     };
 
-                    let has_error = task_output.return_code
+                    let has_error = task_output
+                        .return_code
                         .map(|code| code != 0)
                         .unwrap_or(false);
 
@@ -289,39 +290,53 @@ impl<'a> MarkingJob<'a> {
                         }
                     } else {
                         // No errors detected, proceed with normal comparison
-                        let mut comparison_result =
-                            self.comparator
-                                .compare(subsection, &memo_or_regex_lines, &student_lines);
+                        let mut comparison_result = self.comparator.compare(
+                            subsection,
+                            &memo_or_regex_lines,
+                            &student_lines,
+                        );
                         comparison_result.stderr = task_output.stderr.clone();
                         comparison_result.return_code = task_output.return_code;
                         comparison_result
                     };
 
                     let mut section_feedback = String::new();
-                    
+
                     if has_error {
                         // Use stderr content as feedback for compilation/runtime errors
-                        section_feedback = task_output.stderr.as_ref()
+                        section_feedback = task_output
+                            .stderr
+                            .as_ref()
                             .map(|stderr| stderr.trim().to_string())
-                            .unwrap_or_else(|| format!("Runtime error (exit code: {})", task_output.return_code.unwrap_or(0)));
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "Runtime error (exit code: {})",
+                                    task_output.return_code.unwrap_or(0)
+                                )
+                            });
                     } else if task_entry.valgrind.unwrap_or(false) {
                         // Only check for memory leaks if there are no compilation/runtime errors
-                        let is_memory_leak_section = subsection.name.to_lowercase().contains("memory leak") 
-                            || subsection.feedback.as_ref()
-                                .map(|f| f.to_lowercase().contains("valgrind"))
-                                .unwrap_or(false);
-                        
+                        let is_memory_leak_section =
+                            subsection.name.to_lowercase().contains("memory leak")
+                                || subsection
+                                    .feedback
+                                    .as_ref()
+                                    .map(|f| f.to_lowercase().contains("valgrind"))
+                                    .unwrap_or(false);
+
                         if is_memory_leak_section {
                             if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
-                                let task_has_leaks = valgrind_report_ref.tasks
+                                let task_has_leaks = valgrind_report_ref
+                                    .tasks
                                     .iter()
                                     .find(|t| t.task_number == task_entry.task_number)
                                     .map(|t| t.leaked)
                                     .unwrap_or(false);
-                                
+
                                 if task_has_leaks {
                                     result.awarded = 0.0;
-                                    let leaked_bytes = valgrind_report_ref.tasks
+                                    let leaked_bytes = valgrind_report_ref
+                                        .tasks
                                         .iter()
                                         .find(|t| t.task_number == task_entry.task_number)
                                         .map(|t| t.bytes_leaked)
@@ -332,7 +347,8 @@ impl<'a> MarkingJob<'a> {
                                     );
                                 } else {
                                     result.awarded = subsection.value;
-                                    section_feedback = "No memory leaks detected. Well done!".to_string();
+                                    section_feedback =
+                                        "No memory leaks detected. Well done!".to_string();
                                 }
                             }
                         }
@@ -340,7 +356,7 @@ impl<'a> MarkingJob<'a> {
 
                     result.awarded = round2(result.awarded);
                     task_earned += result.awarded;
-                    
+
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
@@ -458,8 +474,12 @@ impl<'a> MarkingJob<'a> {
         }
 
         if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
-            let tasks_with_leaks = valgrind_report_ref.tasks.iter().filter(|t| t.leaked).count();
-            
+            let tasks_with_leaks = valgrind_report_ref
+                .tasks
+                .iter()
+                .filter(|t| t.leaked)
+                .count();
+
             report.valgrind = Some(crate::report::ValgrindReport {
                 summary: Some(crate::report::ValgrindSummary {
                     total_leaks: valgrind_report_ref.total_leaks,
