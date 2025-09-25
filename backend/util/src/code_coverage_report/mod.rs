@@ -1,29 +1,29 @@
 use crate::languages::Language;
 use chrono::Utc;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CoverageSummary {
-    total_files: u64,
-    total_lines: u64,
-    covered_lines: u64,
-    coverage_percent: f64,
+    pub total_files: u64,
+    pub total_lines: u64,
+    pub covered_lines: u64,
+    pub coverage_percent: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CoverageFile {
-    path: String,
-    total_lines: u64,
-    covered_lines: u64,
-    coverage_percent: f64,
+    pub path: String,
+    pub total_lines: u64,
+    pub covered_lines: u64,
+    pub coverage_percent: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CoverageReport {
-    generated_at: String,
-    summary: CoverageSummary,
-    files: Vec<CoverageFile>,
+    pub generated_at: String,
+    pub summary: CoverageSummary,
+    pub files: Vec<CoverageFile>,
 }
 
 pub struct CoverageProcessor;

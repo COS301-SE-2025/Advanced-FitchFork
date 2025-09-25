@@ -125,6 +125,37 @@ pub struct CodeCoverageReport {
     pub files: Vec<CoverageFile>,
 }
 
+/// Represents memory leak analysis results from Valgrind.
+#[derive(Debug, Serialize, Clone)]
+pub struct ValgrindReport {
+    /// Summary of memory leaks across all tasks.
+    pub summary: Option<ValgrindSummary>,
+    /// Leak details for each task.
+    pub tasks: Vec<ValgrindTaskReport>,
+}
+
+/// Summary of valgrind analysis results.
+#[derive(Debug, Serialize, Clone)]
+pub struct ValgrindSummary {
+    /// Total bytes leaked across all tasks.
+    pub total_leaks: u64,
+    /// Number of tasks with leaks.
+    pub tasks_with_leaks: usize,
+    /// Total number of tasks analyzed.
+    pub total_tasks: usize,
+}
+
+/// Represents memory leak information for a single task.
+#[derive(Debug, Serialize, Clone)]
+pub struct ValgrindTaskReport {
+    /// Task number.
+    pub task_number: i64,
+    /// Whether this task has memory leaks.
+    pub has_leaks: bool,
+    /// Number of bytes leaked in this task.
+    pub bytes_leaked: u64,
+}
+
 /// Represents code coverage information for a single file.
 #[derive(Debug, Serialize, Clone)]
 pub struct CoverageFile {
@@ -150,6 +181,9 @@ pub struct MarkReport {
     /// Optional code coverage report.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_coverage: Option<CodeCoverageReport>,
+    /// Optional valgrind memory leak report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valgrind: Option<ValgrindReport>,
 }
 
 /// API response wrapper for a grading report, used for serialization.
@@ -196,6 +230,7 @@ pub fn generate_new_mark_report(
         mark,
         tasks,
         code_coverage: None,
+        valgrind: None,
     }
 }
 
@@ -265,6 +300,7 @@ mod tests {
             mark: sample_score(),
             tasks: vec![sample_task()],
             code_coverage: None,
+            valgrind: None,
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("\"created_at\":\"2024-06-01T12:00:00Z\""));
@@ -281,6 +317,7 @@ mod tests {
             mark: sample_score(),
             tasks: vec![],
             code_coverage: None,
+            valgrind: None,
         };
         let response: MarkReportResponse = report.into();
         assert!(response.success);
@@ -325,6 +362,7 @@ mod tests {
             mark: sample_score(),
             tasks: vec![],
             code_coverage: Some(coverage),
+            valgrind: None,
         };
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("code_coverage"));

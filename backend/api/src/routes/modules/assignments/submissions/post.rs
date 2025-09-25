@@ -690,6 +690,17 @@ async fn grade_submission(
         marking_job = marking_job.with_coverage(coverage_path);
     }
 
+    let valgrind_path = attempt_dir(
+        assignment.module_id,
+        assignment.id,
+        submission.user_id,
+        submission.attempt,
+    )
+    .join("valgrind_report.json");
+    if valgrind_path.exists() {
+        marking_job = marking_job.with_valgrind(valgrind_path);
+    }
+
     let mark_report = match marking_job.mark().await {
         Ok(report) => report,
         Err(e) => {
@@ -713,8 +724,6 @@ async fn grade_submission(
                 | MarkerError::MissingField(msg)
                 | MarkerError::IoError(msg)
                 | MarkerError::MissingTaskId(msg)
-                | MarkerError::ParseCoverageError(msg)
-                | MarkerError::ParseAllocatorError(msg)
                 | MarkerError::ParseOutputError(msg) => msg,
             };
             return Err(error_msg);
