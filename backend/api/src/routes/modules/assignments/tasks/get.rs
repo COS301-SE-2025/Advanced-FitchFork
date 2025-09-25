@@ -212,7 +212,9 @@ pub async fn get_task_details(
     {
         Ok(Some(mo)) => {
             let full = storage_root().join(&mo.path); // relative to storage root
-            fs::read_to_string(full).ok().map(|content| filter_system_info(&content))
+            fs::read_to_string(full)
+                .ok()
+                .map(|content| filter_system_info(&content))
         }
         _ => {
             let dir = memo_output_dir(module_id, assignment_id);

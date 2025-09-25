@@ -755,13 +755,16 @@ async fn grade_submission(
         .code_coverage
         .as_ref()
         .map(|cov| {
-            let summary = cov.summary.as_ref().map(|s| super::common::CodeCoverageSummary {
-                earned: s.earned,
-                total: s.total,
-                total_lines: s.total_lines as u32,
-                covered_lines: s.covered_lines as u32,
-                coverage_percent: s.coverage_percent,
-            });
+            let summary = cov
+                .summary
+                .as_ref()
+                .map(|s| super::common::CodeCoverageSummary {
+                    earned: s.earned,
+                    total: s.total,
+                    total_lines: s.total_lines as u32,
+                    covered_lines: s.covered_lines as u32,
+                    coverage_percent: s.coverage_percent,
+                });
             let files: Vec<serde_json::Value> = cov
                 .files
                 .iter()

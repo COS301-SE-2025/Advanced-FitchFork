@@ -24,9 +24,12 @@ use db::models::{
     assignment_submission::{self, Entity as SubmissionEntity},
     assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
     assignment_submission_output::Model as SubmissionOutput,
-    assignment_task, user,
+    assignment_task,
+    plagiarism_case::{
+        Column as PlagiarismCaseColumn, Entity as PlagiarismCaseEntity, Status as PlagiarismStatus,
+    },
+    user,
     user_module_role::{self, Role},
-    plagiarism_case::{Entity as PlagiarismCaseEntity, Column as PlagiarismCaseColumn, Status as PlagiarismStatus},
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, JoinType, PaginatorTrait, QueryFilter,
@@ -889,24 +892,29 @@ pub async fn get_submission(
         .filter(
             Condition::any()
                 .add(PlagiarismCaseColumn::SubmissionId1.eq(submission.id))
-                .add(PlagiarismCaseColumn::SubmissionId2.eq(submission.id))
+                .add(PlagiarismCaseColumn::SubmissionId2.eq(submission.id)),
         )
         .filter(PlagiarismCaseColumn::Status.eq(PlagiarismStatus::Flagged))
         .all(db)
         .await
     {
         Ok(cases) if !cases.is_empty() => {
-            let highest_similarity_case = cases.into_iter()
-                .max_by(|a, b| a.similarity.partial_cmp(&b.similarity).unwrap_or(Ordering::Equal))
+            let highest_similarity_case = cases
+                .into_iter()
+                .max_by(|a, b| {
+                    a.similarity
+                        .partial_cmp(&b.similarity)
+                        .unwrap_or(Ordering::Equal)
+                })
                 .unwrap();
-            
+
             PlagiarismInfo {
                 flagged: true,
                 similarity: highest_similarity_case.similarity,
                 lines_matched: highest_similarity_case.lines_matched,
                 description: highest_similarity_case.description,
             }
-        },
+        }
         _ => PlagiarismInfo {
             flagged: false,
             similarity: 0.0,

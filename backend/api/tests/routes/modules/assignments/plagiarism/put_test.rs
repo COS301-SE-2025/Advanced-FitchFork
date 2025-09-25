@@ -87,7 +87,7 @@ mod update_plagiarism_tests {
         .await
         .unwrap();
 
-        use util::paths::{user_submission_dir, attempt_dir};
+        use util::paths::{attempt_dir, user_submission_dir};
         let _user_dir = user_submission_dir(module.id, assignment.id, student_user.id);
         let attempt_dir = attempt_dir(module.id, assignment.id, student_user.id, 1);
         std::fs::create_dir_all(&attempt_dir).expect("Failed to create submission directories");
