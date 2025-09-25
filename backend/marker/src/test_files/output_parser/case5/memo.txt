@@ -1,7 +1,7 @@
 javac … && java Main task1
-&-=-&Sub1
+###Sub1
 X
-&-=-&Sub2
+###Sub2
 Y
-&-=-&Sub3
+###Sub3
 Z

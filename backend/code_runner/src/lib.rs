@@ -154,7 +154,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Apply overwrites for this task
-            let mut files = task_files_base;
+            let mut files = task_files_base.clone();
             let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
             if overwrite_dir.exists() {
                 if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
@@ -174,6 +174,15 @@ pub async fn create_memo_outputs_for_all_tasks(
                         }
                     }
                 }
+            }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
             }
 
             let request_body = serde_json::json!({
@@ -395,7 +404,7 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Apply overwrites for this task
-            let mut files = task_files_base;
+            let mut files = task_files_base.clone();
             let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
             if overwrite_dir.exists() {
                 if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
@@ -415,6 +424,15 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
                         }
                     }
                 }
+            }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
             }
 
             let request_body = serde_json::json!({
@@ -696,7 +714,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Prepare task-specific files (apply overwrites)
-            let mut task_files = task_files_base;
+            let mut task_files = task_files_base.clone();
             let overwrite_dir =
                 overwrite_task_dir(module_id_cloned, assignment_id_cloned, task.task_number);
             if overwrite_dir.exists() {
@@ -718,6 +736,16 @@ pub async fn create_submission_outputs_for_all_tasks(
                     }
                 }
             }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                task_files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                task_files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
+            }
+
 
             // Compose request
             let request_body = json!({

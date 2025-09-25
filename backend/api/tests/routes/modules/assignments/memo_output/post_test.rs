@@ -49,7 +49,7 @@ mod tests {
         let mut cfg = ExecutionConfig::default_config();
         cfg.project.language = Language::Java; // we’re providing Main.java
         cfg.project.submission_mode = SubmissionMode::Manual; // matches your route expectations
-        cfg.marking.deliminator = "&-=-&".to_string(); // keep existing spelling
+        cfg.marking.deliminator = "###".to_string(); // keep existing spelling
 
         cfg.save(module_id, assignment_id)
             .expect("write config.json");

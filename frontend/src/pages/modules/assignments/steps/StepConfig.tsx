@@ -346,7 +346,7 @@ const StepConfig = () => {
             <Divider />
             <Space wrap size="large">
               <Form.Item name="deliminator" label="Output Delimiter" rules={[{ required: true }]}>
-                <Input placeholder="&-=-&" />
+                <Input placeholder="###" />
               </Form.Item>
               <Form.Item name="pass_mark" label="Pass Mark (%)" rules={[{ required: true }]}>
                 <InputNumber min={0} max={100} />

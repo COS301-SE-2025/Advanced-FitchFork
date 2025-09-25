@@ -152,7 +152,7 @@ mod tests {
     fn create_memo_outputs(module_id: i64, assignment_id: i64) {
         let dir = memo_output_dir(module_id, assignment_id);
         fs::create_dir_all(&dir).unwrap();
-        let memo_content = "make task1\n&-=-&Subtask 1 Output\nOutput A";
+        let memo_content = "make task1\n###Subtask 1 Output\nOutput A";
         fs::write(dir.join("task1.txt"), memo_content).unwrap();
     }
 
@@ -161,7 +161,7 @@ mod tests {
         // Only override what the tests require:
         cfg.project.language = Language::Java; // because we ship .java files
         cfg.project.submission_mode = SubmissionMode::Manual;
-        cfg.marking.deliminator = "&-=-&".to_string(); // your parser expects this exact token
+        cfg.marking.deliminator = "###".to_string(); // your parser expects this exact token
         // (Other defaults: pass_mark=50, grading_policy=Last, etc.)
 
         cfg.save(module_id, assignment_id)
@@ -304,7 +304,7 @@ mod tests {
     }
 
     fn create_main_content() -> Vec<u8> {
-        br#"
+        br#####"
         public class Main {
             public static void main(String[] args) {
                 String task = args.length > 0 ? args[0] : "task1";
@@ -315,15 +315,15 @@ mod tests {
                 }
             }
             static void runTask1() {
-                System.out.println("&-=-&Task1Subtask1");
+                System.out.println("###Task1Subtask1");
                 System.out.println(HelperOne.subtaskA());
             }
             static void runTask2() {
-                System.out.println("&-=-&Task2Subtask1");
+                System.out.println("###Task2Subtask1");
                 System.out.println(HelperTwo.subtaskX());
             }
-        }"#
-        .to_vec()
+        }"#####
+            .to_vec()
     }
 
     fn create_helper_one_content() -> Vec<u8> {
@@ -396,7 +396,7 @@ mod tests {
         cfg.marking.allow_practice_submissions = allow_practice;
         cfg.marking.pass_mark = 50;
         cfg.marking.grading_policy = GradingPolicy::Last; // same as your previous JSON
-        cfg.marking.deliminator = "&-=-&".to_string();
+        cfg.marking.deliminator = "###".to_string();
 
         cfg.save(module_id, assignment_id)
             .expect("write config.json");
@@ -1443,11 +1443,7 @@ mod tests {
             attempt,
             &format!("{}.txt", output.id),
         );
-        std::fs::write(
-            &out_file_path,
-            "make task1\n&-=-&Subtask 1 Output\nOutput A",
-        )
-        .unwrap();
+        std::fs::write(&out_file_path, "make task1\n###Subtask 1 Output\nOutput A").unwrap();
 
         let root = storage_root();
         let rel_path = out_file_path
@@ -2898,7 +2894,7 @@ mod tests {
 
         // Make sure your runner path is Manual and your delimiter matches memo files
         cfg.project.submission_mode = SubmissionMode::Manual;
-        cfg.marking.deliminator = "&-=-&".to_string();
+        cfg.marking.deliminator = "###".to_string();
 
         // Allow late submissions and make the window permissive for the tests
         cfg.marking.late.allow_late_submissions = true;

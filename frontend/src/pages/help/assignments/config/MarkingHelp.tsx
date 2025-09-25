@@ -68,7 +68,7 @@ const optionRows: Row[] = [
     meaning:
       'Marker your Main prints to split a task into subsections. The text after it becomes the subsection name.',
     options: undefined,
-    def: '&-=-&',
+    def: '###',
   },
   {
     key: 'policy',
@@ -121,7 +121,7 @@ const DEFAULTS_JSON = `{
   "marking": {
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "grading_policy": "last",
     "max_attempts": 10,
     "limit_attempts": false,
@@ -135,7 +135,7 @@ const COMMON_VARIANT_JSON = `{
   "marking": {
     "marking_scheme": "percentage",
     "feedback_scheme": "manual",
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "grading_policy": "best",
     "max_attempts": 3,
     "limit_attempts": true,
@@ -302,7 +302,7 @@ export default function MarkingHelp() {
           needed.
         </li>
         <li>
-          Keep the <b>delimiter</b> in sync with your Main (e.g., <Text code>&-=-&</Text>).
+          Keep the <b>delimiter</b> in sync with your Main (e.g., <Text code>###</Text>).
         </li>
         <li>
           <b>Best</b> encourages iteration; <b>Last</b> fits “final submit” workflows.
@@ -364,7 +364,7 @@ export default function MarkingHelp() {
               <ul className="list-disc pl-5">
                 <li>
                   Ensure your Main prints the same delimiter as configured (e.g.,{' '}
-                  <Text code>&-=-&</Text>).
+                  <Text code>###</Text>).
                 </li>
                 <li>
                   Print the subsection label on the same line after the delimiter, once per

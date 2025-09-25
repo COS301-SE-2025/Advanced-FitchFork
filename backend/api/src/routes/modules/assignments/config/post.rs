@@ -34,7 +34,7 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 ///   "marking": {
 ///     "marking_scheme": "exact",
 ///     "feedback_scheme": "auto",
-///     "deliminator": "&-=-&"
+///     "deliminator": "###"
 ///   }
 /// }
 /// ```

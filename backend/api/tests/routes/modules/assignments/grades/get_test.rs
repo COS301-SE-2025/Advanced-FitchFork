@@ -53,7 +53,7 @@ mod tests {
             "marking": {
                 "marking_scheme": "exact",
                 "feedback_scheme": "auto",
-                "deliminator": "&-=-&",
+                "deliminator": "###",
                 "grading_policy": grading_policy_lower,
                 "max_attempts": 10,
                 "limit_attempts": false,

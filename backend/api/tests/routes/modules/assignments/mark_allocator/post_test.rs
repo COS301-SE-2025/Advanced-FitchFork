@@ -94,11 +94,7 @@ mod tests {
         let memo_dir = memo_output_dir(data.module.id, data.assignment.id);
         std::fs::create_dir_all(&memo_dir).unwrap();
         let memo_file_name = "task_1.txt";
-        std::fs::write(
-            memo_dir.join(memo_file_name),
-            "&-=-& Sub1\nline A\nline B\n",
-        )
-        .unwrap();
+        std::fs::write(memo_dir.join(memo_file_name), "### Sub1\nline A\nline B\n").unwrap();
 
         // 3) Insert memo-output DB row pointing to the file (path relative to storage_root)
         let rel_path = format!(

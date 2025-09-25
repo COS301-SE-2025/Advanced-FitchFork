@@ -135,6 +135,8 @@ pub async fn generate_allocator(
     assignment_id: i64,
     tasks_info: &[(TaskInfo, PathBuf)],
 ) -> Result<MarkAllocator, String> {
+    let default_valgrind_mark_value: f64 = 5.0f64;
+
     // Read config once up-front
     let (separator, want_regex, cover_weight_frac) =
         match ExecutionConfig::get_execution_config(module_id, assignment_id) {
@@ -152,7 +154,7 @@ pub async fn generate_allocator(
 
                 (cfg.marking.deliminator, want_regex, w)
             }
-            Err(_) => ("&-=-&".to_string(), false, 0.10f64), // fallback: 10%
+            Err(_) => ("###".to_string(), false, 0.10f64), // fallback: 10%
         };
 
     let dir = mark_allocator_dir(module_id, assignment_id);
@@ -176,16 +178,17 @@ pub async fn generate_allocator(
             let mut current_section = String::new();
             let mut mark_counter: f64 = 0.0;
 
+            let mut section_counter = 0;
+
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
                 if split.len() > 1 {
                     if !current_section.is_empty() {
-                        let take_count = mark_counter.max(0.0).round() as usize;
                         subsections.push(Subsection {
                             name: current_section.clone(),
                             value: mark_counter,
                             regex: if want_regex {
-                                Some(std::iter::repeat(String::new()).take(take_count).collect())
+                                Some(vec![String::new(); mark_counter.max(0.0f64) as usize])
                             } else {
                                 None
                             },
@@ -193,8 +196,14 @@ pub async fn generate_allocator(
                         });
                         task_value += mark_counter;
                     }
-                    current_section = split.last().unwrap().trim().to_string();
-                    mark_counter = 0.0;
+                    section_counter += 1;
+                    let name = split.last().unwrap().trim();
+                    current_section = if name.is_empty() {
+                        format!("Section {}", section_counter)
+                    } else {
+                        name.to_string()
+                    };
+                    mark_counter = 0.0f64;
                 } else if !line.trim().is_empty() {
                     mark_counter += 1.0;
                 }
@@ -215,6 +224,10 @@ pub async fn generate_allocator(
                 task_value += mark_counter;
             }
 
+            if info.valgrind {
+                task_value += default_valgrind_mark_value;
+            }
+
             base_total += task_value;
         } else if info.code_coverage {
             coverage_indices.push(idx);
@@ -224,7 +237,7 @@ pub async fn generate_allocator(
         if info.valgrind {
             subsections.push(Subsection {
                 name: "Memory Leaks".to_string(),
-                value: 5.0,
+                value: default_valgrind_mark_value,
                 regex: None,
                 feedback: Some("Check for memory leaks with Valgrind".to_string()),
             });

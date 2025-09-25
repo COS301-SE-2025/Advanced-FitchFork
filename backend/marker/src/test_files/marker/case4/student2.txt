@@ -1,6 +1,6 @@
 Sort Numbers
-&-=-&Sort ascending
+###Sort ascending
 1 2 3 4
 5
-&-=-&Sort descending
+###Sort descending
 5 4 3 1 2 
