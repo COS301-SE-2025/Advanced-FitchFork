@@ -264,7 +264,7 @@ pub async fn check_disallowed_code(
                     }
                 };
 
-            // Save the submission with zero mark total preset from allocator
+            // Save the submission with zero mark and total from allocator
             let saved = match AssignmentSubmissionModel::save_file(
                 db,
                 assignment_id,
@@ -289,10 +289,19 @@ pub async fn check_disallowed_code(
                 }
             };
 
-            // Immediately mark as failed_disallowed_code and use the UPDATED model for accurate status
-            let updated = match AssignmentSubmissionModel::set_failed(
+            // Mark as ignored and set status to graded (since it has been processed with 0 marks)
+            let updated = match AssignmentSubmissionModel::set_ignored(db, saved.id, true).await {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set ignored flag: {:?}", e);
+                    saved
+                }
+            };
+
+            // Set status to graded since we've processed it with a 0 mark
+            let updated = match AssignmentSubmissionModel::update_status(
                 db,
-                saved.id,
+                updated.id,
                 assignment_submission::SubmissionStatus::FailedDisallowedCode,
             )
             .await
@@ -300,7 +309,7 @@ pub async fn check_disallowed_code(
                 Ok(u) => u,
                 Err(e) => {
                     eprintln!("Failed to set failed_disallowed_code: {:?}", e);
-                    saved
+                    updated
                 }
             };
 
