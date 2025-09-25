@@ -76,14 +76,14 @@ g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 -c HelperTwo.cpp -o HelperTwo.
 g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 -c HelperThree.cpp -o HelperThree.o
 g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 Main.o HelperOne.o HelperTwo.o HelperThree.o -lgcov -o main
 valgrind --leak-check=full ./main task3
-&-=-&Task3Subtask1
+###Task3Subtask1
 HelperThree: Subtask for Task3
 This as well
-&-=-&Task3Subtask2
+###Task3Subtask2
 HelperOne: Subtask for Task3
 This as well
 And this
-&-=-&Task3Subtask3
+###Task3Subtask3
 
 &FITCHFORK&StandardError
 
@@ -127,16 +127,16 @@ g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 -c HelperTwo.cpp -o HelperTwo.
 g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 -c HelperThree.cpp -o HelperThree.o
 g++ -fprofile-arcs -ftest-coverage -O0 -std=c++17 Main.o HelperOne.o HelperTwo.o HelperThree.o -lgcov -o main
 valgrind --leak-check=full ./main task2
-&-=-&Task2Subtask1
+###Task2Subtask1
 HelperTwo: Subtask for Task2
 This as well
 And this
-&-=-&Task2Subtask2
+###Task2Subtask2
 HelperThree: Subtask for Task2
 This as well
 And this
 Additional wrong line
-&-=-&Task2Subtask3
+###Task2Subtask3
 HelperOne: Subtask for Task2
 This as well
 And this

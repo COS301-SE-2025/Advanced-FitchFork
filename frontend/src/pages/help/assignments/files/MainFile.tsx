@@ -67,7 +67,7 @@ const langCols = [
 // Samples — delimiter is for subsections only.
 const JAVA_TASKED_SAMPLE = `public class Main {
     // Delimiter prints a subsection label. Whatever text you print becomes the subsection name.
-    private static void delim(String label) { System.out.println("&-=-& " + label); }
+    private static void delim(String label) { System.out.println("### " + label); }
 
     private static void task1() {
         // Subsections inside Task 1
@@ -102,7 +102,7 @@ const CPP_TASKED_SAMPLE = `// Main.cpp
 using namespace std;
 
 // Delimiter prints a subsection label. Whatever text you print becomes the subsection name.
-static void delim(const string& label){ cout << "&-=-& " << label << "\\n"; }
+static void delim(const string& label){ cout << "### " << label << "\\n"; }
 
 static void task1(){
   // Subsections inside Task 1
@@ -366,13 +366,13 @@ export default function MainFile() {
         </Paragraph>
         <CodeEditor
           language="plaintext"
-          value={`&-=-& Step 1
+          value={`### Step 1
 42
-&-=-& Step 2
+### Step 2
 OK
-&-=-& Step 1
+### Step 1
 hello
-&-=-& Step 2
+### Step 2
 12`}
           height={200}
           readOnly

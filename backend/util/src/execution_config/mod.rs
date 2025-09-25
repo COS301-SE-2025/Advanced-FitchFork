@@ -461,7 +461,7 @@ fn default_feedback_scheme() -> FeedbackScheme {
 }
 
 fn default_deliminator() -> String {
-    "&-=-&".to_string()
+    "###".to_string()
 }
 
 fn default_grading_policy() -> GradingPolicy {

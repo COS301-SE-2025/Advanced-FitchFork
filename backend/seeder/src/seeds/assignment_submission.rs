@@ -266,7 +266,7 @@ struct HelperThree {
 #endif
 "#;
 
-                let main_cpp = r#"
+                let main_cpp = r####"
 #include <iostream>
 #include <string>
 #include "HelperOne.h"
@@ -274,17 +274,17 @@ struct HelperThree {
 #include "HelperThree.h"
 
 void runTask1() {
-    std::cout << "&-=-&Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+    std::cout << "###Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
 }
 
 void runTask2() {
-    std::cout << "&-=-&Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
-        std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskZ() << std::endl;
+    std::cout << "###Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+        std::cout << "###Task3Subtask2\n" << HelperOne::subtaskZ() << std::endl;
 }
 
 void runTask3() {
-    std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
-    std::cout << "&-=-&Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+    std::cout << "###Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "###Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
 }
 
 int main() {
@@ -293,7 +293,7 @@ int main() {
     runTask3();
     return 0;
 }
-"#;
+"####;
 
                 zip.start_file("HelperOne.cpp", options).unwrap();
                 zip.write_all(helper_one_cpp.as_bytes()).unwrap();

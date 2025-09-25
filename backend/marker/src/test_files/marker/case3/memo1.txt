@@ -1,5 +1,5 @@
 FizzBuzz
-&-=-&Output Fizz
+###Output Fizz
 Fizz
-&-=-&Output Buzz
+###Output Buzz
 Buzz 

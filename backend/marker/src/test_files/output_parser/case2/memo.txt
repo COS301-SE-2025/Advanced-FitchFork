@@ -1,5 +1,5 @@
 javac … && java Main task1
-&-=-&Sub1
+###Sub1
 Line A
-&-=-&Sub2
+###Sub2
 Line B

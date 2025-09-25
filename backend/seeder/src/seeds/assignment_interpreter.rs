@@ -83,7 +83,7 @@ fn create_interpreter_zip_cpp() -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(&mut buf);
         let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-        let interpreter_cpp = r##"
+        let interpreter_cpp = r#####"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -112,7 +112,7 @@ std::string randomSubtaskName(const std::string& task, int index) {
 void writeTask(std::ostream& out, const std::string& taskName, const std::vector<std::string>& calls) {
     out << "static void run" << taskName << "() {\n";
     for (size_t i = 0; i < calls.size(); ++i) {
-        out << "    std::cout << \"&-=-&" << randomSubtaskName(taskName, i) << "\" << std::endl;\n";
+        out << "    std::cout << \"###" << randomSubtaskName(taskName, i) << "\" << std::endl;\n";
         out << "    std::cout << " << calls[i] << " << std::endl;\n";
     }
     out << "}\n\n";
@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-"##;
+"#####;
 
         zip.start_file("interpreter.cpp", options).unwrap();
         zip.write_all(interpreter_cpp.as_bytes()).unwrap();
@@ -202,7 +202,7 @@ fn create_gatlam_interpreter_zip() -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(&mut buf);
         let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-        let main_java = r#"
+        let main_java = r####"
 import java.util.*;
 
 public class Interpreter {
@@ -240,7 +240,7 @@ public class Interpreter {
         System.out.println("    public static void run" + taskName + "() {");
         System.out.println("        StudentSolution solution = new StudentSolution();");
         for (int i = 0; i < calls.size(); i++) {
-            System.out.println("        System.out.println(\"&-=-&" + randomSubtaskName(taskName, i) + "\");");
+            System.out.println("        System.out.println(\"###" + randomSubtaskName(taskName, i) + "\");");
             System.out.println("        System.out.println(" + calls.get(i) + ");");
         }
         System.out.println("    }");
@@ -293,7 +293,7 @@ public class Interpreter {
         System.out.println("}");
     }
 }
-"#;
+"####;
 
         zip.start_file("Interpreter.java", options).unwrap();
         zip.write_all(main_java.as_bytes()).unwrap();

@@ -128,7 +128,7 @@ pub struct TaskDetailResponse {
 /// - The mark allocator is **optional**. If absent or if the task is not defined within it, the
 ///   endpoint still returns `200 OK` with `"subsections": []`.
 /// - `code_coverage: true` marks this task as a **coverage-type** task (special handling by the evaluator).
-/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"&-=-&"`).
+/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"###"`).
 pub async fn get_task_details(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
@@ -234,7 +234,7 @@ pub async fn get_task_details(
     // Load ExecutionConfig delimiter
     let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(cfg) => cfg.marking.deliminator,
-        Err(_) => "&-=-&".to_string(),
+        Err(_) => "###".to_string(),
     };
 
     // Split memo into chunks per subsection; drop the leading chunk before the first delimiter

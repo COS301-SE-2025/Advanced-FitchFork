@@ -96,7 +96,7 @@ mod tests {
         let memo_file_name = "task_1.txt";
         std::fs::write(
             memo_dir.join(memo_file_name),
-            "&-=-& Sub1\nline A\nline B\n",
+            "### Sub1\nline A\nline B\n",
         )
         .unwrap();
 

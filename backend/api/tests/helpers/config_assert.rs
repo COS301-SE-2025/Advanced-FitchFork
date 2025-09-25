@@ -13,7 +13,7 @@ pub fn assert_default_config(d: &Value) {
     // ---------- marking ----------
     assert_eq!(d["marking"]["marking_scheme"], "exact");
     assert_eq!(d["marking"]["feedback_scheme"], "auto");
-    assert_eq!(d["marking"]["deliminator"], "&-=-&");
+    assert_eq!(d["marking"]["deliminator"], "###");
     assert_eq!(d["marking"]["grading_policy"], "last");
     assert_eq!(d["marking"]["max_attempts"], 10);
     assert_eq!(d["marking"]["limit_attempts"], false);

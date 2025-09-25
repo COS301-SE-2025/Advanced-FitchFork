@@ -4,7 +4,7 @@ use linked_list::LinkedList;
 use std::env;
 
 // Keep delimiter consistent with other languages
-const DELIM: &str = "&-=-&"; // matches ExecutionConfig.default_deliminator()
+const DELIM: &str = "###"; // matches ExecutionConfig.default_deliminator()
 
 fn section(name: &str) {
     println!("{} {}", DELIM, name);
@@ -17,7 +17,9 @@ fn print_list<T: std::fmt::Display>(lst: &LinkedList<T>, label: &str) {
     print!("[");
     let mut first = true;
     for v in lst.to_vec() {
-        if !first { print!(" "); }
+        if !first {
+            print!(" ");
+        }
         first = false;
         print!("{}", v);
     }
@@ -45,7 +47,11 @@ fn task1_basic_ops() {
 
     section("pop_front");
     let popped = lst.pop_front();
-    println!("ok={} popped={}", popped.is_some(), popped.unwrap_or_default());
+    println!(
+        "ok={} popped={}",
+        popped.is_some(),
+        popped.unwrap_or_default()
+    );
     print_list(&lst, "after-pop");
 
     section("clear");
@@ -66,7 +72,9 @@ fn task2_insert_erase() {
     section("start-task2");
 
     let mut lst = LinkedList::new();
-    for i in 1..=5 { lst.push_back(i); }
+    for i in 1..=5 {
+        lst.push_back(i);
+    }
     print_list(&lst, "seed");
 
     section("insert");
@@ -78,11 +86,11 @@ fn task2_insert_erase() {
     section("erase");
     println!("ok={}", lst.remove_at(0).is_ok());
     println!("ok={}", lst.remove_at(2).is_ok());
-    println!("ok={}", lst.remove_at(lst.len()-1).is_ok());
+    println!("ok={}", lst.remove_at(lst.len() - 1).is_ok());
     print_list(&lst, "after-erase");
 
     section("erase-tail-then-push");
-    let ok_tail = lst.remove_at(lst.len()-1).is_ok();
+    let ok_tail = lst.remove_at(lst.len() - 1).is_ok();
     println!("ok={}", ok_tail);
     lst.push_back(999);
     print_list(&lst, "after-erase-tail-then-push");
@@ -92,7 +100,9 @@ fn task3_copy_move() {
     section("start-task3");
 
     let mut a = LinkedList::new();
-    for i in 0..4 { a.push_back(i*10); }
+    for i in 0..4 {
+        a.push_back(i * 10);
+    }
     print_list(&a, "a");
 
     section("copy-ctor");

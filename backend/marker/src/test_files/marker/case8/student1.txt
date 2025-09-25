@@ -1,5 +1,5 @@
 BadMemo
-&-=-&First
+###First
 foo
-&-=-&Second
+###Second
 bar 

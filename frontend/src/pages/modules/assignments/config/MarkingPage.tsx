@@ -177,7 +177,7 @@ export default function MarkingPage() {
           rules={[{ required: true, message: 'Enter a delimiter string' }]}
           extra="Used to split output sections when parsing results."
         >
-          <Input className="w-full" placeholder="e.g., &-=-&" />
+          <Input className="w-full" placeholder="e.g., ###" />
         </Form.Item>
 
         {/* Disallowed code substrings */}

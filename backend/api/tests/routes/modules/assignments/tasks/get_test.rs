@@ -156,7 +156,7 @@ mod tests {
 
         let memo_file_path = memo_dir.join("task_1.txt");
         let memo_content =
-            "Overall Feedback\n&-=-&\nFeedback for Subsection A\n&-=-&\nFeedback for Subsection B";
+            "Overall Feedback\n###\nFeedback for Subsection A\n###\nFeedback for Subsection B";
         fs::write(&memo_file_path, memo_content).expect("Failed to write task memo file");
 
         TestData {

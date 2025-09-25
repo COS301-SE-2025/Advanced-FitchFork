@@ -154,7 +154,7 @@ pub async fn generate_allocator(
 
                 (cfg.marking.deliminator, want_regex, w)
             }
-            Err(_) => ("&-=-&".to_string(), false, 0.10), // fallback: 10%
+            Err(_) => ("###".to_string(), false, 0.10), // fallback: 10%
         };
 
     let dir = mark_allocator_dir(module_id, assignment_id);

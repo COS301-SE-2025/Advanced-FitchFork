@@ -92,7 +92,7 @@ pub async fn get_all_memo_outputs(
     // Load separator from execution config (once)
     let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(config) => config.marking.deliminator,
-        Err(_) => "&-=-&".to_string(),
+        Err(_) => "###".to_string(),
     };
 
     let mut results = Vec::new();
