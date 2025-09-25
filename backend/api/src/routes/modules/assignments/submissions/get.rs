@@ -21,7 +21,10 @@ use axum::{
 use chrono::{DateTime, Utc};
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_submission::{self, Column as SubmissionColumn, Entity as SubmissionEntity, Model as SubmissionModel, SubmissionStatus},
+    assignment_submission::{
+        self, Column as SubmissionColumn, Entity as SubmissionEntity, Model as SubmissionModel,
+        SubmissionStatus,
+    },
     assignment_submission_output::Model as SubmissionOutput,
     assignment_task, user,
     user_module_role::{self, Role},

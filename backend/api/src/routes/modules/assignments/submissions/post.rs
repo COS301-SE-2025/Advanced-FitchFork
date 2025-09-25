@@ -1,8 +1,6 @@
 use super::common::{MarkSummary, SubmissionDetailResponse};
-use crate::{
-    auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
-    ws::modules::assignments::submissions::topics::{submission_staff_topic, submission_topic},
-};
+use crate::ws::submissions::{emit as sub_emit, payload as sub_payload};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
     Json,
     extract::{Extension, Multipart, Path, Query, State},
@@ -16,7 +14,7 @@ use db::models::assignment_task;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
-    user
+    user,
 };
 use db::models::{assignment_memo_output, assignment_submission::SubmissionStatus};
 use marker::MarkingJob;
@@ -97,16 +95,39 @@ const ERR_LATE_NOT_ALLOWED: &str = "Late submissions are not allowed";
 // Helper Functions
 // ============================================================================
 
-fn status_is_failed(status: &SubmissionStatus) -> bool {
-    matches!(
-        status,
-        SubmissionStatus::FailedUpload
-            | SubmissionStatus::FailedCompile
-            | SubmissionStatus::FailedExecution
-            | SubmissionStatus::FailedGrading
-            | SubmissionStatus::FailedInternal
-            | SubmissionStatus::FailedDisallowedCode
-    )
+#[inline]
+async fn emit_status_minimal(
+    app: &AppState,
+    module_id: i64,
+    assignment_id: i64,
+    user_id: i64,
+    submission_id: i64,
+    attempt: i64,
+    status: SubmissionStatus,
+    mark: Option<(i64, i64)>, // (earned, total)
+    message: Option<String>,
+) {
+    let username_opt = user::Entity::find_by_id(user_id)
+        .one(app.db())
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.username);
+
+    let mark_payload = mark.map(|(earned, total)| sub_payload::MarkSummary { earned, total });
+
+    let payload = sub_payload::SubmissionStatusPayload {
+        module_id,
+        assignment_id,
+        submission_id,
+        username: username_opt,
+        attempt,
+        status: status.to_string(),
+        mark: mark_payload,
+        message,
+    };
+
+    sub_emit::status(app.ws(), assignment_id, user_id, payload).await;
 }
 
 fn within_late_window(
@@ -130,78 +151,6 @@ fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i6
         (earned, None)
     }
 }
-
-#[derive(Serialize)]
-struct WsMark {
-    earned: i64,
-    total: i64,
-}
-
-#[inline]
-async fn broadcast_to_staff(
-    app: &AppState,
-    module_id: i64,
-    assignment_id: i64,
-    payload: serde_json::Value,
-) {
-    let topic = submission_staff_topic(module_id, assignment_id);
-    app.ws().broadcast(&topic, payload.to_string()).await;
-}
-
-async fn emit_submission_status(
-    app: &AppState,
-    module_id: i64,
-    assignment_id: i64,
-    user_id: i64,
-    submission_id: i64,
-    status: SubmissionStatus,
-    message: Option<String>,
-    mark: Option<WsMark>,
-) {
-    let topic = submission_topic(module_id, assignment_id, user_id);
-
-    let mut payload = serde_json::json!({
-        "event": "submission_status",
-        "submission_id": submission_id,
-        "status": status.to_string(),
-        "ts": chrono::Utc::now().to_rfc3339(),
-    });
-
-    if status_is_failed(&status) {
-        if let Some(msg) = message {
-            if let Some(obj) = payload.as_object_mut() {
-                obj.insert("message".into(), serde_json::Value::String(msg));
-            }
-        }
-    }
-
-    if let Some(m) = mark {
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert(
-                "mark".into(),
-                serde_json::json!({ "earned": m.earned, "total": m.total }),
-            );
-        }
-    }
-
-    // (1) per-user topic (unchanged)
-    app.ws().broadcast(&topic, payload.to_string()).await;
-
-    // (2) staff topic → include user_id and user_username
-    let mut staff_payload = payload.clone();
-    if let Some(obj) = staff_payload.as_object_mut() {
-        obj.insert("user_id".into(), serde_json::json!(user_id));
-
-        // look up username (best-effort)
-        if let Ok(Some(u)) = user::Entity::find_by_id(user_id).one(app.db()).await {
-            obj.insert("user_username".into(), serde_json::json!(u.username));
-        }
-    }
-
-    broadcast_to_staff(app, module_id, assignment_id, staff_payload).await;
-}
-
-
 
 /// Applies the appropriate comparator to a marking job based on the scheme
 fn apply_comparator<'a>(marking_job: MarkingJob<'a>, scheme: &MarkingScheme) -> MarkingJob<'a> {
@@ -1248,21 +1197,41 @@ pub async fn submit_assignment(
     {
         DisallowedCodeCheckResult::Clean => {}
         DisallowedCodeCheckResult::DisallowedFound(response) => {
-            // WS: failed_upload + zero mark
-            emit_submission_status(
-                &app_state,
+            let username_opt = user::Entity::find_by_id(claims.sub)
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|u| u.username);
+
+            // staff sees a "new submission" (even though it immediately failed policy)
+            // (do NOT emit a status for staff here)
+            let new_payload = sub_payload::SubmissionNewPayload {
                 module_id,
                 assignment_id,
-                claims.sub,
-                response.id,
-                SubmissionStatus::FailedUpload,
-                Some("Disallowed code patterns detected".into()),
-                Some(WsMark {
+                submission_id: response.id,
+                username: username_opt.clone(),
+                attempt: response.attempt,
+                is_practice: response.is_practice,
+                created_at: response.created_at.clone(),
+            };
+            sub_emit::new_submission_staff(app_state.ws(), assignment_id, new_payload).await;
+
+            // owner gets the immediate FailedUpload status
+            let status_payload = sub_payload::SubmissionStatusPayload {
+                module_id,
+                assignment_id,
+                submission_id: response.id,
+                username: username_opt,
+                attempt: response.attempt,
+                status: SubmissionStatus::FailedUpload.to_string(),
+                mark: Some(sub_payload::MarkSummary {
                     earned: 0,
                     total: response.mark.total,
                 }),
-            )
-            .await;
+                message: Some("Disallowed code patterns detected".into()),
+            };
+            sub_emit::status_owner(app_state.ws(), assignment_id, claims.sub, status_payload).await;
 
             let body = json!({
                 "id": response.id,
@@ -1317,18 +1286,37 @@ pub async fn submit_assignment(
         }
     };
 
-    // emit QUEUED immediately for both modes
-    emit_submission_status(
-        &app_state,
+    let username_opt = user::Entity::find_by_id(claims.sub)
+        .one(db)
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.username);
+
+    // staff sees a "new submission" event (no status at creation)
+    let new_payload = sub_payload::SubmissionNewPayload {
         module_id,
         assignment_id,
-        claims.sub,
-        submission.id,
-        SubmissionStatus::Queued,
-        None,
-        None,
-    )
-    .await;
+        submission_id: submission.id,
+        username: username_opt.clone(),
+        attempt: submission.attempt,
+        is_practice,
+        created_at: submission.created_at.to_rfc3339(),
+    };
+    sub_emit::new_submission_staff(app_state.ws(), assignment_id, new_payload).await;
+
+    // owner gets the initial Queued status
+    let status_payload = sub_payload::SubmissionStatusPayload {
+        module_id,
+        assignment_id,
+        submission_id: submission.id,
+        username: username_opt,
+        attempt: submission.attempt,
+        status: SubmissionStatus::Queued.to_string(),
+        mark: None,
+        message: None,
+    };
+    sub_emit::status_owner(app_state.ws(), assignment_id, claims.sub, status_payload).await;
 
     // ====== BRANCH: async vs blocking ======
     if async_mode {
@@ -1432,15 +1420,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedUpload,
-                Some("Late submissions are not allowed for this assignment".into()),
                 None,
+                Some("Late submissions are not allowed for this assignment".into()),
             )
             .await;
 
@@ -1454,12 +1443,13 @@ async fn run_submission_pipeline(
         .await
         .is_ok()
     {
-        emit_submission_status(
+        emit_status_minimal(
             app,
             module_id,
             assignment_id,
             user_id,
             submission.id,
+            submission.attempt,
             SubmissionStatus::Running,
             None,
             None,
@@ -1468,7 +1458,7 @@ async fn run_submission_pipeline(
     }
 
     // execute
-    if let Err(exec_err) =
+    if let Err(_) =
         process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
     {
         let _ = AssignmentSubmissionModel::set_failed(
@@ -1478,15 +1468,16 @@ async fn run_submission_pipeline(
         )
         .await;
 
-        emit_submission_status(
+        emit_status_minimal(
             app,
             module_id,
             assignment_id,
             user_id,
             submission.id,
+            submission.attempt,
             SubmissionStatus::FailedExecution,
-            Some(exec_err.to_string()),
             None,
+            Some("Failed to run code for submission".into()),
         )
         .await;
 
@@ -1494,12 +1485,13 @@ async fn run_submission_pipeline(
     }
 
     // grading start
-    emit_submission_status(
+    emit_status_minimal(
         app,
         module_id,
         assignment_id,
         user_id,
         submission.id,
+        submission.attempt,
         SubmissionStatus::Grading,
         None,
         None,
@@ -1509,7 +1501,7 @@ async fn run_submission_pipeline(
     // paths
     let (_, _, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
         Ok(paths) => paths,
-        Err(e) => {
+        Err(_) => {
             let _ = AssignmentSubmissionModel::set_failed(
                 db,
                 submission.id,
@@ -1517,15 +1509,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedInternal,
-                Some(e.clone()),
                 None,
+                Some("Failed to load mark allocator".into()),
             )
             .await;
 
@@ -1545,24 +1538,21 @@ async fn run_submission_pipeline(
     .await
     {
         Ok(resp) => {
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::Graded,
+                Some((resp.mark.earned, resp.mark.total)),
                 None,
-                Some(WsMark {
-                    earned: resp.mark.earned,
-                    total: resp.mark.total,
-                }),
             )
             .await;
-
             Ok(resp)
         }
-        Err(e) => {
+        Err(_) => {
             let _ = AssignmentSubmissionModel::set_failed(
                 db,
                 submission.id,
@@ -1570,15 +1560,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedGrading,
-                Some(e.clone()),
                 None,
+                Some("Failed to mark submission".into()),
             )
             .await;
 
@@ -1846,7 +1837,9 @@ pub async fn resubmit_submissions(
         Err(_) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ResubmitResponse>::error("Assignment not found")),
+                Json(ApiResponse::<ResubmitResponse>::error(
+                    "Assignment not found",
+                )),
             );
         }
     };
@@ -1880,17 +1873,20 @@ pub async fn resubmit_submissions(
 
     for sid in submission_ids {
         // fetch submission
-        let submission = match assignment_submission::Entity::find_by_id(sid)
-            .one(db)
-            .await
-        {
+        let submission = match assignment_submission::Entity::find_by_id(sid).one(db).await {
             Ok(Some(s)) => s,
             Ok(None) => {
-                failed.push(FailedOperation { id: Some(sid), error: "Submission not found".into() });
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: "Submission not found".into(),
+                });
                 continue;
             }
             Err(e) => {
-                failed.push(FailedOperation { id: Some(sid), error: format!("Database error: {e}") });
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: format!("Database error: {e}"),
+                });
                 continue;
             }
         };
@@ -1934,20 +1930,23 @@ pub async fn resubmit_submissions(
             {
                 DisallowedCodeCheckResult::Clean => {}
                 DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                    emit_submission_status(
+                    emit_status_minimal(
                         &app_state,
                         module_id,
                         assignment_id,
                         submission.user_id,
                         submission.id,
+                        submission.attempt,
                         SubmissionStatus::FailedUpload,
+                        None,
                         Some("Disallowed code patterns detected".into()),
-                        None, // no mark payload here during resubmit
-                    ).await;
-
+                    )
+                    .await;
                     failed.push(FailedOperation {
                         id: Some(sid),
-                        error: "Submission rejected: disallowed code patterns detected (marked as 0)".into(),
+                        error:
+                            "Submission rejected: disallowed code patterns detected (marked as 0)"
+                                .into(),
                     });
                     continue;
                 }
@@ -1964,7 +1963,10 @@ pub async fn resubmit_submissions(
 
         // clear old outputs before launching
         if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
-            failed.push(FailedOperation { id: Some(sid), error: e });
+            failed.push(FailedOperation {
+                id: Some(sid),
+                error: e,
+            });
             continue;
         }
 
@@ -1975,16 +1977,18 @@ pub async fn resubmit_submissions(
         let config_bg = config.clone();
         let submission_bg = submission.clone();
 
-        emit_submission_status(
+        emit_status_minimal(
             &app_state,
             module_id,
             assignment_id,
             submission.user_id,
             submission.id,
+            submission.attempt,
             SubmissionStatus::Queued,
             None,
             None,
-        ).await;
+        )
+        .await;
 
         tokio::spawn(async move {
             // Full pipeline (exec + grade + WS statuses). This does its own status emits.
@@ -2017,5 +2021,8 @@ pub async fn resubmit_submissions(
         response.failed.len()
     );
 
-    (StatusCode::OK, Json(ApiResponse::success(response, &message)))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success(response, &message)),
+    )
 }

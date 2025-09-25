@@ -12,11 +12,12 @@ use axum::{
 };
 use db::models::{
     ticket_messages::Model as TicketMessageModel,
-    user::{Column as UserColumn, Entity as UserEntity, Model as UserModel},
+    user::{Column as UserColumn, Entity as UserEntity},
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
 
+use crate::ws::tickets::{emit as t_emit, payload as t_payload};
 use crate::{
     auth::AuthUser,
     response::ApiResponse,
@@ -24,7 +25,6 @@ use crate::{
         common::is_valid,
         ticket_messages::common::{MessageResponse, UserResponse},
     },
-    ws::tickets::topics::ticket_chat_topic,
 };
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages
@@ -118,13 +118,12 @@ pub async fn create_message(
         }
     };
 
-    let user: Option<UserModel> = UserEntity::find()
+    let user = match UserEntity::find()
         .filter(UserColumn::Id.eq(user_id))
         .one(db)
         .await
-        .unwrap_or(None);
-
-    let user = match user {
+        .unwrap_or(None)
+    {
         Some(u) => u,
         None => {
             return (
@@ -146,27 +145,37 @@ pub async fn create_message(
         }
     };
 
+    // ---- Clone the owned Strings BEFORE first move ----
+    let msg_content = message.content.clone();
+    let user_username = user.username.clone();
+
+    // HTTP response
     let response = MessageResponse {
         id: message.id,
         ticket_id: message.ticket_id,
-        content: message.content,
+        content: msg_content.clone(), // use the clone
         created_at: message.created_at.to_rfc3339(),
         updated_at: message.updated_at.to_rfc3339(),
         user: Some(UserResponse {
             id: user.id,
-            username: user.username,
+            username: user_username.clone(), // use the clone
         }),
     };
 
-    // ---- WebSocket broadcast: notify subscribers on this ticket's topic ----
-    // Topic: ws/tickets/{ticket_id}
-    let topic = ticket_chat_topic(ticket_id);
+    // WS payload (typed)
     let ws = app_state.ws_clone();
-    let event_json = serde_json::json!({
-        "event": "message_created",
-        "payload": &response
-    });
-    ws.broadcast(&topic, event_json.to_string()).await;
+    let payload = t_payload::Message {
+        id: message.id,
+        ticket_id: message.ticket_id,
+        content: msg_content, // move the clone here
+        created_at: message.created_at.to_rfc3339(),
+        updated_at: message.updated_at.to_rfc3339(),
+        user: Some(t_payload::LightUser {
+            id: user.id,
+            username: user_username, // move the clone here
+        }),
+    };
+    t_emit::message_created(&ws, payload).await;
 
     (
         StatusCode::OK,

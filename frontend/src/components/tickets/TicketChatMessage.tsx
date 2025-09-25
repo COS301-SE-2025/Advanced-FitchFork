@@ -1,3 +1,4 @@
+// src/components/tickets/TicketChatMessage.tsx
 import React from 'react';
 import { Input, Popconfirm, Tooltip, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -5,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import dayjs from 'dayjs';
 import UserAvatar from '@/components/common/UserAvatar';
-import type { ChatEntry } from '@/hooks/tickets';
+import type { ChatEntry } from '@/types/modules/assignments/tickets';
 
 const { Text } = Typography;
 
@@ -68,7 +69,7 @@ const IconBtn = ({ onClick, title, danger, confirm, children }: IconBtnProps) =>
   );
 };
 
-// ----- small helper so “same” ignores trivial whitespace/CRLF differences
+// normalize whitespace when checking for “unchanged”
 const norm = (s: string) => s.replace(/\r\n/g, '\n').trim();
 
 const TicketChatMessage: React.FC<Props> = ({
@@ -112,7 +113,7 @@ const TicketChatMessage: React.FC<Props> = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (!unchanged) onSave(); // block save if content unchanged
+                if (!unchanged) onSave();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 onCancel();
@@ -130,7 +131,7 @@ const TicketChatMessage: React.FC<Props> = ({
             • enter to{' '}
             <button
               onClick={() => {
-                if (!unchanged) onSave(); // block click if unchanged
+                if (!unchanged) onSave();
               }}
               disabled={unchanged}
               className={[
@@ -186,7 +187,10 @@ const TicketChatMessage: React.FC<Props> = ({
       className={`group flex items-start gap-2 px-3 transition-colors pt-1 mt-3 ${sharedBg}`}
     >
       <UserAvatar
-        user={{ id: message.userId ?? -1, username: message.sender }}
+        user={{
+          id: message.user?.id ?? -1,
+          username: message.sender ?? 'Unknown',
+        }}
         className="flex-shrink-0 pt-1"
       />
 
@@ -195,7 +199,7 @@ const TicketChatMessage: React.FC<Props> = ({
         <div className="flex items-center justify-between mb-0.5">
           <div className="flex items-center gap-2">
             <Text strong className="text-sm">
-              {message.sender}
+              {message.sender ?? 'Unknown'}
             </Text>
             <Text type="secondary" className="text-xs">
               {timeStr}

@@ -1,4 +1,3 @@
-// helpers/ws.rs
 use axum::{
     body::Body,
     http::{Request, Response},
@@ -23,15 +22,17 @@ pub async fn spawn_server(
         axum::serve(listener, service).await.unwrap();
     });
 
+    // small settle delay
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     addr
 }
 
-/// Connects to a WebSocket route at `/ws/{topic}` with an optional `?token=...`
+/// Connect to the multiplexed WS entrypoint at `/ws`
+/// Auth is via HTTP guard, so pass `Authorization: Bearer <token>` header.
+/// (No per-topic path; you subscribe after connecting.)
 pub async fn connect_ws(
     addr: &str,
-    topic: &str,
-    token: Option<&str>, // <— accept Option<&str>
+    token: Option<&str>,
 ) -> Result<
     (
         WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -39,13 +40,16 @@ pub async fn connect_ws(
     ),
     tokio_tungstenite::tungstenite::Error,
 > {
-    let base = format!("ws://{}/ws/{}", addr, topic);
-    let url = if let Some(tok) = token {
-        Url::parse(&format!("{base}?token={tok}")).unwrap()
-    } else {
-        Url::parse(&base).unwrap()
-    };
+    let url = Url::parse(&format!("ws://{}/ws", addr)).unwrap();
 
-    let req = url.to_string().into_client_request().unwrap();
+    // Build the upgrade request and inject Authorization if provided
+    let mut req = url.to_string().into_client_request().unwrap();
+
+    if let Some(tok) = token {
+        use tokio_tungstenite::tungstenite::http::header::{AUTHORIZATION, HeaderValue};
+        let hv = HeaderValue::from_str(&format!("Bearer {}", tok)).unwrap();
+        req.headers_mut().insert(AUTHORIZATION, hv);
+    }
+
     connect_async(req).await
 }

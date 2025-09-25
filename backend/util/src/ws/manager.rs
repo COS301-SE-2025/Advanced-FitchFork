@@ -58,6 +58,14 @@ impl WebSocketManager {
         }
     }
 
+    /// Broadcast a JSON-serializable value; silently ignores serialization errors.
+    pub async fn broadcast_json<T: serde::Serialize>(&self, topic: &str, value: &T) {
+        match serde_json::to_string(value) {
+            Ok(s) => self.broadcast(topic, s).await,
+            Err(e) => tracing::warn!("WS JSON serialize error on topic '{topic}': {e}"),
+        }
+    }
+
     // -------------------- Presence API --------------------
 
     /// Increment presence refcount for `user_id` on `topic`.

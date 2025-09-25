@@ -20,7 +20,15 @@ import type { AttendanceSession } from '@/types/modules/attendance';
 import { getAttendanceSession, getCurrentAttendanceCode } from '@/services/modules/attendance/get';
 import { editAttendanceSession } from '@/services/modules/attendance/put';
 import { markAttendanceByUsername } from '@/services/modules/attendance/post';
-import { useAttendanceSessionWs } from '@/hooks/useAttendanceSessionWs';
+
+// NEW: WS context
+import { useWsEvents } from '@/ws/hooks';
+import { Topics } from '@/ws/topics';
+import type {
+  AttendanceMarked as WsAttendanceMarked,
+  AttendanceSessionUpdated as WsSessionUpdated,
+  AttendanceSessionDeleted as WsSessionDeleted,
+} from '@/ws/types';
 
 export default function AttendanceSessionProjector() {
   const navigate = useNavigate();
@@ -54,6 +62,7 @@ export default function AttendanceSessionProjector() {
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId, session_id]);
 
   // Rotation ticker
@@ -92,7 +101,7 @@ export default function AttendanceSessionProjector() {
     }
   };
 
-  // Refresh at rotation boundaries (tighter padding reduces race windows)
+  // Refresh at rotation boundaries
   useEffect(() => {
     if (!session?.active) return;
     let timerId: number | undefined;
@@ -113,7 +122,7 @@ export default function AttendanceSessionProjector() {
     return () => {
       if (timerId !== undefined) window.clearTimeout(timerId);
     };
-  }, [session?.id, session?.rotation_seconds, session?.active]);
+  }, [session?.id, session?.rotation_seconds, session?.active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build scan URL
   const scanUrl = useMemo(() => {
@@ -176,14 +185,13 @@ export default function AttendanceSessionProjector() {
     }
     try {
       setMarkLoading(true);
-      // allowInactive defaults to true in the service; omit the 4th arg
       const res = await markAttendanceByUsername(moduleId, session.id, uname);
       setMarkLoading(false);
       if (res.success) {
         message.success('Attendance recorded');
         setMarkOpen(false);
         setMarkUsername('');
-        // Count will update via WS attendance_marked broadcast
+        // Count will update via WS broadcast
       } else {
         message.error(res.message || 'Failed to record attendance');
       }
@@ -193,21 +201,14 @@ export default function AttendanceSessionProjector() {
     }
   };
 
-  // WebSocket updates
-  useAttendanceSessionWs({
-    sessionId: session?.id,
-    token: auth.token ?? null,
-    onMarked: (p) => {
-      setSession((prev) =>
-        prev
-          ? ({
-              ...prev,
-              attended_count: typeof p.count === 'number' ? p.count : prev.attended_count + 1,
-            } as AttendanceSession)
-          : prev,
-      );
-    },
-    onSessionUpdated: (p) => {
+  /* ─────────────────────────────────────────────
+     NEW: WebSocket updates via useWsEvents
+     Topic: attendance:session:{session_id}
+     Events: attendance.session_updated, attendance.marked, attendance.session_deleted
+  ───────────────────────────────────────────── */
+  const sidNum = Number(session_id);
+  useWsEvents(sidNum ? [Topics.attendanceSession(sidNum)] : [], {
+    'attendance.session_updated': (p: WsSessionUpdated) => {
       setSession((prev) => {
         if (!prev) return prev;
         const updates: Partial<AttendanceSession> = {};
@@ -222,6 +223,8 @@ export default function AttendanceSessionProjector() {
           updates.created_from_ip = (p.created_from_ip ?? undefined) as any;
 
         const next = { ...prev, ...updates } as AttendanceSession;
+
+        // keep code in sync with active flips
         if (typeof p.active === 'boolean') {
           if (p.active) void fetchCode();
           else setCurrentCode('');
@@ -229,13 +232,25 @@ export default function AttendanceSessionProjector() {
         return next;
       });
     },
-    onSessionDeleted: (p) => {
+
+    'attendance.marked': (p: WsAttendanceMarked) => {
+      setSession((prev) =>
+        prev
+          ? ({
+              ...prev,
+              attended_count:
+                typeof p.count === 'number' ? Number(p.count) : (prev.attended_count ?? 0) + 1,
+            } as AttendanceSession)
+          : prev,
+      );
+    },
+
+    'attendance.session_deleted': (p: WsSessionDeleted) => {
       if (session?.id && p.session_id === session.id) {
         message.warning('This session was deleted.');
         closeAndBack();
       }
     },
-    onCodeRotated: () => void fetchCode(),
   });
 
   // Viewport & QR size

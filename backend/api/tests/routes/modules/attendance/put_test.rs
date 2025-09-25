@@ -294,14 +294,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_edit_session_emits_session_updated_broadcast() {
-        use api::ws::attendance::topics::attendance_session_topic;
         use tokio::time::{Duration, timeout};
 
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
-        // Subscribe to this session’s topic BEFORE updating
-        let topic = attendance_session_topic(ctx.session.id);
+        // Subscribe to this session’s topic BEFORE updating (new path)
+        let topic = format!("attendance:session:{}", ctx.session.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
 
         // Prepare updates
@@ -326,21 +325,26 @@ mod tests {
             .uri(&uri)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
-            .body(AxumBody::from(body.to_string()))
+            .body(axum::body::Body::from(body.to_string()))
             .unwrap();
 
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Expect a "session_updated" WS event that mirrors the changed fields
+        // Expect a typed WS event
         let msg = timeout(Duration::from_millis(300), rx.recv())
             .await
             .expect("broadcast not timed out")
             .expect("broadcast ok");
 
-        let v: Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["event"], "session_updated");
-        // payload may be partial, but for our emitter we expect at least these fields:
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+
+        // New envelope + event name + topic
+        assert_eq!(v["type"], "event");
+        assert_eq!(v["event"], "attendance.session_updated");
+        assert_eq!(v["topic"], topic);
+
+        // Payload
         assert_eq!(v["payload"]["session_id"], ctx.session.id);
         assert_eq!(v["payload"]["title"], "Broadcasted Title");
         assert_eq!(v["payload"]["active"], true);
@@ -349,7 +353,7 @@ mod tests {
         assert_eq!(v["payload"]["allowed_ip_cidr"], "203.0.113.0/24");
         assert_eq!(v["payload"]["created_from_ip"], "203.0.113.77");
 
-        // Also verify persistence just to be safe
+        // DB persisted
         let row = SessionEntity::find()
             .filter(SessionCol::Id.eq(ctx.session.id))
             .one(app_state.db())

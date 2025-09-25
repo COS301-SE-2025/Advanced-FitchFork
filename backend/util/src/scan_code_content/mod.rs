@@ -69,10 +69,13 @@ fn scan_zip_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, Stri
         ZipArchive::new(cursor).map_err(|e| format!("Failed to read zip archive: {e}"))?;
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i)
+        let mut file = archive
+            .by_index(i)
             .map_err(|e| format!("Failed to read file in archive: {e}"))?;
 
-        if file.is_dir() { continue; }
+        if file.is_dir() {
+            continue;
+        }
 
         // read raw bytes, lossy decode
         if reader_contains_disallowed(&mut file, config)? {
@@ -86,10 +89,14 @@ fn scan_tar_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, Stri
     let cursor = Cursor::new(bytes);
     let mut archive = Archive::new(cursor);
 
-    for entry in archive.entries()
-        .map_err(|e| format!("Failed to read tar entries: {e}"))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| format!("Failed to read tar entries: {e}"))?
+    {
         let mut entry = entry.map_err(|e| format!("Failed to read tar entry: {e}"))?;
-        if entry.header().entry_type().is_dir() { continue; }
+        if entry.header().entry_type().is_dir() {
+            continue;
+        }
 
         if reader_contains_disallowed(&mut entry, config)? {
             return Ok(true);
@@ -97,17 +104,20 @@ fn scan_tar_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, Stri
     }
     Ok(false)
 }
-
 
 fn scan_tar_gz_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);
     let decoder = GzDecoder::new(cursor);
     let mut archive = Archive::new(decoder);
 
-    for entry in archive.entries()
-        .map_err(|e| format!("Failed to read tar.gz entries: {e}"))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| format!("Failed to read tar.gz entries: {e}"))?
+    {
         let mut entry = entry.map_err(|e| format!("Failed to read tar.gz entry: {e}"))?;
-        if entry.header().entry_type().is_dir() { continue; }
+        if entry.header().entry_type().is_dir() {
+            continue;
+        }
 
         if reader_contains_disallowed(&mut entry, config)? {
             return Ok(true);
@@ -115,7 +125,6 @@ fn scan_tar_gz_archive(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, S
     }
     Ok(false)
 }
-
 
 fn scan_gz_file(bytes: &[u8], config: &ExecutionConfig) -> Result<bool, String> {
     let cursor = Cursor::new(bytes);

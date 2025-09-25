@@ -99,6 +99,18 @@ import ModulePersonnel from './pages/modules/ModulePersonnel';
 import ModulesList from './pages/modules/ModulesList';
 import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
 import AssignmentStatisticsPage from './pages/modules/assignments/AssignmentStatisticsPage';
+import { WS_BASE_URL } from './config/api';
+import { WsProvider } from './ws';
+
+// helper to pass AuthContext into WsProvider (keep this in App.tsx)
+const WithWs: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const auth = useAuth();
+  return (
+    <WsProvider url={WS_BASE_URL} auth={auth} log={true}>
+      {children}
+    </WsProvider>
+  );
+};
 
 export default function App() {
   const { isMobile } = useUI();
@@ -134,7 +146,13 @@ export default function App() {
 
         {/* Protected Auth Routes */}
         <Route element={<ProtectedAuthRoute />}>
-          <Route element={<AppLayout />}>
+          <Route
+            element={
+              <WithWs>
+                <AppLayout />
+              </WithWs>
+            }
+          >
             <Route path="/dashboard" element={<Dashboard />} />
 
             <Route path="/settings" element={<SettingsLayout />}>

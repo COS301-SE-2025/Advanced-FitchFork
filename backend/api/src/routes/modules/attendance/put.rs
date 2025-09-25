@@ -6,11 +6,10 @@ use axum::{
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use util::state::AppState;
 
-use crate::response::ApiResponse;
-use crate::ws::attendance::topics::attendance_session_topic; // NEW
-use serde_json::json; // NEW
-
 use super::common::{AttendanceSessionResponse, EditSessionReq};
+use crate::response::ApiResponse;
+use crate::ws::attendance::emit;
+use crate::ws::attendance::payload as ap;
 use db::models::attendance_session::{
     ActiveModel as SessionAM, Column as SessionCol, Entity as SessionEntity,
 };
@@ -67,22 +66,18 @@ pub async fn edit_session(
     // Persist update
     match am.update(db).await {
         Ok(updated) => {
-            // --- NEW: broadcast session_updated so other tabs sync immediately
+            let payload = ap::SessionUpdated {
+                session_id: updated.id,
+                active: updated.active,
+                rotation_seconds: updated.rotation_seconds,
+                title: updated.title.clone(),
+                restrict_by_ip: updated.restrict_by_ip,
+                allowed_ip_cidr: updated.allowed_ip_cidr.clone(),
+                created_from_ip: updated.created_from_ip.clone(),
+            };
+
             let ws = state.ws_clone();
-            let topic = attendance_session_topic(updated.id);
-            let event = json!({
-                "event": "session_updated",
-                "payload": {
-                    "session_id": updated.id,
-                    "active": updated.active,
-                    "rotation_seconds": updated.rotation_seconds,
-                    "title": updated.title,
-                    "restrict_by_ip": updated.restrict_by_ip,
-                    "allowed_ip_cidr": updated.allowed_ip_cidr,
-                    "created_from_ip": updated.created_from_ip,
-                }
-            });
-            ws.broadcast(&topic, event.to_string()).await;
+            emit::session_updated(&ws, payload).await;
 
             (
                 StatusCode::OK,

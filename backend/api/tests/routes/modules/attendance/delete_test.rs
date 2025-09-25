@@ -298,14 +298,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_session_emits_session_deleted_broadcast() {
-        use api::ws::attendance::topics::attendance_session_topic;
         use tokio::time::{Duration, timeout};
 
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
-        // Subscribe to the WS topic BEFORE the delete
-        let topic = attendance_session_topic(ctx.session.id);
+        // Subscribe to the WS topic BEFORE the delete (new topic path)
+        let topic = format!("attendance:session:{}", ctx.session.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
 
         // Perform delete as lecturer
@@ -324,16 +323,20 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Expect a "session_deleted" broadcast with matching session_id
+        // Expect a typed event envelope
         let msg = timeout(Duration::from_millis(300), rx.recv())
             .await
             .expect("broadcast not timed out")
             .expect("broadcast ok");
 
-        let v: Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["event"], "session_deleted");
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+
+        // New envelope + event name
+        assert_eq!(v["type"], "event");
+        assert_eq!(v["event"], "attendance.session_deleted");
+        assert_eq!(v["topic"], topic);
         assert_eq!(v["payload"]["session_id"], ctx.session.id);
-        // (Optional) If you broadcast more fields (e.g., title), assert them here:
-        // assert_eq!(v["payload"]["title"], ctx.session.title);
+        // Optional: assert timestamp exists
+        assert!(v.get("ts").is_some());
     }
 }

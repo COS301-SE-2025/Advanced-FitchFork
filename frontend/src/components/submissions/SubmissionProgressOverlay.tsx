@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Result, Space, Typography, Button, Progress, Divider } from 'antd';
 import {
@@ -9,12 +9,12 @@ import {
 } from '@ant-design/icons';
 import confetti, { type Options as ConfettiOptions } from 'canvas-confetti';
 
-import { useSubmissionProgressWs } from '@/hooks/useSubmissionProgressWs';
 import { scaleColor } from '@/utils/color';
 import {
   SUBMISSION_STATUSES,
   type SubmissionStatus,
 } from '@/types/modules/assignments/submissions';
+import { useWs, useWsEvents, Topics, type SubmissionStatusPayload } from '@/ws';
 
 const { Title } = Typography;
 
@@ -86,6 +86,14 @@ function statusSubtitle(status: SubmissionStatus | 'queued' | 'connecting') {
   }
 }
 
+type Latest = {
+  submissionId: number;
+  status: SubmissionStatus;
+  mark?: { earned: number; total: number } | null;
+  message?: string | null;
+  ts?: string | null;
+};
+
 export default function SubmissionProgressOverlay({
   moduleId,
   assignmentId,
@@ -98,9 +106,29 @@ export default function SubmissionProgressOverlay({
 }: Props) {
   const navigate = useNavigate();
 
-  // Live WS stream
-  const { latest, connected } = useSubmissionProgressWs(moduleId, assignmentId, userId, {
-    singleLatest: false,
+  // WS connection status (from context)
+  const { status: wsStatus } = useWs();
+  const connected = wsStatus === 'open';
+
+  // Latest owner event snapshot
+  const [latest, setLatest] = useState<Latest | null>(null);
+
+  // Subscribe to the *owner* stream for this user
+  useWsEvents([Topics.assignmentSubmissionsOwner(assignmentId, userId)], {
+    'submission.status': (p: SubmissionStatusPayload) => {
+      if (p.assignment_id !== assignmentId) return; // safety
+      const m =
+        p.mark && typeof p.mark.total === 'number'
+          ? { earned: Number(p.mark.earned), total: Number(p.mark.total) }
+          : null;
+      setLatest({
+        submissionId: Number(p.submission_id),
+        status: p.status as SubmissionStatus,
+        mark: m,
+        message: p.message ?? null,
+        ts: (p as any)?.ts ?? null,
+      });
+    },
   });
 
   // ---- Defer submit: fire on WS connect (once), or fallback after timeout ----
@@ -108,10 +136,8 @@ export default function SubmissionProgressOverlay({
   useEffect(() => {
     if (!triggerSubmit || firedRef.current) return;
 
-    let timer: number | undefined;
     const timeoutMs = Math.max(500, wsConnectTimeoutMs ?? 2000);
-
-    timer = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (!firedRef.current) {
         firedRef.current = true;
         void triggerSubmit();
@@ -128,13 +154,12 @@ export default function SubmissionProgressOverlay({
     }
 
     return () => {
-      if (timer) window.clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, [connected, triggerSubmit, wsConnectTimeoutMs]);
 
   // Active progress (WS only)
   const progress = latest ?? null;
-
   const activeSubmissionId = submissionId ?? progress?.submissionId ?? null;
 
   const isSubmissionStatus = (v: unknown): v is SubmissionStatus =>
@@ -156,25 +181,17 @@ export default function SubmissionProgressOverlay({
         ? STATUS_PROGRESS[rawStatus]
         : 10;
 
-  const mark = progress?.mark as { earned: number; total: number } | undefined;
+  const mark = progress?.mark ?? undefined;
   const pct = mark && mark.total > 0 ? Math.round((mark.earned / mark.total) * 100) : null;
   const circleColor = pct != null ? scaleColor(pct, 'red-green') : undefined;
 
-  const headerIcon = isFailed ? (
-    <CloseCircleTwoTone twoToneColor="#ff4d4f" />
-  ) : isGraded ? (
-    <CheckCircleTwoTone twoToneColor="#52c41a" />
-  ) : (
-    <ClockCircleTwoTone twoToneColor="#1677ff" />
-  );
-
   const handleClose = () => {
-    onClose?.(); // parent can refresh assignment here
+    onClose?.();
   };
 
   const handleGoToSubmission = () => {
     if (!activeSubmissionId) return;
-    onDone?.(activeSubmissionId); // parent can refresh assignment here
+    onDone?.(activeSubmissionId);
     navigate(`/modules/${moduleId}/assignments/${assignmentId}/submissions/${activeSubmissionId}`);
     onClose?.();
   };
@@ -298,7 +315,7 @@ export default function SubmissionProgressOverlay({
       keyboard={false}
       width={720}
       centered
-      destroyOnClose
+      destroyOnHidden
       footer={
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
           <Button onClick={handleClose}>Close</Button>
@@ -314,7 +331,13 @@ export default function SubmissionProgressOverlay({
       title={
         isGraded ? null : (
           <div className="flex items-center justify-center gap-2">
-            {headerIcon}
+            {isFailed ? (
+              <CloseCircleTwoTone twoToneColor="#ff4d4f" />
+            ) : isGraded ? (
+              <CheckCircleTwoTone twoToneColor="#52c41a" />
+            ) : (
+              <ClockCircleTwoTone twoToneColor="#1677ff" />
+            )}
             <Title level={4} className="!m-0">
               Submission Progress
             </Title>

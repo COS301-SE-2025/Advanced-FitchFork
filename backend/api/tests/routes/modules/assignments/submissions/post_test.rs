@@ -2046,6 +2046,14 @@ mod tests {
         .await
         .unwrap();
 
+        // Mark it as a final state so resubmit won't skip it
+        use sea_orm::{ActiveModelTrait, Set};
+        let mut am: db::models::assignment_submission::ActiveModel = submission.clone().into();
+        am.status = Set(db::models::assignment_submission::SubmissionStatus::Graded);
+        am.earned = Set(10);
+        am.total = Set(10);
+        let submission = am.update(db).await.unwrap();
+
         // Seed an output row (empty path is fine for resubmit tests)
         let task = assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
@@ -2113,7 +2121,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 
@@ -2160,7 +2168,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 

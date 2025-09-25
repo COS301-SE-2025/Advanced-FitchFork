@@ -5,11 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 
 import {
-  EntityList,
   type EntityListHandle,
   type EntityColumnType,
   type EntityAction,
   type EntityListProps,
+  EntityList,
 } from '@/components/EntityList';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -22,7 +22,6 @@ import {
   type ResubmitResponse,
   type Submission,
 } from '@/types/modules/assignments/submissions';
-import SubmissionCard from '@/components/submissions/SubmissionCard';
 import {
   remarkSubmissions,
   resubmitSubmissions,
@@ -30,7 +29,10 @@ import {
 } from '@/services/modules/assignments/submissions/post';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import {
+  SubmissionIgnoredTag,
+  SubmissionLateTag,
   SubmissionListItem,
+  SubmissionPracticeTag,
   SubmissionsEmptyState,
   SubmissionStatusTag,
   SubmitAssignmentModal,
@@ -41,7 +43,8 @@ import {
 } from '@/services/modules/assignments/submissions/delete';
 import useApp from 'antd/es/app/useApp';
 import { PercentageTag } from '@/components/common';
-import { useSubmissionStaffProgressWs } from '@/hooks/useSubmissionStaffProgressWs';
+import { useWsEvents, Topics, type SubmissionStatusPayload, type SubmissionNewPayload } from '@/ws';
+import { useUI } from '@/context/UIContext';
 
 // ─────────────────────────────────────────────────────────────
 // Separate, simple Summary Modal
@@ -125,9 +128,9 @@ type StudentSubmission = Submission & {
 export default function SubmissionsList() {
   const navigate = useNavigate();
   const module = useModule();
+  const { isLg } = useUI();
   const { setValue } = useViewSlot();
   const { modal, message } = useApp();
-
   const { assignment, policy, refreshAssignment, refreshAssignmentStats } = useAssignment();
   const auth = useAuth();
   const canToggleIgnored =
@@ -142,63 +145,68 @@ export default function SubmissionsList() {
   const [summaryRequested, setSummaryRequested] = useState<number | undefined>(undefined);
   const [summaryTitle, setSummaryTitle] = useState('Resubmission summary');
 
-  // staff stream (auto no-op for non-staff via the hook’s internal role check)
-  const staffWs = useSubmissionStaffProgressWs(module.id, assignment.id, { singleLatest: false });
-
   const isAssignmentOpen = assignment.status === 'open';
   const isStudent = auth.isStudent(module.id);
 
   const entityListRef = useRef<EntityListHandle>(null);
 
-  // helper to recompute percentage
-  const pctOf = (mark?: { earned: number; total: number }) =>
-    mark && mark.total > 0 ? Math.round((mark.earned / mark.total) * 100) : undefined;
+  const isStaff = auth.isStaff(module.id) || auth.isAdmin;
+  const ownerTopic =
+    !isStaff && auth.user?.id
+      ? Topics.assignmentSubmissionsOwner(assignment.id, auth.user.id)
+      : null;
 
-  // ── Live WS → table: patch existing rows and insert new ones (with username if provided) ──
-  useEffect(() => {
-    if (!staffWs?.progressById) return;
-    const rows = Object.values(staffWs.progressById);
+  useWsEvents(
+    isStaff ? [Topics.assignmentSubmissionsStaff(assignment.id)] : ownerTopic ? [ownerTopic] : [],
+    {
+      'submission.new_submission': (p: SubmissionNewPayload) => {
+        if (p.assignment_id !== assignment.id) return;
+        const id = Number(p.submission_id);
+        const username = p.username ?? undefined;
 
-    rows.forEach((p) => {
-      const patch: Partial<StudentSubmission> = {
-        status: p.status,
-        updated_at: p.ts ?? undefined,
-      };
-      if (p.mark) {
-        patch.mark = { earned: p.mark.earned, total: p.mark.total } as any;
-        patch.percentageMark = pctOf(p.mark);
-      }
+        const stub: StudentSubmission = {
+          id,
+          attempt: Number(p.attempt ?? 1),
+          filename: '',
+          hash: '',
+          created_at: p.created_at,
+          updated_at: p.created_at,
+          mark: { earned: 0, total: 0 },
+          is_practice: !!p.is_practice,
+          is_late: false,
+          ignored: false,
+          status: 'queued',
+          tasks: [],
+          user: username ? ({ id: undefined as any, username } as any) : undefined,
+          percentageMark: undefined,
+          path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${id}/file`,
+        };
 
-      const username = p.userUsername ?? (p.userId != null ? String(p.userId) : undefined);
+        entityListRef.current?.bufferRows([stub]);
+        refreshAssignmentStats?.();
+      },
 
-      // minimal, safe stub for brand-new rows
-      const stub: StudentSubmission = {
-        id: p.submissionId,
-        attempt: 1,
-        filename: '',
-        hash: '',
-        created_at: p.ts ?? new Date().toISOString(),
-        updated_at: p.ts ?? new Date().toISOString(),
-        mark: patch.mark ?? { earned: 0, total: 0 },
-        is_practice: false,
-        is_late: false,
-        ignored: false,
-        status: (patch.status as any) ?? 'queued',
-        tasks: [],
-        user: p.userId != null || username ? ({ id: p.userId, username } as any) : undefined,
-        // UI-only
-        percentageMark: patch.percentageMark,
-        path: `/api/modules/${module.id}/assignments/${assignment.id}/submissions/${p.submissionId}/file`,
-      };
+      'submission.status': (p: SubmissionStatusPayload) => {
+        if (p.assignment_id !== assignment.id) return;
 
-      // Upsert (replace if exists, prepend if new)
-      entityListRef.current?.upsertRows([{ ...stub, ...patch } as StudentSubmission], 'prepend');
-    });
+        const id = Number(p.submission_id);
+        const patch: Partial<StudentSubmission> = {
+          status: p.status as any,
+          updated_at: new Date().toISOString(),
+        };
 
-    if (rows.some((r) => r.status === 'graded')) {
-      refreshAssignmentStats?.();
-    }
-  }, [staffWs.progressById, module.id, assignment.id, refreshAssignmentStats]);
+        if (p.mark) {
+          const earned = Number(p.mark.earned);
+          const total = Number(p.mark.total);
+          patch.mark = { earned, total } as any;
+          patch.percentageMark = total > 0 ? Math.round((earned / total) * 100) : undefined;
+        }
+
+        entityListRef.current?.updateRow(id, patch);
+        if (p.status === 'graded' || p.mark) refreshAssignmentStats?.();
+      },
+    },
+  );
 
   useEffect(() => {
     setValue(
@@ -308,7 +316,6 @@ export default function SubmissionsList() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      // show nice tags in the filter dropdown too
       filters: SUBMISSION_STATUSES.map((s) => ({
         text: <SubmissionStatusTag status={s} />,
         value: s,
@@ -320,7 +327,9 @@ export default function SubmissionsList() {
       title: 'Is Practice',
       dataIndex: 'is_practice',
       key: 'is_practice',
-      render: (v) => (v ? <Tag color="gold">Yes</Tag> : <Tag>No</Tag>),
+      render: (v: boolean) => (
+        <SubmissionPracticeTag practice={v} showWhenFalse={true} trueLabel="Yes" falseLabel="No" />
+      ),
     },
     {
       title: 'Mark',
@@ -343,54 +352,47 @@ export default function SubmissionsList() {
       dataIndex: 'ignored',
       key: 'ignored',
       defaultHidden: !(auth.isStaff(module.id) || auth.isAdmin),
-      render: (_: boolean, record) => {
-        if (canToggleIgnored) {
-          return (
-            <Switch
-              size="small"
-              checked={record.ignored}
-              onClick={(nextChecked, e) => {
-                e?.preventDefault();
-                e?.stopPropagation();
+      render: (_: boolean, record) =>
+        canToggleIgnored ? (
+          <Switch
+            size="small"
+            checked={record.ignored}
+            onClick={(nextChecked, e) => {
+              e?.preventDefault();
+              e?.stopPropagation();
 
-                const id = record.id;
-                // optimistic update
-                entityListRef.current?.updateRow(id, { ignored: nextChecked });
+              const id = record.id;
+              // optimistic update
+              entityListRef.current?.updateRow(id, { ignored: nextChecked });
 
-                (async () => {
-                  try {
-                    const res = await setSubmissionIgnored(
-                      module.id,
-                      assignment.id,
-                      id,
-                      nextChecked,
-                    );
-                    if (!res.success) {
-                      // rollback
-                      entityListRef.current?.updateRow(id, { ignored: !nextChecked });
-                      message.error(res.message || 'Failed to update ignored flag');
-                    } else {
-                      await refreshAssignmentStats?.();
-                    }
-                  } catch (err) {
+              (async () => {
+                try {
+                  const res = await setSubmissionIgnored(module.id, assignment.id, id, nextChecked);
+                  if (!res.success) {
+                    // rollback
                     entityListRef.current?.updateRow(id, { ignored: !nextChecked });
-                    console.error(err);
-                    message.error('Failed to update ignored flag');
+                    message.error(res.message || 'Failed to update ignored flag');
+                  } else {
+                    await refreshAssignmentStats?.();
                   }
-                })();
-              }}
-            />
-          );
-        }
-        return record.ignored ? <Tag color="red">Yes</Tag> : <Tag>No</Tag>;
-      },
+                } catch (err) {
+                  entityListRef.current?.updateRow(id, { ignored: !nextChecked });
+                  console.error(err);
+                  message.error('Failed to update ignored flag');
+                }
+              })();
+            }}
+          />
+        ) : (
+          <SubmissionIgnoredTag ignored={record.ignored} showWhenFalse={true} />
+        ),
     },
     {
       title: 'Is Late',
       dataIndex: 'is_late',
       key: 'is_late',
       defaultHidden: true,
-      render: (v) => (v ? <Tag color="red">Yes</Tag> : <Tag>On Time</Tag>),
+      render: (v: boolean) => <SubmissionLateTag late={v} showOnTime={true} />,
     },
     {
       title: 'Created At',
@@ -694,7 +696,7 @@ export default function SubmissionsList() {
       <EntityList<StudentSubmission>
         ref={entityListRef}
         name="Submissions"
-        listMode={auth.isStudent(module.id)}
+        listMode={auth.isStudent(module.id) || !isLg}
         showControlBar={!isStudent}
         fetchItems={fetchItems}
         columns={columns}
@@ -704,21 +706,13 @@ export default function SubmissionsList() {
         }
         columnToggleEnabled
         actions={actions}
-        renderGridItem={(item, itemActions) => (
-          <SubmissionCard
-            submission={item}
-            actions={itemActions}
-            onClick={(s) =>
-              navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
-            }
-          />
-        )}
         renderListItem={(submission) => (
           <SubmissionListItem
             submission={submission}
             onClick={(s) =>
               navigate(`/modules/${module.id}/assignments/${assignment.id}/submissions/${s.id}`)
             }
+            isStudent={auth.isStudent(module.id)}
           />
         )}
         emptyNoEntities={
@@ -729,6 +723,9 @@ export default function SubmissionsList() {
             onRefresh={() => entityListRef.current?.refresh()}
           />
         }
+        onRefreshClick={() => {
+          entityListRef.current?.refresh();
+        }}
       />
 
       <SubmitAssignmentModal
