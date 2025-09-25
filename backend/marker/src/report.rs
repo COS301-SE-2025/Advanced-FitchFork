@@ -75,6 +75,21 @@ pub struct Score {
     pub total: f64,
 }
 
+/// Represents a code coverage summary with detailed statistics.
+#[derive(Debug, Serialize, Clone)]
+pub struct CoverageSummary {
+    /// Points earned by the student.
+    pub earned: f64,
+    /// Total possible points.
+    pub total: f64,
+    /// Total number of lines across all files.
+    pub total_lines: u64,
+    /// Total number of covered lines across all files.
+    pub covered_lines: u64,
+    /// Overall coverage percentage (0.0 - 100.0).
+    pub coverage_percent: f64,
+}
+
 /// Represents a subsection of a grading task, such as a subtask or rubric item.
 #[derive(Debug, Serialize, Clone)]
 pub struct ReportSubsection {
@@ -105,7 +120,7 @@ pub struct ReportTask {
 #[derive(Debug, Serialize, Clone)]
 pub struct CodeCoverageReport {
     /// Optional summary score for code coverage.
-    pub summary: Option<Score>,
+    pub summary: Option<CoverageSummary>,
     /// Coverage details for each file.
     pub files: Vec<CoverageFile>,
 }
@@ -291,9 +306,12 @@ mod tests {
     #[test]
     fn test_code_coverage_optional_fields() {
         let coverage = CodeCoverageReport {
-            summary: Some(Score {
+            summary: Some(CoverageSummary {
                 earned: 5.0,
                 total: 10.0,
+                total_lines: 100,
+                covered_lines: 50,
+                coverage_percent: 50.0,
             }),
             files: vec![CoverageFile {
                 path: "src/lib.rs".to_string(),

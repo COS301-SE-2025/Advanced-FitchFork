@@ -88,6 +88,16 @@ pub struct MarkSummary {
     pub total: f64,
 }
 
+/// Represents a code coverage summary with coverage statistics.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverageSummary {
+    pub earned: f64,
+    pub total: f64,
+    pub total_lines: u32,
+    pub covered_lines: u32,
+    pub coverage_percent: f64,
+}
+
 /// Represents code coverage for a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverageFile {
@@ -99,7 +109,7 @@ pub struct CodeCoverageFile {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CodeCoverage {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<MarkSummary>,
+    pub summary: Option<CodeCoverageSummary>,
     pub files: Vec<CodeCoverageFile>,
 }
 

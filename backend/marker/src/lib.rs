@@ -330,7 +330,7 @@ impl<'a> MarkingJob<'a> {
             coverage_total_possible = round2(coverage_value);
             total_earned += coverage_total_earned;
 
-            // attach to report later
+            // TODO: attach to report later
         }
 
         let mark = crate::report::Score {
@@ -348,9 +348,12 @@ impl<'a> MarkingJob<'a> {
                     .parse(&cov_raw, self.config.clone())?;
 
                 report.code_coverage = Some(crate::report::CodeCoverageReport {
-                    summary: Some(crate::report::Score {
+                    summary: Some(crate::report::CoverageSummary {
                         earned: coverage_total_earned,
                         total: coverage_total_possible,
+                        total_lines: coverage_report.total_lines,
+                        covered_lines: coverage_report.covered_lines,
+                        coverage_percent: coverage_report.coverage_percent,
                     }),
                     files: coverage_report
                         .files
