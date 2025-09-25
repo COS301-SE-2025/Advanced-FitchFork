@@ -135,6 +135,8 @@ pub async fn generate_allocator(
     assignment_id: i64,
     tasks_info: &[(TaskInfo, PathBuf)],
 ) -> Result<MarkAllocator, String> {
+    let default_valgrind_mark_value = 5;
+
     // Read config once up-front
     let (separator, want_regex, cover_weight_frac) =
         match ExecutionConfig::get_execution_config(module_id, assignment_id) {
@@ -177,6 +179,8 @@ pub async fn generate_allocator(
             let mut current_section = String::new();
             let mut mark_counter: i64 = 0;
 
+            let mut section_counter = 0;
+
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
                 if split.len() > 1 {
@@ -185,11 +189,7 @@ pub async fn generate_allocator(
                             name: current_section.clone(),
                             value: mark_counter,
                             regex: if want_regex {
-                                Some(
-                                    std::iter::repeat(String::new())
-                                        .take(mark_counter.max(0) as usize)
-                                        .collect(),
-                                )
+                                Some(vec![String::new(); mark_counter.max(0) as usize])
                             } else {
                                 None
                             },
@@ -197,7 +197,13 @@ pub async fn generate_allocator(
                         });
                         task_value += mark_counter;
                     }
-                    current_section = split.last().unwrap().trim().to_string();
+                    section_counter += 1;
+                    let name = split.last().unwrap().trim();
+                    current_section = if name.is_empty() {
+                        format!("Section {}", section_counter)
+                    } else {
+                        name.to_string()
+                    };
                     mark_counter = 0;
                 } else if !line.trim().is_empty() {
                     mark_counter += 1;
@@ -222,6 +228,10 @@ pub async fn generate_allocator(
                 task_value += mark_counter;
             }
 
+            if info.valgrind {
+                task_value += default_valgrind_mark_value;
+            }
+
             base_total += task_value;
         } else if info.code_coverage {
             coverage_indices.push(idx);
@@ -231,7 +241,7 @@ pub async fn generate_allocator(
         if info.valgrind {
             subsections.push(Subsection {
                 name: "Memory Leaks".to_string(),
-                value: 5,
+                value: default_valgrind_mark_value,
                 regex: None,
                 feedback: Some("Check for memory leaks with Valgrind".to_string()),
             });

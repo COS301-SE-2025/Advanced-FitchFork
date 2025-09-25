@@ -185,6 +185,8 @@ impl<'a> MarkingJob<'a> {
         let mut per_task_names: Vec<String> = Vec::new();
         let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
 
+        let mut i = 1;
+
         for task_entry in allocator.tasks.iter() {
             if task_entry.code_coverage.unwrap_or(false) {
                 // handled later
@@ -192,7 +194,9 @@ impl<'a> MarkingJob<'a> {
             }
 
             // submission uses ids like "task1", "task2", ...
-            let expected_id = format!("task{}", task_entry.task_number);
+            // let expected_id = format!("task{}", task_entry.task_number);
+            let expected_id = format!("task{}", i);
+            i = i + 1;
             let submission_task = submission
                 .tasks
                 .iter()
