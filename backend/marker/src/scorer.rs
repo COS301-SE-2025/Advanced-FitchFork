@@ -42,8 +42,8 @@ use crate::types::TaskResult;
 /// let score = compute_overall_score(&empty_results).unwrap();
 /// assert_eq!(score, 0);
 /// ```
-pub fn compute_overall_score(results: &[TaskResult]) -> Result<i64, MarkerError> {
-    let mut total_awarded = 0;
+pub fn compute_overall_score(results: &[TaskResult]) -> Result<f64, MarkerError> {
+    let mut total_awarded = 0.0;
     for result in results {
         total_awarded += result.awarded;
     }
@@ -61,8 +61,8 @@ mod tests {
         let results = vec![
             TaskResult {
                 name: "Task 1".to_string(),
-                awarded: 10,
-                possible: 10,
+                awarded: 10.0,
+                possible: 10.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -73,8 +73,8 @@ mod tests {
             },
             TaskResult {
                 name: "Task 2".to_string(),
-                awarded: 5,
-                possible: 10,
+                awarded: 5.0,
+                possible: 10.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -84,14 +84,14 @@ mod tests {
                 manual_feedback: None,
             },
         ];
-        assert_eq!(compute_overall_score(&results).unwrap(), 15);
+        assert_eq!(compute_overall_score(&results).unwrap(), 15.0);
     }
 
     /// Tests the function with an empty list of results, expecting a score of 0.
     #[test]
     fn test_compute_overall_score_empty() {
         let results: Vec<TaskResult> = vec![];
-        assert_eq!(compute_overall_score(&results).unwrap(), 0);
+        assert_eq!(compute_overall_score(&results).unwrap(), 0.0);
     }
 
     /// Tests that tasks with zero possible points are still included if awarded > 0.
@@ -100,8 +100,8 @@ mod tests {
         let results = vec![
             TaskResult {
                 name: "Task 1".to_string(),
-                awarded: 10,
-                possible: 10,
+                awarded: 10.0,
+                possible: 10.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -112,8 +112,8 @@ mod tests {
             },
             TaskResult {
                 name: "Task 2".to_string(),
-                awarded: 5,
-                possible: 0,
+                awarded: 5.0,
+                possible: 0.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -123,7 +123,7 @@ mod tests {
                 manual_feedback: None,
             },
         ];
-        assert_eq!(compute_overall_score(&results).unwrap(), 15);
+        assert_eq!(compute_overall_score(&results).unwrap(), 15.0);
     }
 
     #[test]
@@ -131,8 +131,8 @@ mod tests {
         let results = vec![
             TaskResult {
                 name: "Task 1".to_string(),
-                awarded: 2,
-                possible: 3,
+                awarded: 2.0,
+                possible: 3.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -143,8 +143,8 @@ mod tests {
             },
             TaskResult {
                 name: "Task 2".to_string(),
-                awarded: 1,
-                possible: 2,
+                awarded: 1.0,
+                possible: 2.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -154,7 +154,7 @@ mod tests {
                 manual_feedback: None,
             },
         ];
-        assert_eq!(compute_overall_score(&results).unwrap(), 3);
+        assert_eq!(compute_overall_score(&results).unwrap(), 3.0);
     }
 
     /// Tests the case where all tasks score zero.
@@ -163,8 +163,8 @@ mod tests {
         let results = vec![
             TaskResult {
                 name: "Task 1".to_string(),
-                awarded: 0,
-                possible: 10,
+                awarded: 0.0,
+                possible: 10.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -175,8 +175,8 @@ mod tests {
             },
             TaskResult {
                 name: "Task 2".to_string(),
-                awarded: 0,
-                possible: 20,
+                awarded: 0.0,
+                possible: 20.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -186,7 +186,7 @@ mod tests {
                 manual_feedback: None,
             },
         ];
-        assert_eq!(compute_overall_score(&results).unwrap(), 0);
+        assert_eq!(compute_overall_score(&results).unwrap(), 0.0);
     }
 
     /// Tests the case where all tasks receive a perfect score.
@@ -195,8 +195,8 @@ mod tests {
         let results = vec![
             TaskResult {
                 name: "Task 1".to_string(),
-                awarded: 15,
-                possible: 15,
+                awarded: 15.0,
+                possible: 15.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -207,8 +207,8 @@ mod tests {
             },
             TaskResult {
                 name: "Task 2".to_string(),
-                awarded: 100,
-                possible: 100,
+                awarded: 100.0,
+                possible: 100.0,
                 matched_patterns: vec![],
                 missed_patterns: vec![],
                 student_output: vec![],
@@ -218,6 +218,6 @@ mod tests {
                 manual_feedback: None,
             },
         ];
-        assert_eq!(compute_overall_score(&results).unwrap(), 115);
+        assert_eq!(compute_overall_score(&results).unwrap(), 115.0);
     }
 }

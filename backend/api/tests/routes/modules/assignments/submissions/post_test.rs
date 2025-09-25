@@ -416,8 +416,8 @@ mod tests {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
-            earned: Set(0),
-            total: Set(0),
+            earned: Set(0.0),
+            total: Set(0.0),
             filename: Set("seed.zip".into()),
             file_hash: Set("seedhash".into()),
             path: Set("seed/path.zip".into()),
@@ -1403,8 +1403,8 @@ mod tests {
             assignment_id,
             user_id,
             attempt,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             &filename,
             "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
@@ -2036,8 +2036,8 @@ mod tests {
             assignment_id,
             user_id,
             attempt,
-            /* earned */ 10,
-            /* total  */ 10,
+            /* earned */ 10.0,
+            /* total  */ 10.0,
             /* is_practice */ false,
             "test_submission.zip", // original filename (what users see)
             "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
@@ -2752,8 +2752,8 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "test.zip",
             "test_hash",
@@ -2903,7 +2903,7 @@ mod tests {
         // Allow late submissions and make the window permissive for the tests
         cfg.marking.late.allow_late_submissions = true;
         cfg.marking.late.late_window_minutes = 24 * 60; // 24h is generous for tests
-        cfg.marking.late.late_max_percent = 100; // do not cap for these tests
+        cfg.marking.late.late_max_percent = 100.0; // do not cap for these tests
 
         // Keep attempts behavior as per your suite defaults
         // (we don't touch limit_attempts/max_attempts here)
@@ -3257,7 +3257,7 @@ mod tests {
         .unwrap();
         cfg.marking.late.allow_late_submissions = true;
         cfg.marking.late.late_window_minutes = 60; // 1h window
-        cfg.marking.late.late_max_percent = 100;
+        cfg.marking.late.late_max_percent = 100.0;
         cfg.save(data.module.id, data.assignment.id).unwrap();
 
         // Due 30 minutes ago => inside late window

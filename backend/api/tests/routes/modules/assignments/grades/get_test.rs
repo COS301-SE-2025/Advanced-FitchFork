@@ -111,14 +111,14 @@ mod tests {
         filename: &str,
         hash: &str,
         created_at: chrono::DateTime<Utc>,
-        mark_earned: i64,
-        mark_total: i64,
+        mark_earned: f64,
+        mark_total: f64,
         is_practice: bool,
         tasks_payload: Vec<(
             i64, /* task_id */
             i64, /* task_number */
-            i64, /* earned */
-            i64, /* total */
+            f64, /* earned */
+            f64, /* total */
         )>,
     ) {
         let path = submission_report_path(module_id, assignment_id, user_id, attempt);
@@ -163,14 +163,14 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: i64,
-        total: i64,
+        earned: f64,
+        total: f64,
         created_offset_min: i64,
         task_rows: Vec<(
             i64, /* task_id */
             i64, /* task_number */
-            i64, /* earned */
-            i64, /* total */
+            f64, /* earned */
+            f64, /* total */
         )>,
     ) -> AssignmentSubmissionModel {
         let created = assignment.due_date + Duration::minutes(created_offset_min);
@@ -218,12 +218,12 @@ mod tests {
         assignment: &AssignmentModel,
         user: &UserModel,
         attempt: i64,
-        earned: i64,
-        total: i64,
+        earned: f64,
+        total: f64,
         created_offset_min: i64,
         is_practice: bool,
         ignored: bool,
-        task_rows: Vec<(i64, i64, i64, i64)>,
+        task_rows: Vec<(i64, i64, f64, f64)>,
     ) -> AssignmentSubmissionModel {
         let created = assignment.due_date + Duration::minutes(created_offset_min);
         let filename = format!("u{}_a{}.zip", user.id, attempt);
@@ -400,10 +400,10 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             1,
-            10,
-            20,
+            10.0,
+            20.0,
             -10,
-            vec![(data.t_ids_by_num[&1], 1, 5, 10)],
+            vec![(data.t_ids_by_num[&1], 1, 5.0, 10.0)],
         )
         .await;
 
@@ -466,10 +466,10 @@ mod tests {
             &data.assignment_last,
             &data.student2,
             1,
-            18,
-            20,
+            18.0,
+            20.0,
             -5,
-            vec![(data.t_ids_by_num[&2], 2, 9, 10)],
+            vec![(data.t_ids_by_num[&2], 2, 9.0, 10.0)],
         )
         .await;
 
@@ -532,12 +532,12 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             1,
-            10,
-            27,
+            10.0,
+            27.0,
             -200,
             vec![
-                (data.t_ids_by_num[&1], 1, 3, 9),
-                (data.t_ids_by_num[&2], 2, 4, 9),
+                (data.t_ids_by_num[&1], 1, 3.0, 9.0),
+                (data.t_ids_by_num[&2], 2, 4.0, 9.0),
             ],
         )
         .await;
@@ -548,13 +548,13 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             2,
-            21,
-            27,
+            21.0,
+            27.0,
             -100,
             vec![
-                (data.t_ids_by_num[&1], 1, 8, 9),
-                (data.t_ids_by_num[&2], 2, 8, 9),
-                (data.t_ids_by_num[&3], 3, 5, 9),
+                (data.t_ids_by_num[&1], 1, 8.0, 9.0),
+                (data.t_ids_by_num[&2], 2, 8.0, 9.0),
+                (data.t_ids_by_num[&3], 3, 5.0, 9.0),
             ],
         )
         .await;
@@ -566,12 +566,12 @@ mod tests {
             &data.assignment_last,
             &data.student2,
             1,
-            24,
-            27,
+            24.0,
+            27.0,
             -50,
             vec![
-                (data.t_ids_by_num[&1], 1, 9, 9),
-                (data.t_ids_by_num[&2], 2, 7, 9),
+                (data.t_ids_by_num[&1], 1, 9.0, 9.0),
+                (data.t_ids_by_num[&2], 2, 7.0, 9.0),
             ],
         )
         .await;
@@ -656,12 +656,12 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             1,
-            10,
-            20,
+            10.0,
+            20.0,
             -300,
             false, /* is_practice */
             false, /* ignored */
-            vec![(data.t_ids_by_num[&1], 1, 5, 10)],
+            vec![(data.t_ids_by_num[&1], 1, 5.0, 10.0)],
         )
         .await;
 
@@ -671,12 +671,12 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             2,
-            18,
-            20,
+            18.0,
+            20.0,
             -200,
             true,  /* is_practice */
             false, /* ignored */
-            vec![(data.t_ids_by_num[&2], 2, 9, 10)],
+            vec![(data.t_ids_by_num[&2], 2, 9.0, 10.0)],
         )
         .await;
 
@@ -686,12 +686,12 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             3,
-            19,
-            20,
+            19.0,
+            20.0,
             -100,
             false, /* is_practice */
             true,  /* ignored */
-            vec![(data.t_ids_by_num[&3], 3, 9, 10)],
+            vec![(data.t_ids_by_num[&3], 3, 9.0, 10.0)],
         )
         .await;
 
@@ -702,12 +702,12 @@ mod tests {
             &data.assignment_last,
             &data.student2,
             1,
-            20,
-            20,
+            20.0,
+            20.0,
             -50,
             false, /* is_practice */
             true,  /* ignored */
-            vec![(data.t_ids_by_num[&1], 1, 10, 10)],
+            vec![(data.t_ids_by_num[&1], 1, 10.0, 10.0)],
         )
         .await;
 
@@ -790,10 +790,10 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             1,
-            10,
-            20,
+            10.0,
+            20.0,
             -10,
-            vec![(data.t_ids_by_num[&1], 1, 5, 10)],
+            vec![(data.t_ids_by_num[&1], 1, 5.0, 10.0)],
         )
         .await;
 
@@ -803,10 +803,10 @@ mod tests {
             &data.assignment_last,
             &data.student2,
             1,
-            18,
-            20,
+            18.0,
+            20.0,
             -5,
-            vec![(data.t_ids_by_num[&2], 2, 9, 10)],
+            vec![(data.t_ids_by_num[&2], 2, 9.0, 10.0)],
         )
         .await;
 
@@ -848,10 +848,10 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             1,
-            10,
-            27,
+            10.0,
+            27.0,
             -200,
-            vec![(data.t_ids_by_num[&1], 1, 5, 9)],
+            vec![(data.t_ids_by_num[&1], 1, 5.0, 9.0)],
         )
         .await;
         let _s1a2 = seed_submission(
@@ -860,13 +860,13 @@ mod tests {
             &data.assignment_last,
             &data.student1,
             2,
-            21,
-            27,
+            21.0,
+            27.0,
             -100,
             vec![
-                (data.t_ids_by_num[&1], 1, 8, 9), // 88.888…
-                (data.t_ids_by_num[&2], 2, 8, 9), // 88.888…
-                (data.t_ids_by_num[&3], 3, 5, 9), // 55.555…
+                (data.t_ids_by_num[&1], 1, 8.0, 9.0), // 88.888…
+                (data.t_ids_by_num[&2], 2, 8.0, 9.0), // 88.888…
+                (data.t_ids_by_num[&3], 3, 5.0, 9.0), // 55.555…
             ],
         )
         .await;
@@ -878,12 +878,12 @@ mod tests {
             &data.assignment_last,
             &data.student2,
             1,
-            24,
-            27,
+            24.0,
+            27.0,
             -50,
             vec![
-                (data.t_ids_by_num[&1], 1, 9, 9), // 100
-                (data.t_ids_by_num[&2], 2, 7, 9), // 77.777…
+                (data.t_ids_by_num[&1], 1, 9.0, 9.0), // 100
+                (data.t_ids_by_num[&2], 2, 7.0, 9.0), // 77.777…
             ],
         )
         .await;

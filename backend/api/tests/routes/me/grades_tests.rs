@@ -80,8 +80,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            80,
-            100,
+            80.0,
+            100.0,
             false,
             "s1.zip",
             "hash1",
@@ -94,8 +94,8 @@ mod tests {
             assignment1.id,
             student2.id,
             1,
-            90,
-            100,
+            90.0,
+            100.0,
             false,
             "s2.zip",
             "hash2",
@@ -253,8 +253,8 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 80);
-        assert_eq!(grades[1]["score"]["earned"], 90);
+        assert_eq!(grades[0]["score"]["earned"], 80.0);
+        assert_eq!(grades[1]["score"]["earned"], 90.0);
     }
 
     #[tokio::test]
@@ -279,8 +279,8 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 90);
-        assert_eq!(grades[1]["score"]["earned"], 80);
+        assert_eq!(grades[0]["score"]["earned"], 90.0);
+        assert_eq!(grades[1]["score"]["earned"], 80.0);
     }
 
     #[tokio::test]

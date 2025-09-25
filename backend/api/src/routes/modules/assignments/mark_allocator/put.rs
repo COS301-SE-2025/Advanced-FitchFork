@@ -3,7 +3,7 @@ use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use util::execution_config::{ExecutionConfig, MarkingScheme};
 use util::paths::assignment_dir;
 
-use util::mark_allocator::{MarkAllocator, save_allocator};
+use util::mark_allocator::{MarkAllocator, load_allocator, save_allocator};
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/mark_allocator
 ///
@@ -48,7 +48,7 @@ pub async fn save(
             .into_response();
     }
 
-    let mut sum_task_values: i64 = 0;
+    let mut sum_task_values: f64 = 0.0;
     for (tidx, t) in alloc.tasks.iter().enumerate() {
         if t.task_number <= 0 {
             return (
@@ -70,7 +70,7 @@ pub async fn save(
             )
                 .into_response();
         }
-        if t.value < 0 {
+        if t.value < 0.0 {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
@@ -81,7 +81,7 @@ pub async fn save(
                 .into_response();
         }
 
-        let mut sum_sub_values: i64 = 0;
+        let mut sum_sub_values: f64 = 0.0;
         for (sidx, s) in t.subsections.iter().enumerate() {
             if s.name.trim().is_empty() {
                 return (
@@ -93,7 +93,7 @@ pub async fn save(
                 )
                     .into_response();
             }
-            if s.value < 0 {
+            if s.value < 0.0 {
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<()>::error(&format!(
@@ -105,7 +105,8 @@ pub async fn save(
             }
             sum_sub_values += s.value;
         }
-        if sum_sub_values != t.value {
+
+        if !t.code_coverage.unwrap_or(false) && sum_sub_values != t.value {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ApiResponse::<()>::error(&format!(
@@ -130,13 +131,37 @@ pub async fn save(
             .into_response();
     }
 
-    // 2) Read marking scheme to decide regex behavior
+    // 2) Load existing allocator to preserve code coverage task values
+    let existing_alloc = load_allocator(module_id, assignment_id);
+
+    // 3) Preserve code coverage task values from existing allocator
+    if let Ok(existing) = existing_alloc {
+        let mut coverage_values: std::collections::HashMap<i64, f64> =
+            std::collections::HashMap::new();
+        for task in &existing.tasks {
+            if task.code_coverage.unwrap_or(false) {
+                coverage_values.insert(task.task_number, task.value);
+            }
+        }
+
+        for task in &mut alloc.tasks {
+            if task.code_coverage.unwrap_or(false) {
+                if let Some(&existing_value) = coverage_values.get(&task.task_number) {
+                    task.value = existing_value;
+                }
+            }
+        }
+
+        alloc.total_value = alloc.tasks.iter().map(|t| t.value).sum();
+    }
+
+    // 4) Read marking scheme to decide regex behavior
     let want_regex = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(cfg) => matches!(cfg.marking.marking_scheme, MarkingScheme::Regex),
         Err(_) => false,
     };
 
-    // 3) If Regex scheme, accept regex arrays as-is (independent of value)
+    // 5) If Regex scheme, accept regex arrays as-is (independent of value)
     if want_regex {
         for (_tidx, t) in alloc.tasks.iter_mut().enumerate() {
             for (_sidx, s) in t.subsections.iter_mut().enumerate() {
@@ -158,7 +183,7 @@ pub async fn save(
         }
     }
 
-    // 4) Save normalized JSON
+    // 6) Save normalized JSON
     if let Err(e) = save_allocator(module_id, assignment_id, &alloc) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -169,7 +194,7 @@ pub async fn save(
             .into_response();
     }
 
-    // 5) Respond with normalized object
+    // 7) Respond with normalized object
     (
         StatusCode::OK,
         Json(ApiResponse::success(

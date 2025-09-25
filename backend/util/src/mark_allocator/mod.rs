@@ -9,14 +9,14 @@ use crate::paths::{mark_allocator_dir, mark_allocator_path};
 pub struct MarkAllocator {
     pub generated_at: DateTime<Utc>,
     pub tasks: Vec<Task>,
-    pub total_value: i64,
+    pub total_value: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Task {
     pub task_number: i64,
     pub name: String,
-    pub value: i64,
+    pub value: f64,
     #[serde(default)]
     pub code_coverage: Option<bool>,
     pub valgrind: Option<bool>,
@@ -26,7 +26,7 @@ pub struct Task {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Subsection {
     pub name: String,
-    pub value: i64,
+    pub value: f64,
     #[serde(default)]
     pub regex: Option<Vec<String>>,
     #[serde(default)]
@@ -34,7 +34,7 @@ pub struct Subsection {
 }
 
 impl MarkAllocator {
-    pub fn recompute_total(&mut self) -> i64 {
+    pub fn recompute_total(&mut self) -> f64 {
         self.total_value = self.tasks.iter().map(|t| t.value).sum();
         self.total_value
     }
@@ -152,7 +152,7 @@ pub async fn generate_allocator(
 
                 (cfg.marking.deliminator, want_regex, w)
             }
-            Err(_) => ("&-=-&".to_string(), false, 0.10), // fallback: 10%
+            Err(_) => ("&-=-&".to_string(), false, 0.10f64), // fallback: 10%
         };
 
     let dir = mark_allocator_dir(module_id, assignment_id);
@@ -161,13 +161,12 @@ pub async fn generate_allocator(
 
     // -------- Pass 1: build all tasks (with parsed values for non-coverage) --------
     let mut tasks: Vec<Task> = Vec::with_capacity(tasks_info.len());
-    let mut base_total: i64 = 0; // sum of non-coverage tasks
-
+    let mut base_total: f64 = 0.0; // sum of non-coverage tasks
     let mut coverage_indices: Vec<usize> = Vec::new();
 
     for (idx, (info, maybe_path)) in tasks_info.iter().enumerate() {
         let mut subsections = Vec::new();
-        let mut task_value: i64 = 0;
+        let mut task_value: f64 = 0.0;
 
         if !info.code_coverage && maybe_path.exists() {
             // Normal subsection parsing
@@ -175,21 +174,18 @@ pub async fn generate_allocator(
                 .map_err(|e| format!("Failed reading {:?}: {}", maybe_path, e))?;
 
             let mut current_section = String::new();
-            let mut mark_counter: i64 = 0;
+            let mut mark_counter: f64 = 0.0;
 
             for line in content.lines() {
                 let split: Vec<_> = line.split(&separator).collect();
                 if split.len() > 1 {
                     if !current_section.is_empty() {
+                        let take_count = mark_counter.max(0.0).round() as usize;
                         subsections.push(Subsection {
                             name: current_section.clone(),
                             value: mark_counter,
                             regex: if want_regex {
-                                Some(
-                                    std::iter::repeat(String::new())
-                                        .take(mark_counter.max(0) as usize)
-                                        .collect(),
-                                )
+                                Some(std::iter::repeat(String::new()).take(take_count).collect())
                             } else {
                                 None
                             },
@@ -198,22 +194,19 @@ pub async fn generate_allocator(
                         task_value += mark_counter;
                     }
                     current_section = split.last().unwrap().trim().to_string();
-                    mark_counter = 0;
+                    mark_counter = 0.0;
                 } else if !line.trim().is_empty() {
-                    mark_counter += 1;
+                    mark_counter += 1.0;
                 }
             }
 
             if !current_section.is_empty() {
+                let take_count = mark_counter.max(0.0).round() as usize;
                 subsections.push(Subsection {
                     name: current_section,
                     value: mark_counter,
                     regex: if want_regex {
-                        Some(
-                            std::iter::repeat(String::new())
-                                .take(mark_counter.max(0) as usize)
-                                .collect(),
-                        )
+                        Some(std::iter::repeat(String::new()).take(take_count).collect())
                     } else {
                         None
                     },
@@ -231,7 +224,7 @@ pub async fn generate_allocator(
         if info.valgrind {
             subsections.push(Subsection {
                 name: "Memory Leaks".to_string(),
-                value: 5,
+                value: 5.0,
                 regex: None,
                 feedback: Some("Check for memory leaks with Valgrind".to_string()),
             });
@@ -253,26 +246,21 @@ pub async fn generate_allocator(
 
     // -------- Pass 2: assign coverage marks based on base_total & weight --------
     if !coverage_indices.is_empty() && cover_weight_frac > 0.0 {
-        // C = round(B * w / (1 - w))
-        let c = if cover_weight_frac >= 1.0 {
-            0 // (shouldn’t happen due to clamp) – but keep safe
+        // C = B * w / (1 - w)
+        let c: f64 = if cover_weight_frac >= 1.0 {
+            0.0 // (shouldn’t happen due to clamp) – but keep safe
         } else {
-            let c_f = (base_total as f64) * (cover_weight_frac / (1.0 - cover_weight_frac));
-            c_f.round() as i64
+            base_total * (cover_weight_frac / (1.0 - cover_weight_frac))
         };
 
-        let n = coverage_indices.len() as i64;
-        let per = c.div_euclid(n.max(1)); // even split
-        let rem = c.rem_euclid(n.max(1)); // distribute remainder +1 to first 'rem' tasks
+        let n = coverage_indices.len() as f64;
+        let per = if n > 0.0 { c / n } else { 0.0 }; // even split as floating value
 
-        for (j, &ti) in coverage_indices.iter().enumerate() {
+        for &ti in coverage_indices.iter() {
             let mut v = per;
-            if (j as i64) < rem {
-                v += 1;
-            }
             // Ensure non-negative
-            if v < 0 {
-                v = 0;
+            if v < 0.0 {
+                v = 0.0;
             }
             if let Some(t) = tasks.get_mut(ti) {
                 t.value = v;

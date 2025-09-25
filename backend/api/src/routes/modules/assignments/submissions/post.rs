@@ -1,4 +1,4 @@
-use super::common::{MarkSummary, SubmissionDetailResponse};
+use super::common::{MarkSummary, PlagiarismInfo, SubmissionDetailResponse};
 use crate::services::email::EmailService;
 use crate::{
     auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
@@ -119,8 +119,8 @@ fn within_late_window(
 }
 
 /// Returns (adjusted_earned, capped_to_opt)
-fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i64>) {
-    let cap = ((max_percent as i128) * (total as i128) / 100) as i64;
+fn cap_late_earned(earned: f64, total: f64, max_percent: f64) -> (f64, Option<f64>) {
+    let cap = max_percent * total / 100.0;
     if earned > cap {
         (cap, Some(cap))
     } else {
@@ -130,8 +130,8 @@ fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i6
 
 #[derive(Serialize)]
 struct WsMark {
-    earned: i64,
-    total: i64,
+    earned: f64,
+    total: f64,
 }
 
 async fn emit_submission_status(
@@ -270,7 +270,7 @@ pub async fn check_disallowed_code(
                 assignment_id,
                 user_id,
                 attempt,
-                0,
+                0.0,
                 allocator.total_value,
                 is_practice,
                 file_name,
@@ -313,7 +313,7 @@ pub async fn check_disallowed_code(
                 created_at: now.to_rfc3339(),
                 updated_at: now.to_rfc3339(),
                 mark: MarkSummary {
-                    earned: 0,
+                    earned: 0.0,
                     total: allocator.total_value,
                 },
                 is_practice: updated.is_practice,
@@ -323,6 +323,12 @@ pub async fn check_disallowed_code(
                 tasks: vec![],
                 code_coverage: None,
                 user: None,
+                plagiarism: PlagiarismInfo {
+                    flagged: false,
+                    similarity: 0.0,
+                    lines_matched: 0,
+                    description: "".to_string(),
+                },
             };
 
             let report_path = submission_report_path(
@@ -722,7 +728,7 @@ async fn grade_submission(
 
     // Apply late cap if applicable
     let is_late_now = submission.created_at > assignment.due_date;
-    let mut _late_capped_to: Option<i64> = None;
+    let mut _late_capped_to: Option<f64> = None;
     if is_late_now && config.marking.late.allow_late_submissions {
         if within_late_window(
             submission.created_at,
@@ -749,10 +755,16 @@ async fn grade_submission(
         .code_coverage
         .as_ref()
         .map(|cov| {
-            let summary = cov.summary.as_ref().map(|s| MarkSummary {
-                earned: s.earned,
-                total: s.total,
-            });
+            let summary = cov
+                .summary
+                .as_ref()
+                .map(|s| super::common::CodeCoverageSummary {
+                    earned: s.earned,
+                    total: s.total,
+                    total_lines: s.total_lines as u32,
+                    covered_lines: s.covered_lines as u32,
+                    coverage_percent: s.coverage_percent,
+                });
             let files: Vec<serde_json::Value> = cov
                 .files
                 .iter()
@@ -797,6 +809,12 @@ async fn grade_submission(
         tasks,
         code_coverage,
         user: None, // just ignore this lol
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
     };
 
     let report_path = submission_report_path(
@@ -1024,6 +1042,13 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 ///     "status": "graded",
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
+///     "user": null,
+///     "plagiarism": {
+///         "flagged": false,
+///         "similarity": 0.0,
+///         "lines_matched": 0,
+///         "description": ""
+///     },
 ///   }
 /// }
 /// ```
@@ -1257,7 +1282,7 @@ pub async fn submit_assignment(
                 SubmissionStatus::FailedUpload,
                 Some("Disallowed code patterns detected".into()),
                 Some(WsMark {
-                    earned: 0,
+                    earned: 0.0,
                     total: response.mark.total,
                 }),
             )
@@ -1296,8 +1321,8 @@ pub async fn submit_assignment(
         assignment_id,
         claims.sub,
         attempt,
-        0,
-        0,
+        0.0,
+        0.0,
         is_practice,
         &file_name,
         &file_hash,
