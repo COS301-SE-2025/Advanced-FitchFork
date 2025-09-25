@@ -53,8 +53,8 @@ pub struct SubmissionItem {
 
 #[derive(Debug, Serialize)]
 pub struct Score {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,8 +87,8 @@ pub struct GetSubmissionsResponse {
 #[derive(Debug, FromQueryResult)]
 pub struct SubmissionWithRelations {
     pub id: i64,
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
     pub user_id: i64,

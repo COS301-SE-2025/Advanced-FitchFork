@@ -29,7 +29,7 @@ pub fn assert_default_config(d: &Value) {
     // NEW: late policy defaults
     assert_eq!(d["marking"]["late"]["allow_late_submissions"], false);
     assert_eq!(d["marking"]["late"]["late_window_minutes"], 0);
-    assert_eq!(d["marking"]["late"]["late_max_percent"], 100);
+    assert_eq!(d["marking"]["late"]["late_max_percent"], 100.0);
 
     // ---------- project ----------
     assert_eq!(d["project"]["language"], "cpp"); // serde rename_all = "lowercase"

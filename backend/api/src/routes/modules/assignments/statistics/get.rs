@@ -37,7 +37,7 @@ pub struct AssignmentStatsResponse {
     pub worst: i64, // %
 
     // extras
-    pub total_marks: i64, // sum of "total" across subs
+    pub total_marks: f64, // sum of "total" across subs
     pub num_students_submitted: usize,
     pub num_passed: usize,
     pub num_failed: usize,
@@ -52,9 +52,9 @@ pub struct AssignmentStatsResponse {
 // ---------- Helpers ----------
 
 #[inline]
-fn to_pct(earned: Option<i64>, total: Option<i64>) -> Option<i64> {
+fn to_pct(earned: Option<f64>, total: Option<f64>) -> Option<i64> {
     match (earned, total) {
-        (Some(e), Some(t)) if t > 0 => Some(((e as f64 / t as f64) * 100.0).round() as i64),
+        (Some(e), Some(t)) if t > 0.0 => Some(((e / t) * 100.0).round() as i64),
         _ => None,
     }
 }
@@ -246,7 +246,7 @@ pub async fn get_assignment_stats(
             stddev: 0.0,
             best: 0,
             worst: 0,
-            total_marks: 0,
+            total_marks: 0.0,
             num_students_submitted: 0,
             num_passed: 0,
             num_failed: 0,
@@ -331,11 +331,11 @@ pub async fn get_assignment_stats(
                 let earned = json
                     .get("mark")
                     .and_then(|m| m.get("earned"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 let total = json
                     .get("mark")
                     .and_then(|m| m.get("total"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 if let Some(p) = to_pct(earned, total) {
                     user_marks
                         .entry(s.user_id)
@@ -382,7 +382,7 @@ pub async fn get_assignment_stats(
     };
 
     // totals across counted rows only
-    let total_marks: i64 = rows.iter().map(|s| s.total).sum();
+    let total_marks: f64 = rows.iter().map(|s| s.total).sum();
     let num_students_submitted = rows.iter().map(|s| s.user_id).collect::<HashSet<_>>().len();
 
     // aggregates on effective marks

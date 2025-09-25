@@ -20,7 +20,7 @@ use util::execution_config::{ExecutionConfig, GradingPolicy};
 pub struct GradeSelection {
     pub submission: SubmissionModel,
     pub user: UserModel,
-    pub score_pct: f32,
+    pub score_pct: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -61,11 +61,11 @@ impl std::fmt::Display for GradeComputationError {
 impl std::error::Error for GradeComputationError {}
 
 /// Helper to compute percentage safely.
-pub fn percentage(earned: i64, total: i64) -> f32 {
-    if total <= 0 {
+pub fn percentage(earned: f64, total: f64) -> f64 {
+    if total <= 0.0 {
         0.0
     } else {
-        (earned as f32) * 100.0 / (total as f32)
+        (earned * 100.0) / total
     }
 }
 
@@ -79,8 +79,8 @@ fn apply_policy(
             attempts
                 .into_iter()
                 .max_by(|(a_submission, _), (b_submission, _)| {
-                    let a_ratio = a_submission.earned as f64 / a_submission.total.max(1) as f64;
-                    let b_ratio = b_submission.earned as f64 / b_submission.total.max(1) as f64;
+                    let a_ratio = a_submission.earned as f64 / a_submission.total.max(1.0) as f64;
+                    let b_ratio = b_submission.earned as f64 / b_submission.total.max(1.0) as f64;
 
                     match a_ratio.partial_cmp(&b_ratio).unwrap_or(Ordering::Equal) {
                         Ordering::Equal => {

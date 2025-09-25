@@ -10,7 +10,7 @@ mod update_plagiarism_tests {
     use chrono::{Datelike, TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_submission::Model as SubmissionModel,
+        assignment_submission::{Entity as AssignmentSubmissionEntity, Model as SubmissionModel},
         module::Model as ModuleModel,
         plagiarism_case::{Entity as PlagiarismCaseEntity, Model as PlagiarismCaseModel, Status},
         user::Model as UserModel,
@@ -87,13 +87,18 @@ mod update_plagiarism_tests {
         .await
         .unwrap();
 
+        use util::paths::{attempt_dir, user_submission_dir};
+        let _user_dir = user_submission_dir(module.id, assignment.id, student_user.id);
+        let attempt_dir = attempt_dir(module.id, assignment.id, student_user.id, 1);
+        std::fs::create_dir_all(&attempt_dir).expect("Failed to create submission directories");
+
         let submission1 = SubmissionModel::save_file(
             db,
             assignment.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "sub1.txt",
             "hash123#",
@@ -107,8 +112,8 @@ mod update_plagiarism_tests {
             assignment.id,
             student_user.id,
             1,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "sub2.txt",
             "hash456#",
@@ -508,5 +513,126 @@ mod update_plagiarism_tests {
             .unwrap();
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_update_plagiarism_case_to_flagged_zeros_out_submission_marks() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let submission1_before =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        let submission2_before =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_2)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+
+        assert!(submission1_before.earned > 0.0);
+        assert!(submission2_before.earned > 0.0);
+
+        let payload = UpdatePlagiarismCasePayload {
+            description: None,
+            status: Some("flagged".to_string()),
+            similarity: None,
+        };
+
+        let req = make_put_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            data.plagiarism_case.id,
+            &payload,
+        );
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
+            .one(app_state.db())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated_case.status, Status::Flagged);
+
+        let submission1_after =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        let submission2_after =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_2)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(submission1_after.earned, 0.0);
+        assert_eq!(submission2_after.earned, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_update_plagiarism_case_away_from_flagged_does_not_restore_marks() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let payload_flag = UpdatePlagiarismCasePayload {
+            description: None,
+            status: Some("flagged".to_string()),
+            similarity: None,
+        };
+        let req_flag = make_put_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            data.plagiarism_case.id,
+            &payload_flag,
+        );
+        let response_flag = app.clone().oneshot(req_flag).await.unwrap();
+        assert_eq!(response_flag.status(), StatusCode::OK);
+
+        let submission1_flagged =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(submission1_flagged.earned, 0.0);
+
+        let payload_review = UpdatePlagiarismCasePayload {
+            description: Some("Reviewed and cleared".to_string()),
+            status: Some("reviewed".to_string()),
+            similarity: None,
+        };
+        let req_review = make_put_request(
+            &data.lecturer_user,
+            data.module.id,
+            data.assignment.id,
+            data.plagiarism_case.id,
+            &payload_review,
+        );
+        let response_review = app.oneshot(req_review).await.unwrap();
+        assert_eq!(response_review.status(), StatusCode::OK);
+
+        let updated_case = PlagiarismCaseEntity::find_by_id(data.plagiarism_case.id)
+            .one(app_state.db())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated_case.status, Status::Reviewed);
+
+        let submission1_after_review =
+            AssignmentSubmissionEntity::find_by_id(data.plagiarism_case.submission_id_1)
+                .one(app_state.db())
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(submission1_after_review.earned, 0.0);
     }
 }
