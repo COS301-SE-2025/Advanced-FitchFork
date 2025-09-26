@@ -16,6 +16,7 @@ use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// Automatic feedback strategy: generates template-based feedback for each task.
 ///
@@ -56,25 +57,47 @@ impl Feedback for AutoFeedback {
             }
 
             if summary.is_empty() {
-                let student_set: std::collections::HashSet<&String> =
-                    result.student_output.iter().collect();
-                let memo_set: std::collections::HashSet<&String> =
-                    result.memo_output.iter().collect();
+                fn freq_map(lines: &[String]) -> HashMap<&String, usize> {
+                    let mut m = HashMap::new();
+                    for s in lines {
+                        *m.entry(s).or_insert(0) += 1;
+                    }
+                    m
+                }
 
-                let feedback_message =
-                    if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
-                        "Too much output"
-                    } else if !result.missed_patterns.is_empty() {
-                        if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {
-                            "Missing lines"
-                        } else {
-                            "Incorrect output"
-                        }
-                    } else if !result.matched_patterns.is_empty() {
+                let student_counts = freq_map(&result.student_output);
+                let memo_counts = freq_map(&result.memo_output);
+
+                let student_total = result.student_output.len();
+                let memo_total = result.memo_output.len();
+
+                let memo_is_multiset_subset = memo_counts
+                    .iter()
+                    .all(|(k, &v)| student_counts.get(k).unwrap_or(&0) >= &v);
+
+                let student_is_multiset_subset = student_counts
+                    .iter()
+                    .all(|(k, &v)| memo_counts.get(k).unwrap_or(&0) >= &v);
+
+                let multisets_equal = student_counts == memo_counts;
+
+                let feedback_message = if memo_is_multiset_subset && memo_total < student_total {
+                    "Too much output"
+                } else if !result.missed_patterns.is_empty() {
+                    if student_is_multiset_subset && student_total < memo_total {
+                        "Missing lines"
+                    } else {
+                        "Incorrect output"
+                    }
+                } else if !result.matched_patterns.is_empty() {
+                    if multisets_equal {
                         "All patterns matched"
                     } else {
-                        ""
-                    };
+                        "Incorrect output"
+                    }
+                } else {
+                    ""
+                };
 
                 summary.push_str(feedback_message);
             }

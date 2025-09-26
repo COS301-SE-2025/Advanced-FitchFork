@@ -154,8 +154,6 @@ impl Feedback for AiFeedback {
                 result.memo_output.join("\n"),
             );
 
-            println!("{}", prompt);
-
             let message = if result.missed_patterns.is_empty() {
                 let student_set: std::collections::HashSet<&String> =
                     result.student_output.iter().collect();
