@@ -32,9 +32,11 @@ use crate::types::TaskResult;
 use chrono::Utc;
 use std::fs;
 use std::path::PathBuf;
+use util::code_coverage_report::CoverageReport;
 use util::execution_config::ExecutionConfig;
 use util::execution_config::MarkingScheme;
 use util::mark_allocator;
+use util::valgrind_report::ValgrindReport;
 
 /// Represents a marking job for a single student submission.
 ///
@@ -46,6 +48,7 @@ use util::mark_allocator;
 /// - `student_outputs`: Paths to the student output files.
 /// - `allocator`: **Allocator object** describing the task/subtask structure and scoring.
 /// - `coverage_report`: Optional path to a code coverage report.
+/// - `valgrind_report`: Optional path to a valgrind memory leak report.
 /// - `comparator`: Strategy for comparing outputs (e.g., percentage, exact).
 /// - `feedback`: Automated feedback generation for each subtask.
 pub struct MarkingJob<'a> {
@@ -53,6 +56,7 @@ pub struct MarkingJob<'a> {
     student_outputs: Vec<PathBuf>,
     allocator: mark_allocator::MarkAllocator,
     coverage_report: Option<PathBuf>,
+    valgrind_report: Option<PathBuf>,
     comparator: Box<dyn OutputComparator + Send + Sync + 'a>,
     feedback: Box<dyn Feedback + Send + Sync + 'a>,
     config: ExecutionConfig,
@@ -86,6 +90,7 @@ impl<'a> MarkingJob<'a> {
             student_outputs,
             allocator,
             coverage_report: None,
+            valgrind_report: None,
             comparator: Box::new(PercentageComparator),
             feedback: Box::new(AutoFeedback),
             config,
@@ -98,6 +103,15 @@ impl<'a> MarkingJob<'a> {
     /// * `report` - Path to the coverage report file.
     pub fn with_coverage(mut self, report: PathBuf) -> Self {
         self.coverage_report = Some(report);
+        self
+    }
+
+    /// Attach a valgrind memory leak report to the marking job.
+    ///
+    /// # Arguments
+    /// * `report` - Path to the valgrind report file.
+    pub fn with_valgrind(mut self, report: PathBuf) -> Self {
+        self.valgrind_report = Some(report);
         self
     }
 
@@ -133,7 +147,6 @@ impl<'a> MarkingJob<'a> {
     /// 5. Aggregates results and generates automated feedback.
     /// 6. Builds a detailed report with scores and feedback per task/subtask.
     pub async fn mark(self) -> Result<MarkReportResponse, MarkerError> {
-        // --- Load memo & student contents locally (no allocator path anymore) ---
         let memo_contents: Vec<String> = self
             .memo_outputs
             .iter()
@@ -154,8 +167,7 @@ impl<'a> MarkingJob<'a> {
             })
             .collect::<Result<_, _>>()?;
 
-        // Optional: coverage raw JSON value
-        let coverage_raw: Option<serde_json::Value> = match &self.coverage_report {
+        let coverage_report: Option<CoverageReport> = match &self.coverage_report {
             Some(path) => {
                 let s = fs::read_to_string(path).map_err(|e| {
                     MarkerError::InputMismatch(format!(
@@ -163,17 +175,30 @@ impl<'a> MarkingJob<'a> {
                         path
                     ))
                 })?;
-                let v: serde_json::Value = serde_json::from_str(&s)
+                let report: CoverageReport = serde_json::from_str(&s)
                     .map_err(|e| MarkerError::InvalidJson(format!("Invalid coverage JSON: {e}")))?;
-                Some(v)
+                Some(report)
             }
             None => None,
         };
 
-        // --- Use allocator object directly ---
+        let valgrind_report: Option<ValgrindReport> = match &self.valgrind_report {
+            Some(path) => {
+                let s = fs::read_to_string(path).map_err(|e| {
+                    MarkerError::InputMismatch(format!(
+                        "Failed to read valgrind file {:?}: {e}",
+                        path
+                    ))
+                })?;
+                let report: ValgrindReport = serde_json::from_str(&s)
+                    .map_err(|e| MarkerError::InvalidJson(format!("Invalid valgrind JSON: {e}")))?;
+                Some(report)
+            }
+            None => None,
+        };
+
         let allocator = self.allocator;
 
-        // Build expected counts for output parser (ignore coverage tasks)
         let expected_counts: Vec<usize> = allocator
             .tasks
             .iter()
@@ -243,19 +268,100 @@ impl<'a> MarkingJob<'a> {
                             .unwrap_or_default(),
                     };
 
-                    let mut result =
-                        self.comparator
-                            .compare(subsection, &memo_or_regex_lines, &student_lines);
-                    result.stderr = task_output.stderr.clone();
-                    result.return_code = task_output.return_code;
+                    let has_error = task_output
+                        .return_code
+                        .map(|code| code != 0)
+                        .unwrap_or(false);
+
+                    let mut result = if has_error {
+                        // If there are compilation or runtime errors, award 0 marks
+                        // and skip comparison and memory leak checks
+                        TaskResult {
+                            name: subsection.name.clone(),
+                            awarded: 0.0,
+                            possible: subsection.value,
+                            matched_patterns: Vec::new(),
+                            missed_patterns: Vec::new(),
+                            student_output: student_lines.clone(),
+                            memo_output: memo_or_regex_lines.clone(),
+                            stderr: task_output.stderr.clone(),
+                            return_code: task_output.return_code,
+                            manual_feedback: None,
+                        }
+                    } else {
+                        // No errors detected, proceed with normal comparison
+                        let mut comparison_result = self.comparator.compare(
+                            subsection,
+                            &memo_or_regex_lines,
+                            &student_lines,
+                        );
+                        comparison_result.stderr = task_output.stderr.clone();
+                        comparison_result.return_code = task_output.return_code;
+                        comparison_result
+                    };
+
+                    let mut section_feedback = String::new();
+
+                    if has_error {
+                        // Use stderr content as feedback for compilation/runtime errors
+                        section_feedback = task_output
+                            .stderr
+                            .as_ref()
+                            .map(|stderr| stderr.trim().to_string())
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "Runtime error (exit code: {})",
+                                    task_output.return_code.unwrap_or(0)
+                                )
+                            });
+                    } else if task_entry.valgrind.unwrap_or(false) {
+                        // Only check for memory leaks if there are no compilation/runtime errors
+                        let is_memory_leak_section =
+                            subsection.name.to_lowercase().contains("memory leak")
+                                || subsection
+                                    .feedback
+                                    .as_ref()
+                                    .map(|f| f.to_lowercase().contains("valgrind"))
+                                    .unwrap_or(false);
+
+                        if is_memory_leak_section {
+                            if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
+                                let task_has_leaks = valgrind_report_ref
+                                    .tasks
+                                    .iter()
+                                    .find(|t| t.task_number == task_entry.task_number)
+                                    .map(|t| t.leaked)
+                                    .unwrap_or(false);
+
+                                if task_has_leaks {
+                                    result.awarded = 0.0;
+                                    let leaked_bytes = valgrind_report_ref
+                                        .tasks
+                                        .iter()
+                                        .find(|t| t.task_number == task_entry.task_number)
+                                        .map(|t| t.bytes_leaked)
+                                        .unwrap_or(0);
+                                    section_feedback = format!(
+                                        "Memory leaks detected: {} bytes leaked. Fix memory leaks to earn points.",
+                                        leaked_bytes
+                                    );
+                                } else {
+                                    result.awarded = subsection.value;
+                                    section_feedback =
+                                        "No memory leaks detected. Well done!".to_string();
+                                }
+                            }
+                        }
+                    }
 
                     result.awarded = round2(result.awarded);
                     task_earned += result.awarded;
+
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
                         total: round2(subsection.value),
-                        feedback: String::new(),
+                        feedback: section_feedback,
                     });
                     task_results.push(result.clone());
                     all_results.push(result);
@@ -287,10 +393,14 @@ impl<'a> MarkingJob<'a> {
                 .zip(per_task_names.into_iter().zip(per_task_scores.into_iter()))
         {
             for subsection in &mut subsections {
-                subsection.feedback = feedback_iter
-                    .next()
-                    .map(|f| f.message.clone())
-                    .unwrap_or_default();
+                if !subsection.feedback.is_empty() {
+                    feedback_iter.next();
+                } else {
+                    subsection.feedback = feedback_iter
+                        .next()
+                        .map(|f| f.message.clone())
+                        .unwrap_or_default();
+                }
             }
 
             report_tasks.push(crate::report::ReportTask {
@@ -307,14 +417,10 @@ impl<'a> MarkingJob<'a> {
             task_counter += 1;
         }
 
-        // Coverage buckets (optional)
         let mut coverage_total_earned: f64 = 0.0;
         let mut coverage_total_possible: f64 = 0.0;
-        if let Some(cov_raw) = coverage_raw.as_ref() {
-            let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
-                .parse(cov_raw, self.config.clone())?;
-
-            let bucket_percent: f64 = match coverage_report.coverage_percent {
+        if let Some(coverage_report_ref) = coverage_report.as_ref() {
+            let bucket_percent: f64 = match coverage_report_ref.summary.coverage_percent {
                 p if p < 5.0 => 0.0,
                 p if p < 20.0 => 20.0,
                 p if p < 40.0 => 40.0,
@@ -333,8 +439,6 @@ impl<'a> MarkingJob<'a> {
             coverage_total_earned = round2(bucket_percent * coverage_value / 100.0);
             coverage_total_possible = round2(coverage_value);
             total_earned += coverage_total_earned;
-
-            // TODO: attach to report later
         }
 
         let mark = crate::report::Score {
@@ -347,19 +451,16 @@ impl<'a> MarkingJob<'a> {
             crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
 
         if coverage_total_possible > 0.0 {
-            if let Some(cov_raw) = coverage_raw {
-                let coverage_report = crate::parsers::coverage_parser::JsonCoverageParser
-                    .parse(&cov_raw, self.config.clone())?;
-
+            if let Some(coverage_report_ref) = coverage_report.as_ref() {
                 report.code_coverage = Some(crate::report::CodeCoverageReport {
                     summary: Some(crate::report::CoverageSummary {
                         earned: coverage_total_earned,
                         total: coverage_total_possible,
-                        total_lines: coverage_report.total_lines,
-                        covered_lines: coverage_report.covered_lines,
-                        coverage_percent: coverage_report.coverage_percent,
+                        total_lines: coverage_report_ref.summary.total_lines,
+                        covered_lines: coverage_report_ref.summary.covered_lines,
+                        coverage_percent: coverage_report_ref.summary.coverage_percent,
                     }),
-                    files: coverage_report
+                    files: coverage_report_ref
                         .files
                         .iter()
                         .map(|f| crate::report::CoverageFile {
@@ -370,6 +471,31 @@ impl<'a> MarkingJob<'a> {
                         .collect(),
                 });
             }
+        }
+
+        if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
+            let tasks_with_leaks = valgrind_report_ref
+                .tasks
+                .iter()
+                .filter(|t| t.leaked)
+                .count();
+
+            report.valgrind = Some(crate::report::ValgrindReport {
+                summary: Some(crate::report::ValgrindSummary {
+                    total_leaks: valgrind_report_ref.total_leaks,
+                    tasks_with_leaks,
+                    total_tasks: valgrind_report_ref.total_tasks,
+                }),
+                tasks: valgrind_report_ref
+                    .tasks
+                    .iter()
+                    .map(|t| crate::report::ValgrindTaskReport {
+                        task_number: t.task_number,
+                        has_leaks: t.leaked,
+                        bytes_leaked: t.bytes_leaked,
+                    })
+                    .collect(),
+            });
         }
 
         Ok(report.into())

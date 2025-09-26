@@ -20,6 +20,7 @@ use serde_json::json;
 use util::code_coverage_report::CoverageProcessor;
 use util::config;
 use util::execution_config::ExecutionConfig;
+use util::valgrind_report::ValgrindProcessor;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -671,10 +672,12 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     // Run tasks concurrently
     use std::sync::Arc;
-    use tokio::sync::Semaphore;
+    use tokio::sync::{Mutex, Semaphore};
     use tokio::task::JoinSet;
     use tokio::time::{Duration, sleep};
     let mut join_set = JoinSet::new();
+
+    let valgrind_outputs = Arc::new(Mutex::new(Vec::<(i64, String)>::new()));
 
     // Bounded concurrency to avoid DB write contention
     let max_concurrency = std::cmp::max(
@@ -708,6 +711,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         let submission_path_cloned = submission_path.clone();
         let whitelist_cloned = config.code_coverage.whitelist.clone();
         let whitelist = whitelist_cloned.clone();
+        let valgrind_outputs_cloned = valgrind_outputs.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
@@ -811,7 +815,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                             }
                         }
                     } else {
-                        // Save with retry to mitigate transient DB locks
+                        let mut task_saved = false;
                         for attempt in 0..5 {
                             match SubmissionOutputModel::save_file(
                                 &db_cloned,
@@ -823,7 +827,8 @@ pub async fn create_submission_outputs_for_all_tasks(
                             .await
                             {
                                 Ok(_) => {
-                                    return true;
+                                    task_saved = true;
+                                    break;
                                 }
                                 Err(e) => {
                                     let backoff_ms = 20u64 * (1 << attempt);
@@ -838,10 +843,24 @@ pub async fn create_submission_outputs_for_all_tasks(
                                 }
                             }
                         }
-                        println!(
-                            "Failed to save submission output for task {} after retries",
-                            task.task_number
-                        );
+
+                        if !task_saved {
+                            println!(
+                                "Failed to save submission output for task {} after retries",
+                                task.task_number
+                            );
+                            return false;
+                        }
+
+                        if task.task_type == TaskType::Valgrind {
+                            let task_number = task.task_number;
+                            let output_for_valgrind = output_combined.clone();
+                            let mut outputs = valgrind_outputs_cloned.lock().await;
+                            outputs.push((task_number, output_for_valgrind));
+                            drop(outputs);
+                        }
+
+                        return true;
                     }
                     false
                 }
@@ -861,6 +880,24 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     if saved_any == 0 {
         return Err("No submission outputs were generated".to_string());
+    }
+
+    let collected_outputs = valgrind_outputs.lock().await;
+    if !collected_outputs.is_empty() {
+        match ValgrindProcessor::process_report(&collected_outputs) {
+            Ok(valgrind_json) => {
+                let valgrind_report_path = submission_path.join("valgrind_report.json");
+                match std::fs::write(&valgrind_report_path, &valgrind_json) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Failed to save combined valgrind report: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to process combined valgrind report: {}", e);
+            }
+        }
     }
 
     Ok(())
