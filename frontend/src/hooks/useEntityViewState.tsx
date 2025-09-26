@@ -22,6 +22,8 @@ export interface UseEntityViewStateOptions<T> {
   viewModeKey: string;
   getInitialNewItem: () => Partial<T>;
   defaultViewMode?: 'table' | 'grid';
+  /** storage key to persist filters; omit/undefined to disable persistence */
+  persistFiltersKey?: string;
 }
 
 /**
@@ -44,8 +46,28 @@ export function useEntityViewState<T>(options: UseEntityViewStateOptions<T>) {
   /** Search input state */
   const [searchTerm, setSearchTerm] = useState('');
 
-  /** Column filter values */
-  const [filterState, setFilterState] = useState<Record<string, string[]>>({});
+  // state: initialize filters ONLY from storage (or {})
+  const [filterState, setFilterState] = useState<Record<string, string[]>>(() => {
+    if (options.persistFiltersKey) {
+      try {
+        const raw = localStorage.getItem(options.persistFiltersKey);
+        if (raw != null && raw !== 'undefined') {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            return parsed as Record<string, string[]>;
+          }
+        }
+      } catch {}
+    }
+    return {}; // no defaults anymore
+  });
+
+  useEffect(() => {
+    if (!options.persistFiltersKey) return;
+    try {
+      localStorage.setItem(options.persistFiltersKey, JSON.stringify(filterState));
+    } catch {}
+  }, [filterState, options.persistFiltersKey]);
 
   /** Column sorter state */
   const [sorterState, setSorterState] = useState<SortOption[]>([]);

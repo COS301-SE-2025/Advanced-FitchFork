@@ -22,7 +22,10 @@ import type { SortOption } from '@/types/common';
 // Helpers
 const uniq = <T,>(xs: T[]) => Array.from(new Set(xs));
 const taskIdFrom = (t: NonNullable<GradeResponse['tasks']>[number]) =>
-  t.name?.trim() || (t.task_number != null ? `Task ${t.task_number}` : undefined) || 'Task';
+  (t.name?.trim() || (t.task_number != null ? `Task ${t.task_number}` : 'Task')).replace(
+    /\s+/g,
+    ' ',
+  );
 
 const AssignmentGrades = () => {
   const { setValue } = useViewSlot();
@@ -90,17 +93,20 @@ const AssignmentGrades = () => {
     }
   };
 
-  const actions: EntityListProps<GradeResponse>['actions'] = {
-    control: [
-      {
-        key: 'export',
-        label: 'Export CSV',
-        icon: <DownloadOutlined />,
-        isPrimary: true,
-        handler: handleExport,
-      },
-    ],
-  };
+  const actions = useMemo<EntityListProps<GradeResponse>['actions']>(
+    () => ({
+      control: [
+        {
+          key: 'export',
+          label: 'Export CSV',
+          icon: <DownloadOutlined />,
+          isPrimary: true,
+          handler: handleExport,
+        },
+      ],
+    }),
+    [handleExport],
+  );
 
   // Base columns (without Grade)
   const baseColumnsWithoutGrade: EntityListProps<GradeResponse>['columns'] = useMemo(
@@ -204,6 +210,7 @@ const AssignmentGrades = () => {
         emptyNoEntities={
           <AssignmentGradesEmptyState onRefresh={() => listRef.current?.refresh()} />
         }
+        filtersStorageKey={`modules:${moduleId}:assignments:${assignmentId}:grades:filters:v1`}
       />
     </div>
   );

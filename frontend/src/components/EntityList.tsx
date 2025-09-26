@@ -51,6 +51,10 @@ export type EntityListProps<T> = {
   showControlBar?: boolean;
   refreshButtonLabel?: string;
   onRefreshClick?: () => void;
+  /** Persist filters to localStorage (default true when no custom key). */
+  persistFilters?: boolean;
+  /** Optional explicit key for saving filters; if set, it’s used verbatim */
+  filtersStorageKey?: string;
 };
 
 export type EntityListHandle = {
@@ -87,6 +91,8 @@ const EntityList = forwardRef(function <T>(
     emptyNoEntities,
     showControlBar = true,
     onRefreshClick,
+    filtersStorageKey,
+    persistFilters = true,
   } = props;
 
   const {
@@ -106,6 +112,8 @@ const EntityList = forwardRef(function <T>(
     viewModeKey,
     defaultViewMode,
     getInitialNewItem: () => ({}) as Partial<T>,
+    // Use explicit key if provided; else fall back to `${viewModeKey}:filters` when persistFilters=true
+    persistFiltersKey: filtersStorageKey ?? (persistFilters ? `${viewModeKey}:filters` : undefined),
   });
 
   const { notifyError } = useNotifier();
@@ -792,7 +800,7 @@ const EntityList = forwardRef(function <T>(
                     </div>
 
                     {pagination.total > pagination.pageSize && (
-                      <div className="mt-6 flex justify-between items-center pb-4">
+                      <div className="mt-4 flex justify-between items-center pb-4">
                         <Button
                           onClick={() => goToPage(pagination.current - 1)}
                           disabled={pagination.current === 1}
@@ -838,7 +846,7 @@ const EntityList = forwardRef(function <T>(
                   data-testid="entity-list"
                 />
                 {items!.length < (pagination.total ?? 0) && (
-                  <div className="flex justify-between items-center mt-4">
+                  <div className="flex justify-between items-center mt-4 pb-4">
                     <Button
                       onClick={() => goToPage(pagination.current - 1)}
                       disabled={pagination.current === 1}
@@ -861,76 +869,78 @@ const EntityList = forwardRef(function <T>(
                 )}
               </>
             ) : (
-              <Table<T>
-                columns={extendedColumns}
-                dataSource={items!}
-                rowKey={getRowKey}
-                loading={loading}
-                tableLayout="auto"
-                scroll={{ x: 'max-content' }}
-                pagination={{
-                  ...pagination,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                  onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-                }}
-                rowSelection={
-                  bulkActions.length > 0
-                    ? {
-                        selectedRowKeys,
-                        onChange: setSelectedRowKeys,
-                      }
-                    : undefined
-                }
-                onChange={(pagination_, filters, sorter) => {
-                  const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
-                    .filter(
-                      (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
-                        !!s.columnKey && !!s.order,
-                    )
-                    .map((s) => ({ field: String(s.columnKey), order: s.order }));
-                  setSorterState(sorterArray);
-                  setFilterState(filters as Record<string, string[]>);
-                  setPagination({
-                    current: pagination_.current || 1,
-                    pageSize: pagination_.pageSize || 10,
-                  });
-                }}
-                onRow={(record) => ({
-                  onClick: () => onRowClick?.(record),
-                  'data-testid': 'entity-row',
-                })}
-                locale={{
-                  emptyText: (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
-                      {clearMenuItems.length === 1 ? (
-                        <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
-                          {clearMenuItems[0].label}
-                        </Button>
-                      ) : (
-                        <Dropdown
-                          menu={{
-                            items: clearMenuItems.map((item) => ({
-                              key: item.key,
-                              label: item.label,
-                              onClick: item.onClick,
-                            })),
-                          }}
-                        >
-                          <Button icon={<ReloadOutlined />}>Clear</Button>
-                        </Dropdown>
-                      )}
-                    </Empty>
-                  ),
-                }}
-                rowClassName={(record: any) =>
-                  justAppliedKeys.has(getRowKey(record))
-                    ? 'bg-green-50 transition-colors duration-700'
-                    : ''
-                }
-                data-testid="entity-table"
-                className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-              />
+              <div className="pb-4">
+                <Table<T>
+                  columns={extendedColumns}
+                  dataSource={items!}
+                  rowKey={getRowKey}
+                  loading={loading}
+                  tableLayout="auto"
+                  scroll={{ x: 'max-content' }}
+                  pagination={{
+                    ...pagination,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
+                  }}
+                  rowSelection={
+                    bulkActions.length > 0
+                      ? {
+                          selectedRowKeys,
+                          onChange: setSelectedRowKeys,
+                        }
+                      : undefined
+                  }
+                  onChange={(pagination_, filters, sorter) => {
+                    const sorterArray = (Array.isArray(sorter) ? sorter : [sorter])
+                      .filter(
+                        (s): s is { columnKey: string; order: 'ascend' | 'descend' } =>
+                          !!s.columnKey && !!s.order,
+                      )
+                      .map((s) => ({ field: String(s.columnKey), order: s.order }));
+                    setSorterState(sorterArray);
+                    setFilterState(filters as Record<string, string[]>);
+                    setPagination({
+                      current: pagination_.current || 1,
+                      pageSize: pagination_.pageSize || 10,
+                    });
+                  }}
+                  onRow={(record) => ({
+                    onClick: () => onRowClick?.(record),
+                    'data-testid': 'entity-row',
+                  })}
+                  locale={{
+                    emptyText: (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data found.">
+                        {clearMenuItems.length === 1 ? (
+                          <Button icon={<ReloadOutlined />} onClick={clearMenuItems[0].onClick}>
+                            {clearMenuItems[0].label}
+                          </Button>
+                        ) : (
+                          <Dropdown
+                            menu={{
+                              items: clearMenuItems.map((item) => ({
+                                key: item.key,
+                                label: item.label,
+                                onClick: item.onClick,
+                              })),
+                            }}
+                          >
+                            <Button icon={<ReloadOutlined />}>Clear</Button>
+                          </Dropdown>
+                        )}
+                      </Empty>
+                    ),
+                  }}
+                  rowClassName={(record: any) =>
+                    justAppliedKeys.has(getRowKey(record))
+                      ? 'bg-green-50 transition-colors duration-700'
+                      : ''
+                  }
+                  data-testid="entity-table"
+                  className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
+                />
+              </div>
             )}
           </>
         )}

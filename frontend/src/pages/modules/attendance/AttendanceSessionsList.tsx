@@ -4,21 +4,84 @@ import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { Tag, Switch, Progress, Tooltip } from 'antd';
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
-
 import type { AttendanceSession } from '@/types/modules/attendance';
 import PageHeader from '@/components/PageHeader';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
-import CreateModal from '@/components/common/CreateModal';
-import EditModal from '@/components/common/EditModal';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 import { message } from '@/utils/message';
 import { useAuth } from '@/context/AuthContext';
 import { useModule } from '@/context/ModuleContext';
-
 import { listAttendanceSessions } from '@/services/modules/attendance/get';
 import { createAttendanceSession } from '@/services/modules/attendance/post';
 import { editAttendanceSession } from '@/services/modules/attendance/put';
 import { deleteAttendanceSession } from '@/services/modules/attendance/delete';
 import { AttendanceEmptyState, AttendanceSessionCard } from '@/components/attendance';
+
+// One source of truth for both create & edit
+const sessionFields: FormModalField[] = [
+  {
+    name: 'title',
+    label: 'Title',
+    type: 'text',
+    constraints: { required: true, length: { min: 3, max: 120 } },
+  },
+  {
+    name: 'active',
+    label: 'Enabled',
+    type: 'boolean',
+  },
+  {
+    name: 'rotation_seconds',
+    label: 'Rotation (seconds)',
+    type: 'number',
+    constraints: {
+      required: true,
+      number: { min: 5, max: 3600, integer: true, step: 5, precision: 0 },
+    },
+  },
+  {
+    name: 'restrict_by_ip',
+    label: 'Restrict by IP',
+    type: 'boolean',
+  },
+  {
+    name: 'allowed_ip_cidr',
+    label: 'Allowed CIDR (optional)',
+    type: 'text',
+    // very light CIDR validation; tweak if you want stricter
+    constraints: {
+      length: { max: 64 },
+      pattern: {
+        regex: /^$|^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/,
+        message: 'CIDR like 192.168.0.0/24',
+      },
+    },
+  },
+  {
+    name: 'pin_to_creator_ip',
+    label: 'Pin to my current IP',
+    type: 'boolean',
+  },
+];
+
+// Edit-only extras (optional fields that the backend accepts on edit)
+const sessionEditExtraFields: FormModalField[] = [
+  {
+    name: 'created_from_ip',
+    label: 'Creator IP',
+    type: 'text',
+    constraints: {
+      length: { max: 64 },
+      pattern: {
+        regex: /^$|^(\d{1,3}\.){3}\d{1,3}$/,
+        message: 'IPv4 like 203.0.113.4',
+      },
+    },
+  },
+];
+
+// Merge for edit modal
+const sessionEditFields: FormModalField[] = [...sessionFields, ...sessionEditExtraFields];
 
 const fmt = (s: string) => dayjs(s).format('YYYY-MM-DD HH:mm');
 
@@ -175,6 +238,7 @@ const AttendanceSessionsList = () => {
             ref={listRef}
             name="Attendance Sessions"
             fetchItems={fetchSessions}
+            filtersStorageKey={`modules:${moduleId}:attendance:sessions:filters:v1`}
             getRowKey={(s) => s.id}
             onRowClick={(s) => navigate(`/modules/${moduleId}/attendance/sessions/${s.id}`)}
             /** Show a clean grid of cards to non-staff; staff default to table for bulk work */
@@ -303,11 +367,12 @@ const AttendanceSessionsList = () => {
         </div>
 
         {/* Create */}
-        <CreateModal
+        <FormModal
           open={createOpen}
           onCancel={() => setCreateOpen(false)}
-          onCreate={handleCreate}
+          onSubmit={handleCreate}
           title="Create Attendance Session"
+          submitText="Create"
           initialValues={{
             title: '',
             active: true,
@@ -316,46 +381,29 @@ const AttendanceSessionsList = () => {
             allowed_ip_cidr: '',
             pin_to_creator_ip: false,
           }}
-          fields={[
-            { name: 'title', label: 'Title', type: 'text', required: true },
-            { name: 'active', label: 'Enabled', type: 'boolean' },
-            {
-              name: 'rotation_seconds',
-              label: 'Rotation (seconds)',
-              type: 'number',
-              required: true,
-            },
-            { name: 'restrict_by_ip', label: 'Restrict by IP', type: 'boolean' },
-            { name: 'allowed_ip_cidr', label: 'Allowed CIDR (optional)', type: 'text' },
-            { name: 'pin_to_creator_ip', label: 'Pin to my current IP', type: 'boolean' },
-          ]}
+          fields={sessionFields}
         />
 
         {/* Edit */}
-        <EditModal
+        <FormModal
           open={editOpen}
           onCancel={() => {
             setEditOpen(false);
             setEditingItem(null);
           }}
-          onEdit={handleEdit}
+          onSubmit={handleEdit}
           title="Edit Attendance Session"
+          submitText="Save"
           initialValues={{
             title: editingItem?.title ?? '',
-            active: editingItem?.active,
-            rotation_seconds: editingItem?.rotation_seconds,
-            restrict_by_ip: editingItem?.restrict_by_ip,
+            active: editingItem?.active ?? false,
+            rotation_seconds: editingItem?.rotation_seconds ?? 30,
+            restrict_by_ip: editingItem?.restrict_by_ip ?? false,
             allowed_ip_cidr: editingItem?.allowed_ip_cidr ?? '',
+            pin_to_creator_ip: false, // not persisted server-side; only used on create
             created_from_ip: editingItem?.created_from_ip ?? '',
           }}
-          fields={[
-            { name: 'title', label: 'Title', type: 'text' },
-            { name: 'active', label: 'Enabled', type: 'boolean' },
-            { name: 'rotation_seconds', label: 'Rotation (seconds)', type: 'number' },
-            { name: 'restrict_by_ip', label: 'Restrict by IP', type: 'boolean' },
-            { name: 'allowed_ip_cidr', label: 'Allowed CIDR', type: 'text' },
-            { name: 'created_from_ip', label: 'Creator IP', type: 'text' },
-          ]}
+          fields={sessionEditFields}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 // HeaderBar.tsx
 import { Button, Dropdown, Typography, Tooltip } from 'antd';
-import { MenuOutlined } from '@ant-design/icons';
+import { MenuOutlined, TeamOutlined } from '@ant-design/icons';
 import { useAuth } from '@/context/AuthContext';
 import UserAvatar from '../common/UserAvatar';
 import BreadcrumbNav from '../common/BreadcrumbNav';
@@ -10,6 +10,7 @@ import { scaleColor } from '@/utils/color';
 // ✨ NEW: wire to the WS context
 import { useWsEvents, Topics, type PayloadOf } from '@/ws';
 import React from 'react';
+import { CapacityModal } from '../system';
 
 const { Text } = Typography;
 
@@ -65,6 +66,7 @@ const HeaderBar = ({ profileMenuItems, onMenuClick }: HeaderBarProps) => {
 
   const [general, setGeneral] = React.useState<PayloadOf<'system.health'> | null>(null);
   const [admin, setAdmin] = React.useState<PayloadOf<'system.health_admin'> | null>(null);
+  const [capOpen, setCapOpen] = React.useState(false);
 
   // Always subscribe to general system health
   useWsEvents([Topics.system()], {
@@ -121,19 +123,27 @@ const HeaderBar = ({ profileMenuItems, onMenuClick }: HeaderBarProps) => {
       {/* Desktop: compact health + profile */}
       {!isMobile && (
         <div className="flex items-center gap-4">
+          {isAdmin && (
+            <>
+              <Button size="middle" onClick={() => setCapOpen(true)} icon={<TeamOutlined />}>
+                Configure capacity
+              </Button>
+              <CapacityModal open={capOpen} onClose={() => setCapOpen(false)} />
+            </>
+          )}
           {/* Compact health panel */}
           <div className="hidden lg:flex items-center mr-2 px-2 py-1 rounded border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-[11px]">
             {/* Load averages */}
             <Tooltip title="Load averages (1/5/15 min)">
               <div className="flex items-center gap-2 pr-3">
                 <Text className={loadClass(load?.one)}>
-                  {load?.one != null ? `${load.one.toFixed(2)}%` : '--'}
+                  {load?.one != null ? `${load.one.toFixed(2)}` : '--'}
                 </Text>
                 <Text className={loadClass(load?.five)}>
-                  {load?.five != null ? `${load.five.toFixed(2)}%` : '--'}
+                  {load?.five != null ? `${load.five.toFixed(2)}` : '--'}
                 </Text>
                 <Text className={loadClass(load?.fifteen)}>
-                  {load?.fifteen != null ? `${load.fifteen.toFixed(2)}%` : '--'}
+                  {load?.fifteen != null ? `${load.fifteen.toFixed(2)}` : '--'}
                 </Text>
               </div>
             </Tooltip>

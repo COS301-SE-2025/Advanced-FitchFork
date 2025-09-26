@@ -1,8 +1,6 @@
 export { default as BreadcrumbNav } from './BreadcrumbNav';
 export { default as CodeDiffEditor } from './CodeDiffEditor';
 export { default as CodeEditor } from './CodeEditor';
-export { default as CreateModal } from './CreateModal';
-export { default as EditModal } from './EditModal';
 export { default as Logo } from './Logo';
 export { default as MobilePageHeader } from './MobilePageHeader';
 export { default as useNotifier } from './Notifier';

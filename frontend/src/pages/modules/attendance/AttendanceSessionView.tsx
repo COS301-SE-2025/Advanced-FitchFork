@@ -30,12 +30,63 @@ import {
 } from '@/services/modules/attendance/get';
 import { editAttendanceSession } from '@/services/modules/attendance/put';
 import { markAttendanceByUsername } from '@/services/modules/attendance/post';
-
-import EditModal from '@/components/common/EditModal';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 import { EntityList, type EntityListHandle } from '@/components/EntityList';
 import { IdTag } from '@/components/common';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { AttendanceRecordsEmptyState } from '@/components/attendance';
+
+// One source of truth for the edit form
+const sessionEditFields: FormModalField[] = [
+  {
+    name: 'title',
+    label: 'Title',
+    type: 'text',
+    constraints: { required: true, length: { min: 3, max: 120 } },
+  },
+  {
+    name: 'active',
+    label: 'Enabled',
+    type: 'boolean',
+  },
+  {
+    name: 'rotation_seconds',
+    label: 'Rotation (seconds)',
+    type: 'number',
+    constraints: {
+      number: { min: 5, max: 3600, integer: true, step: 5, precision: 0 },
+    },
+  },
+  {
+    name: 'restrict_by_ip',
+    label: 'Restrict by IP',
+    type: 'boolean',
+  },
+  {
+    name: 'allowed_ip_cidr',
+    label: 'Allowed CIDR',
+    type: 'text',
+    constraints: {
+      length: { max: 64 },
+      pattern: {
+        regex: /^$|^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/,
+        message: 'CIDR like 192.168.0.0/24',
+      },
+    },
+  },
+  {
+    name: 'created_from_ip',
+    label: 'Creator IP',
+    type: 'text',
+    constraints: {
+      length: { max: 64 },
+      pattern: {
+        regex: /^$|^(\d{1,3}\.){3}\d{1,3}$/,
+        message: 'IPv4 like 203.0.113.4',
+      },
+    },
+  },
+];
 
 const fmt = (s: string) => dayjs(s).format('YYYY-MM-DD HH:mm');
 
@@ -395,23 +446,17 @@ export default function AttendanceSessionView() {
       </div>
 
       {/* Edit modal */}
-      <EditModal
+      <FormModal
         open={editOpen}
         onCancel={() => {
           setEditOpen(false);
           setEditDefaults(undefined);
         }}
-        onEdit={handleEdit}
+        onSubmit={handleEdit}
         title="Edit Attendance Session"
+        submitText="Save"
         initialValues={editDefaults ?? {}}
-        fields={[
-          { name: 'title', label: 'Title', type: 'text' },
-          { name: 'active', label: 'Enabled', type: 'boolean' },
-          { name: 'rotation_seconds', label: 'Rotation (seconds)', type: 'number' },
-          { name: 'restrict_by_ip', label: 'Restrict by IP', type: 'boolean' },
-          { name: 'allowed_ip_cidr', label: 'Allowed CIDR', type: 'text' },
-          { name: 'created_from_ip', label: 'Creator IP', type: 'text' },
-        ]}
+        fields={sessionEditFields}
       />
 
       {/* NEW: Manual mark modal */}
@@ -423,7 +468,7 @@ export default function AttendanceSessionView() {
         onOk={submitManual}
         onCancel={() => setManualOpen(false)}
         confirmLoading={manualSubmitting}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" name="manual_mark_form" preserve={false}>
           <Form.Item

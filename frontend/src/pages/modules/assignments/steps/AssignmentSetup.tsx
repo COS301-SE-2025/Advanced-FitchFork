@@ -17,17 +17,13 @@ import StepFinal from './StepFinal';
 import type { Module } from '@/types/modules';
 import type { AssignmentDetails, AssignmentReadiness } from '@/types/modules/assignments';
 import type { AssignmentConfig, SubmissionMode } from '@/types/modules/assignments/config';
+import {
+  showMemoAllocatorForMode,
+  requiresMainForMode,
+  requiresInterpreterForMode,
+} from '@/policies/submission';
 
 const { Step } = Steps;
-
-// Components, not instantiated nodes
-const STEPS = [
-  { title: 'Welcome', Component: StepWelcome }, // 0
-  { title: 'Config', Component: StepConfig }, // 1 (never the default)
-  { title: 'Files & Resources', Component: StepFilesResources }, // 2
-  { title: 'Tasks', Component: StepTasks }, // 3
-  { title: 'Memo & Allocator', Component: StepMemoAndAllocator }, // 4
-] as const;
 
 type Props = {
   open: boolean;
@@ -51,6 +47,19 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
     setStepSaveHandlers((prev) => (prev[step] === handler ? prev : { ...prev, [step]: handler }));
   }, []);
 
+  const effectiveMode = (readiness?.submission_mode ?? config?.project?.submission_mode) as
+    | SubmissionMode
+    | undefined;
+  const showMemoAllocator = showMemoAllocatorForMode(effectiveMode);
+
+  const STEPS_DYNAMIC = [
+    { title: 'Welcome', Component: StepWelcome }, // 0
+    { title: 'Config', Component: StepConfig }, // 1
+    { title: 'Files & Resources', Component: StepFilesResources }, // 2
+    { title: 'Tasks', Component: StepTasks }, // 3
+    ...(showMemoAllocator ? [{ title: 'Memo & Allocator', Component: StepMemoAndAllocator }] : []), // 4 (optional)
+  ] as const;
+
   /** unified refresh (kept for child steps calling refresh) */
   const refreshLocal = useCallback(
     async (idOverride?: number) => {
@@ -73,17 +82,17 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
   /** choose initial step (Welcome by default; never Config) */
   const decideStartStep = (r?: AssignmentReadiness | null): number => {
     if (!r) return 0; // Welcome
-
-    // Final artifacts present → jump to "Memo & Allocator"
-    if (r.memo_output_present || r.mark_allocator_present) return 4;
-
-    // Tasks present (but no final artifacts) → "Tasks"
+    // If tasks exist → Tasks
     if (r.tasks_present) return 3;
-
-    // Any files/interpreter present → "Files & Resources"
-    if (r.main_present || r.memo_present || r.makefile_present || r.interpreter_present) return 2;
-
-    // Otherwise → Welcome
+    // If any files/interpreter exist → Files & Resources
+    const needsMain = requiresMainForMode(effectiveMode);
+    const needsInterp = requiresInterpreterForMode(effectiveMode);
+    if (
+      (needsMain ? r.main_present : needsInterp ? r.interpreter_present : false) ||
+      r.memo_present ||
+      r.makefile_present
+    )
+      return 2;
     return 0;
   };
 
@@ -95,7 +104,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
       if (!ok) return;
     }
     await refreshLocal(assignment?.assignment.id ?? assignmentId);
-    setCurrent((prev) => Math.min(prev + 1, STEPS.length - 1));
+    setCurrent((prev) => Math.min(prev + 1, STEPS_DYNAMIC.length - 1));
   }, [current, stepSaveHandlers, refreshLocal, assignment?.assignment.id, assignmentId]);
 
   const prev = useCallback(() => setCurrent((p) => Math.max(p - 1, 0)), []);
@@ -143,43 +152,49 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
 
   /** completion (controls Final screen) */
   const showFinal = useMemo(() => {
-    if (readiness?.is_ready === true) return true;
-    if (readiness?.memo_output_present && readiness?.mark_allocator_present) return true;
+    // If backend says assignment is ready, we’re done.
+    if (readiness?.is_ready) return true;
+
+    // Only manual mode cares about memo/allocator presence as a gating signal.
+    if (showMemoAllocator) {
+      if (readiness?.memo_output_present && readiness?.mark_allocator_present) return true;
+    }
+
     return false;
-  }, [readiness]);
+  }, [readiness, showMemoAllocator]);
 
   /** gating (only when not final) */
   const isCurrentStepComplete = (): boolean => {
     if (showFinal) return true;
     if (current === 0) return true; // Welcome
-    if (current === 1) return true; // Config is editable; never blocks
+    if (current === 1) return true; // Config never blocks
 
     if (!readiness) return false;
 
-    const r = readiness as AssignmentReadiness & {
-      submission_mode?: SubmissionMode;
-      interpreter_present?: boolean;
-    };
-    const mode = r.submission_mode;
-    const needsMain = mode === 'manual';
-    const needsInterpreter = mode === 'gatlam';
+    const needsMain = requiresMainForMode(effectiveMode);
+    const needsInterp = requiresInterpreterForMode(effectiveMode);
 
     switch (current) {
-      case 2:
+      case 2: // Files & Resources
         return (
-          (needsMain ? r.main_present : needsInterpreter ? r.interpreter_present : true) &&
-          r.memo_present &&
-          r.makefile_present
+          (needsMain
+            ? readiness.main_present
+            : needsInterp
+              ? (readiness as any).interpreter_present
+              : true) &&
+          readiness.memo_present &&
+          readiness.makefile_present
         );
-      case 3:
-        return r.tasks_present;
-      case 4:
-        return r.memo_output_present && r.mark_allocator_present;
+      case 3: // Tasks
+        return readiness.tasks_present;
+      case 4: // Memo & Allocator (may not exist)
+        return showMemoAllocator
+          ? readiness.memo_output_present && readiness.mark_allocator_present
+          : true;
       default:
         return true;
     }
   };
-
   const fireDoneThenClose = () => {
     try {
       onDone?.();
@@ -216,7 +231,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
     ],
   );
 
-  const CurrentComp = STEPS[current].Component;
+  const CurrentComp = STEPS_DYNAMIC[current].Component;
 
   return (
     <Modal
@@ -234,7 +249,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
           {/* Hide the stepper on the final screen */}
           {!showFinal && (
             <Steps current={current}>
-              {STEPS.map((s) => (
+              {STEPS_DYNAMIC.map((s) => (
                 <Step key={s.title} title={s.title} />
               ))}
             </Steps>
@@ -282,12 +297,14 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
                 <Button
                   size="large"
                   htmlType="button"
-                  type={current === STEPS.length - 1 ? 'default' : 'primary'}
-                  onClick={current === STEPS.length - 1 ? fireDoneThenClose : next}
-                  disabled={current !== STEPS.length - 1 && !isCurrentStepComplete()}
-                  icon={current === STEPS.length - 1 ? <CheckOutlined /> : <RightOutlined />}
+                  type={current === STEPS_DYNAMIC.length - 1 ? 'default' : 'primary'}
+                  onClick={current === STEPS_DYNAMIC.length - 1 ? fireDoneThenClose : next}
+                  disabled={current !== STEPS_DYNAMIC.length - 1 && !isCurrentStepComplete()}
+                  icon={
+                    current === STEPS_DYNAMIC.length - 1 ? <CheckOutlined /> : <RightOutlined />
+                  }
                 >
-                  {current === STEPS.length - 1 ? 'Finish & Close' : 'Next'}
+                  {current === STEPS_DYNAMIC.length - 1 ? 'Finish & Close' : 'Next'}
                 </Button>
               </>
             )}

@@ -36,6 +36,7 @@ import {
   getMaxConcurrent,
   setMaxConcurrent as setMaxConcurrentApi,
 } from '@/services/system/code_manager';
+import { CapacityModal } from '../system';
 
 const PercentBar: React.FC<{
   percent: number | null | undefined;
@@ -241,6 +242,7 @@ const AdminDashboard: React.FC = () => {
 
   // saving flag while we hit the REST endpoint to update maxConcurrent
   const [saving, setSaving] = useState<boolean>(false);
+  const [capOpen, setCapOpen] = useState(false);
 
   // Subscribe to the admin topic and keep `live` updated
   useWsEvents([Topics.systemAdmin()], {
@@ -539,10 +541,7 @@ const AdminDashboard: React.FC = () => {
     if (!maxModalOpen) return;
     setMaxDraft(typeof effectiveMax === 'number' ? effectiveMax : undefined);
   }, [effectiveMax, maxModalOpen]);
-  const handleOpenMaxModal = useCallback(() => {
-    setMaxDraft(typeof effectiveMax === 'number' ? effectiveMax : undefined);
-    setMaxModalOpen(true);
-  }, [effectiveMax]);
+
   const maxDraftValid = typeof maxDraft === 'number' && maxDraft > 0;
   const handleSaveMax = useCallback(async () => {
     if (!maxDraftValid || typeof maxDraft !== 'number' || maxDraft <= 0) return;
@@ -852,17 +851,27 @@ const AdminDashboard: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2">
-              <Button
-                block
-                type="primary"
-                icon={<TeamOutlined />}
-                onClick={handleOpenMaxModal}
-                loading={saving}
-              >
-                Update code manager capacity
-              </Button>
-            </div>
+            {isMobile && (
+              <div className="pt-2">
+                <Button
+                  block
+                  type="primary"
+                  icon={<TeamOutlined />}
+                  onClick={() => setCapOpen(true)}
+                >
+                  Update code manager capacity
+                </Button>
+
+                <CapacityModal
+                  open={capOpen}
+                  onClose={() => setCapOpen(false)}
+                  onSaved={async () => {
+                    // pull fresh value for the dashboard tiles
+                    await refreshMaxConcurrent();
+                  }}
+                />
+              </div>
+            )}
           </Card>
         </div>
 

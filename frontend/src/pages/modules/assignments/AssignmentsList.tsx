@@ -9,12 +9,10 @@ import {
   LockOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-
 import PageHeader from '@/components/PageHeader';
 import AssignmentCard from '@/components/assignments/AssignmentCard';
 import AssignmentTypeTag from '@/components/assignments/AssignmentTypeTag';
 import AssignmentStatusTag from '@/components/assignments/AssignmentStatusTag';
-
 import {
   listAssignments,
   deleteAssignment,
@@ -25,28 +23,112 @@ import {
   closeAssignment,
   openAssignment,
 } from '@/services/modules/assignments';
-
 import {
   type Assignment,
   type AssignmentType,
-  ASSIGNMENT_STATUSES,
+  ASSIGNMENT_STATUS_OPTIONS,
+  ASSIGNMENT_TYPE_OPTIONS,
   ASSIGNMENT_TYPES,
 } from '@/types/modules/assignments';
 import type { SortOption } from '@/types/common';
 import { type EntityListHandle, EntityList } from '@/components/EntityList';
 import { message } from '@/utils/message';
-
-import EditModal from '@/components/common/EditModal';
 import { useModule } from '@/context/ModuleContext';
 import ConfirmModal from '@/components/utils/ConfirmModal';
 import { useAuth } from '@/context/AuthContext';
-import CreateModal from '@/components/common/CreateModal';
 import AssignmentSetup from './steps/AssignmentSetup';
 import { Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import AssignmentListItem from '@/components/assignments/AssignmentListItem';
 import { AssignmentsEmptyState } from '@/components/assignments';
 import { formatModuleCode } from '@/utils/modules';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
+
+// Shared field schema for create & edit
+const assignmentFields: FormModalField[] = [
+  {
+    name: 'name',
+    label: 'Name',
+    type: 'text',
+    constraints: {
+      required: true,
+      length: { min: 3, max: 120 },
+    },
+  },
+  {
+    name: 'assignment_type',
+    label: 'Type',
+    type: 'select',
+    constraints: { required: true },
+    options: ASSIGNMENT_TYPE_OPTIONS,
+  },
+  {
+    name: 'available_from',
+    label: 'Available From',
+    type: 'datetime',
+    constraints: {
+      required: true,
+      date: { withTime: true },
+    },
+  },
+  {
+    name: 'due_date',
+    label: 'Due Date',
+    type: 'datetime',
+    constraints: {
+      required: true,
+      date: { withTime: true },
+      // Enforce due_date >= available_from
+      custom: {
+        validator: (value, all) => {
+          const a = all.available_from;
+          const d = value;
+          if (!a || !d) return;
+          // both are Dayjs here (before normalization)
+          if (d.isBefore?.(a)) throw new Error('Due date must be after Available From');
+        },
+      },
+    },
+  },
+  {
+    name: 'description',
+    label: 'Description',
+    type: 'textarea',
+    constraints: { length: { max: 2000 } },
+  },
+];
+
+// Bulk edit fields (all optional)
+const bulkFields: FormModalField[] = [
+  {
+    name: 'status',
+    label: 'Status',
+    type: 'select',
+    options: ASSIGNMENT_STATUS_OPTIONS,
+  },
+  {
+    name: 'available_from',
+    label: 'Available From',
+    type: 'datetime',
+    constraints: { date: { withTime: true } },
+  },
+  {
+    name: 'due_date',
+    label: 'Due Date',
+    type: 'datetime',
+    constraints: {
+      date: { withTime: true },
+      custom: {
+        validator: (value, all) => {
+          const a = all.available_from;
+          const d = value;
+          if (!a || !d) return;
+          if (d.isBefore?.(a)) throw new Error('Due date must be after Available From');
+        },
+      },
+    },
+  },
+];
 
 const AssignmentsList = () => {
   const auth = useAuth();
@@ -111,8 +193,8 @@ const AssignmentsList = () => {
     const res = await createAssignment(module.id, {
       name: values.name,
       assignment_type: values.assignment_type,
-      available_from: values.available_from.toISOString(),
-      due_date: values.due_date.toISOString(),
+      available_from: values.available_from,
+      due_date: values.due_date,
       description: values.description || '',
     });
 
@@ -143,6 +225,7 @@ const AssignmentsList = () => {
     const selectedIds = (listRef.current?.getSelectedRowKeys() ?? [])
       .map(Number)
       .filter((id) => !isNaN(id));
+
     const res = await bulkUpdateAssignments(module.id, {
       assignment_ids: selectedIds,
       available_from: values.available_from || undefined,
@@ -383,26 +466,17 @@ const AssignmentsList = () => {
                 onRefresh={() => listRef.current?.refresh()}
               />
             }
+            filtersStorageKey={`modules:${module.id}:assignments:filters:v1`}
           />
         </div>
 
-        <CreateModal
+        <FormModal
           open={setupOpen}
           onCancel={() => setSetupOpen(false)}
-          onCreate={handleCreate}
-          fields={[
-            { name: 'name', label: 'Name', type: 'text', required: true },
-            {
-              name: 'assignment_type',
-              label: 'Type',
-              type: 'select',
-              required: true,
-              options: ASSIGNMENT_TYPES.map((t) => ({ label: t, value: t })),
-            },
-            { name: 'available_from', label: 'Available From', type: 'datetime', required: true },
-            { name: 'due_date', label: 'Due Date', type: 'datetime', required: true },
-            { name: 'description', label: 'Description', type: 'textarea' },
-          ]}
+          onSubmit={handleCreate}
+          title="Create Assignment"
+          submitText="Create"
+          normalizeDatetime // => converts any datetime fields to ISO on submit
           initialValues={{
             name: '',
             assignment_type: 'assignment',
@@ -410,60 +484,38 @@ const AssignmentsList = () => {
             due_date: dayjs().add(7, 'day'),
             description: '',
           }}
-          title="Create Assignment"
+          fields={assignmentFields}
         />
 
-        <EditModal
+        <FormModal
           open={editOpen}
           onCancel={() => {
             setEditOpen(false);
             setEditingItem(null);
           }}
-          onEdit={handleEdit}
+          onSubmit={handleEdit}
           title="Edit Assignment"
+          submitText="Save"
+          normalizeDatetime
           initialValues={{
             name: editingItem?.name ?? '',
             description: editingItem?.description ?? '',
             assignment_type: editingItem?.assignment_type ?? 'assignment',
-            available_from: editingItem?.available_from ?? dayjs().toISOString(),
-            due_date: editingItem?.due_date ?? dayjs().add(7, 'day').toISOString(),
+            available_from: dayjs(editingItem?.available_from ?? dayjs()),
+            due_date: dayjs(editingItem?.due_date ?? dayjs().add(7, 'day')),
           }}
-          fields={[
-            { name: 'name', label: 'Name', type: 'text', required: true },
-            {
-              name: 'assignment_type',
-              label: 'Type',
-              type: 'select',
-              required: true,
-              options: ASSIGNMENT_TYPES.map((t) => ({ label: t, value: t })),
-            },
-            { name: 'available_from', label: 'Available From', type: 'datetime', required: true },
-            { name: 'due_date', label: 'Due Date', type: 'datetime', required: true },
-            { name: 'description', label: 'Description', type: 'text' },
-          ]}
+          fields={assignmentFields}
         />
 
-        <EditModal
+        <FormModal
           open={bulkEditOpen}
-          onCancel={() => {
-            setBulkEditOpen(false);
-          }}
-          onEdit={handleBulkEdit}
+          onCancel={() => setBulkEditOpen(false)}
+          onSubmit={handleBulkEdit}
           title="Bulk Edit Assignments"
+          submitText="Update"
+          normalizeDatetime
           initialValues={{}}
-          fields={[
-            {
-              name: 'status',
-              label: 'Status',
-              type: 'select',
-              options: ASSIGNMENT_STATUSES.map((s) => ({
-                label: s,
-                value: s,
-              })),
-            },
-            { name: 'available_from', label: 'Available From', type: 'datetime' },
-            { name: 'due_date', label: 'Due Date', type: 'datetime' },
-          ]}
+          fields={bulkFields}
         />
 
         <ConfirmModal
