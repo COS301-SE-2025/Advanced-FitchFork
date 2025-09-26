@@ -256,12 +256,6 @@ pub async fn check_disallowed_code_existing(
     db: &sea_orm::DatabaseConnection,
     assignment: &db::models::assignment::Model,
 ) -> DisallowedCodeCheckResult {
-    println!(
-        "Checking existing submission {} for disallowed code...",
-        submission_id
-    );
-
-    // First, load the existing submission
     let submission = match assignment_submission::Entity::find_by_id(submission_id)
         .one(db)
         .await
@@ -390,11 +384,8 @@ pub async fn check_disallowed_code_new(
     file_hash: &str,
     assignment: &db::models::assignment::Model,
 ) -> DisallowedCodeCheckResult {
-    println!("Checking new submission for disallowed code...");
-
     match scan_code_content::contains_dissalowed_code(file_bytes, config) {
         Ok(true) => {
-            // Load allocator for total marks
             let allocator =
                 match mark_allocator::load_allocator(assignment.module_id, assignment_id) {
                     Ok(a) => a,
