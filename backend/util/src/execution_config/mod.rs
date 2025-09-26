@@ -469,7 +469,7 @@ fn default_grading_policy() -> GradingPolicy {
 }
 
 fn default_limit_attempts() -> bool {
-    false
+    true
 }
 
 fn default_max_attempts() -> u32 {
