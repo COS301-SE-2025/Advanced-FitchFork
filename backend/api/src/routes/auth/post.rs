@@ -8,9 +8,14 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use db::models::{
+    module::{Column as ModuleColumn, Entity as ModuleEntity},
+    user_module_role::{Model as UserModuleRoleModel, Role as ModuleRole},
+};
+use db::models::{
     password_reset_token::{self, Model as PasswordResetTokenModel},
     user::{self, Model as UserModel},
 };
+use sea_orm::QueryOrder;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, PaginatorTrait,
     QueryFilter,
@@ -23,11 +28,6 @@ use util::{
     state::AppState,
 };
 use validator::Validate;
-use sea_orm::QueryOrder;
-use db::models::{
-    module::{Entity as ModuleEntity, Column as ModuleColumn},
-    user_module_role::{Model as UserModuleRoleModel, Role as ModuleRole},
-};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
