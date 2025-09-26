@@ -41,16 +41,17 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Alias::new("command")).string().not_null())
                     .col(
-                        ColumnDef::new(Alias::new("code_coverage"))
-                            .boolean()
+                        ColumnDef::new(Alias::new("task_type"))
+                            .enumeration(
+                                Alias::new("task_type_enum"),
+                                vec![
+                                    Alias::new("normal"),
+                                    Alias::new("coverage"),
+                                    Alias::new("valgrind"),
+                                ],
+                            )
                             .not_null()
-                            .default(false),
-                    )
-                    .col(
-                        ColumnDef::new(Alias::new("valgrind"))
-                            .boolean()
-                            .not_null()
-                            .default(false),
+                            .default("normal"),
                     )
                     .col(
                         ColumnDef::new(Alias::new("created_at"))

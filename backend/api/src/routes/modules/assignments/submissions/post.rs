@@ -1,7 +1,7 @@
-use super::common::{MarkSummary, SubmissionDetailResponse, PlagiarismInfo};
+use super::common::{MarkSummary, PlagiarismInfo, SubmissionDetailResponse};
+use crate::services::email::EmailService;
 use crate::ws::submissions::{emit as sub_emit, payload as sub_payload};
 use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
-use crate::services::email::EmailService;
 use axum::{
     Json,
     extract::{Extension, Multipart, Path, Query, State},
@@ -11,7 +11,7 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
-use db::models::assignment_task;
+use db::models::assignment_task::{self, TaskType};
 use db::models::user::Entity as UserEntity;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
@@ -510,7 +510,7 @@ async fn grade_submission(
     let mut ordered_student_paths: Vec<std::path::PathBuf> = Vec::new();
     let mut db_pairing_ok = true;
 
-    for task in tasks.iter().filter(|t| !t.code_coverage) {
+    for task in tasks.iter().filter(|t| t.task_type != TaskType::Coverage) {
         // Memo output for this task
         match assignment_memo_output::Entity::find()
             .filter(assignment_memo_output::Column::AssignmentId.eq(assignment.id))
@@ -599,7 +599,7 @@ async fn grade_submission(
                                                 .one(db)
                                                 .await
                                         {
-                                            if !task.code_coverage {
+                                            if task.task_type != TaskType::Coverage {
                                                 // Map task_number to memo file index (task_number is 1-based)
                                                 if let Some(mp) = memo_files_disk
                                                     .get((task.task_number.max(1) as usize) - 1)

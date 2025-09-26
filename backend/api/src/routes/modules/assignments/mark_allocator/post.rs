@@ -5,7 +5,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::{assignment_memo_output, assignment_task};
+use db::models::{
+    assignment_memo_output,
+    assignment_task::{self, TaskType},
+};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 use util::paths::{assignment_dir, memo_output_dir, storage_root};
@@ -86,11 +89,17 @@ pub async fn generate(
     let mut task_file_pairs = Vec::with_capacity(tasks.len());
 
     for t in &tasks {
+        let (code_coverage, valgrind) = match t.task_type {
+            TaskType::Coverage => (true, false),
+            TaskType::Valgrind => (false, true),
+            TaskType::Normal => (false, false),
+        };
+
         let task_info = util::mark_allocator::TaskInfo {
             id: t.id,
             task_number: t.task_number,
-            code_coverage: t.code_coverage,
-            valgrind: t.valgrind,
+            code_coverage,
+            valgrind,
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {

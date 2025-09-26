@@ -198,6 +198,7 @@ const PlagiarismCases = () => {
       submission_id_2: Number(values.submission_id_2),
       description: String(values.description ?? ''),
       similarity: Number(values.similarity ?? 0),
+      lines_matched: Number(values.lines_matched ?? 0),
     });
     if (res.success) {
       message.success(res.message || 'Plagiarism case created');
@@ -616,6 +617,7 @@ const PlagiarismCases = () => {
           submission_id_2: undefined,
           description: '',
           similarity: 0,
+          lines_matched: 0,
         }}
         fields={[
           {
@@ -652,6 +654,12 @@ const PlagiarismCases = () => {
           },
           { name: 'description', label: 'Description', type: 'textarea', required: true },
           { name: 'similarity', label: 'Similarity', type: 'number' },
+          // NEW
+          {
+            name: 'lines_matched',
+            label: 'Lines Matched',
+            type: 'number',
+          },
         ]}
       />
 

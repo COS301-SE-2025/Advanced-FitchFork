@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+// src/pages/modules/assignments/setup/steps/StepTasks.tsx
+import { useEffect, useMemo, useState } from 'react';
 import {
   Typography,
   Button,
@@ -7,9 +8,9 @@ import {
   Empty,
   message,
   Upload,
-  Switch,
   Tooltip,
   Space,
+  Segmented,
 } from 'antd';
 import {
   PlusOutlined,
@@ -31,6 +32,9 @@ import {
   createTasksFromMakefileTargets,
 } from '@/utils/makefile_tasks';
 
+import type { TaskType } from '@/types/modules/assignments/tasks';
+import { taskTypeOptionsForLanguage } from '@/policies/languages';
+
 const { Title, Paragraph, Text } = Typography;
 
 type TaskRow = {
@@ -38,13 +42,18 @@ type TaskRow = {
   task_number: number;
   name: string;
   command: string;
-  code_coverage: boolean;
+  task_type: TaskType;
 };
 
 const StepTasks = () => {
   const module = useModule();
-  const { assignmentId, assignment, readiness, refreshAssignment, setStepSaveHandler } =
+  const { assignmentId, assignment, readiness, refreshAssignment, setStepSaveHandler, config } =
     useAssignmentSetup();
+
+  const lang = config?.project.language ?? null;
+
+  const typeOptions = useMemo(() => taskTypeOptionsForLanguage(lang), [lang]);
+  const allowedValues = useMemo(() => new Set(typeOptions.map((o) => o.value)), [typeOptions]);
 
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +61,8 @@ const StepTasks = () => {
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editedName, setEditedName] = useState('');
   const [editedCommand, setEditedCommand] = useState('');
+  const [editedType, setEditedType] = useState<TaskType>('normal');
+
   const [savingId, setSavingId] = useState<number | null>(null);
   const [uploadingFor, setUploadingFor] = useState<number | null>(null);
   const [generatingFromMakefile, setGeneratingFromMakefile] = useState(false);
@@ -62,7 +73,8 @@ const StepTasks = () => {
     try {
       const res = await listTasks(module.id, assignmentId);
       if (res.success) {
-        setTasks(res.data.sort((a: TaskRow, b: TaskRow) => a.task_number - b.task_number));
+        const data = (res.data as TaskRow[]).sort((a, b) => a.task_number - b.task_number);
+        setTasks(data);
       } else {
         message.error(res.message || 'Failed to load tasks');
       }
@@ -127,6 +139,8 @@ const StepTasks = () => {
     }
   };
 
+  const coerceAllowed = (t: TaskType): TaskType => (allowedValues.has(t) ? t : 'normal');
+
   const handleCreateTask = async () => {
     if (!assignmentId) return;
 
@@ -136,7 +150,7 @@ const StepTasks = () => {
       task_number: nextTaskNumber,
       name: `Task ${nextTaskNumber}`,
       command: 'echo Hello World',
-      code_coverage: false,
+      task_type: 'normal',
     });
 
     if (res.success) {
@@ -149,13 +163,18 @@ const StepTasks = () => {
 
   const handleSaveTask = async (taskId: number) => {
     if (!assignmentId) return;
-    if (savingId === taskId) return; // prevent double-save
+    if (savingId === taskId) return;
 
     const original = tasks.find((t) => t.id === taskId);
     if (!original) return;
 
-    // no-op: nothing changed
-    if (editedName.trim() === original.name && editedCommand.trim() === original.command) {
+    const nextType = coerceAllowed(editedType);
+
+    if (
+      editedName.trim() === original.name &&
+      editedCommand.trim() === original.command &&
+      nextType === original.task_type
+    ) {
       setEditingTaskId(null);
       return;
     }
@@ -165,7 +184,7 @@ const StepTasks = () => {
       const res = await editTask(module.id, assignmentId, taskId, {
         name: editedName.trim(),
         command: editedCommand.trim(),
-        code_coverage: original?.code_coverage ?? false,
+        task_type: nextType,
       });
 
       if (res.success) {
@@ -199,28 +218,6 @@ const StepTasks = () => {
     }
   };
 
-  const handleToggleCoverage = async (task: TaskRow, value: boolean) => {
-    if (!assignmentId) return;
-    if (savingId === task.id) return;
-    try {
-      setSavingId(task.id);
-      const res = await editTask(module.id, assignmentId, task.id, {
-        name: task.name,
-        command: task.command,
-        code_coverage: value,
-      });
-      if (res.success) {
-        setTasks((prev) =>
-          prev.map((t) => (t.id === task.id ? { ...t, code_coverage: value } : t)),
-        );
-      } else {
-        message.error(res.message || 'Failed to update coverage');
-      }
-    } finally {
-      setSavingId(null);
-    }
-  };
-
   const beforeUploadOverwrite = (taskId: number) => async (file: File) => {
     if (!assignmentId) return false;
     try {
@@ -237,19 +234,21 @@ const StepTasks = () => {
     } finally {
       setUploadingFor(null);
     }
-    return false; // prevent auto upload list
+    return false;
   };
 
   const beginEdit = (task: TaskRow) => {
     setEditingTaskId(task.id);
     setEditedName(task.name);
     setEditedCommand(task.command);
+    setEditedType(coerceAllowed(task.task_type));
   };
 
   const cancelEdit = () => {
     setEditingTaskId(null);
     setEditedName('');
     setEditedCommand('');
+    setEditedType('normal');
   };
 
   return (
@@ -387,16 +386,26 @@ const StepTasks = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
-                    <Tooltip title="Mark this task as coverage-only (excluded from pass/fail)">
-                      <span>Coverage</span>
+                  {/* Task Type */}
+                  <div className="flex items-center gap-2">
+                    <Tooltip title="How this task is executed/assessed">
+                      <span className="text-xs text-gray-600 dark:text-gray-300">Mode</span>
                     </Tooltip>
-                    <Switch
-                      size="small"
-                      checked={!!task.code_coverage}
-                      loading={savingId === task.id}
-                      onChange={(v) => handleToggleCoverage(task, v)}
-                    />
+                    {isEditing ? (
+                      <Segmented
+                        value={editedType}
+                        onChange={(v) => setEditedType(v as TaskType)}
+                        options={typeOptions}
+                        size="small"
+                      />
+                    ) : (
+                      <Segmented
+                        value={task.task_type}
+                        options={typeOptions}
+                        size="small"
+                        disabled
+                      />
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

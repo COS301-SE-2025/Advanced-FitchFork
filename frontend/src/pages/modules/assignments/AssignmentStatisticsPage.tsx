@@ -1,6 +1,6 @@
 // src/pages/modules/assignments/AssignmentStatisticsPage.tsx
 import { useEffect, useMemo } from 'react';
-import { Button, Card, Col, Descriptions, Divider, Row, Space, Statistic, Typography } from 'antd';
+import { Button, Card, Col, Descriptions, Row, Space, Statistic, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { Pie } from '@ant-design/plots';
 import type { PieConfig } from '@ant-design/plots';
@@ -11,7 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useUI } from '@/context/UIContext';
 import { scaleColor } from '@/utils/color';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 type Props = { className?: string };
 
@@ -222,11 +222,6 @@ export default function AssignmentStatisticsPage({ className }: Props) {
               <div style={{ minHeight: 300 }}>
                 <Pie {...passFailConfig} />
               </div>
-              <Divider className="!my-3" />
-              <Text type="secondary">
-                This chart reflects unique submissions counted by pass/fail outcomes. Ignored items
-                are still included here unless your backend excludes them from the aggregated stats.
-              </Text>
             </Card>
           </Col>
         </Row>

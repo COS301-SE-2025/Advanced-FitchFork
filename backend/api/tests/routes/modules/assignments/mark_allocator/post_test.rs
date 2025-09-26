@@ -9,6 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::Model as AssignmentModel,
+        assignment_task::TaskType,
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -84,8 +85,7 @@ mod tests {
             1,         // task_number
             "",        // name -> will default to "Task 1" in allocator
             "echo ok", // <-- provide any command string (NOT NULL)
-            false,     // code_coverage
-            false,     // valgrind
+            TaskType::Normal,
         )
         .await
         .unwrap();

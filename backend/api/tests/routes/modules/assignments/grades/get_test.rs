@@ -8,7 +8,7 @@ mod tests {
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
         assignment_submission::Model as AssignmentSubmissionModel,
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -339,8 +339,7 @@ mod tests {
             1,
             "FizzBuzz",
             "run fizz",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .unwrap();
@@ -350,8 +349,7 @@ mod tests {
             2,
             "Palindrome",
             "run pal",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .unwrap();
@@ -361,8 +359,7 @@ mod tests {
             3,
             "Sorting",
             "run sort",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .unwrap();

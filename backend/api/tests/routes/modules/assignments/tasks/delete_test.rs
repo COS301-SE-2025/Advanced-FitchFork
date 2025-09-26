@@ -9,7 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -73,8 +73,7 @@ mod tests {
             1,
             "echo 'Task to Delete'",
             "Task To Delete Name",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task to delete");

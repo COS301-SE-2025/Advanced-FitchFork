@@ -9,6 +9,7 @@ mod tests {
         response::Response,
     };
     use chrono::{Datelike, Duration, Utc};
+    use db::models::assignment_task::TaskType;
     use db::models::{
         assignment::{
             ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
@@ -95,9 +96,16 @@ mod tests {
         active_assignment.updated_at = Set(now);
         let assignment = active_assignment.update(db).await.unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(
+            db,
+            assignment.id,
+            1,
+            "Task 1",
+            "make task1",
+            TaskType::Normal,
+        )
+        .await
+        .unwrap();
 
         create_assignment_structure(module.id, assignment.id);
         create_mark_allocator(module.id, assignment.id);

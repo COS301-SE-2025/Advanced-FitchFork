@@ -10,6 +10,7 @@ export const createPlagiarismCase = async (
     submission_id_2: number;
     description: string;
     similarity: number;
+    lines_matched: number;
   }
 ) => {
   return api.post<PlagiarismCase>(

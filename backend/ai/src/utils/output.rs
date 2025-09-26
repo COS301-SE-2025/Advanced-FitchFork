@@ -1,5 +1,5 @@
 use db::models::assignment_submission_output::Entity as SubmissionOutputEntity;
-use db::models::assignment_task::Entity as AssignmentTaskEntity;
+use db::models::assignment_task::{Entity as AssignmentTaskEntity, TaskType};
 
 use sea_orm::EntityTrait;
 use std::fs;
@@ -122,7 +122,8 @@ impl Output {
                             .one(db)
                             .await
                         {
-                            if task.code_coverage == code_coverage {
+                            let is_coverage_task = task.task_type == TaskType::Coverage;
+                            if is_coverage_task == code_coverage {
                                 let content = fs::read_to_string(&path)?;
                                 results.push((output.task_id, content));
                             }

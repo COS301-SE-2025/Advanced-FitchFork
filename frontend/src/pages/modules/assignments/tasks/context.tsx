@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState, useCall
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Grid } from 'antd';
 
-import type { Task } from '@/types/modules/assignments/tasks';
+import type { Task, TaskType } from '@/types/modules/assignments/tasks';
 import type { GetTaskResponse } from '@/types/modules/assignments/tasks/responses';
 import type {
   MarkAllocatorFile,
@@ -72,8 +72,8 @@ type Ctx = {
   setEditedName: (v: string) => void;
   editedCommand: string;
   setEditedCommand: (v: string) => void;
-  editedCoverage: boolean;
-  setEditedCoverage: (v: boolean) => void;
+  editedMode: TaskType;
+  setEditedMode: (v: TaskType) => void;
 
   // actions
   refreshTasks: () => Promise<void>;
@@ -131,7 +131,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [editedName, setEditedName] = useState('');
   const [editedCommand, setEditedCommand] = useState('');
-  const [editedCoverage, setEditedCoverage] = useState(false);
+  const [editedMode, setEditedMode] = useState<TaskType>('normal');
 
   const refreshTasks = useCallback(async (): Promise<void> => {
     if (!moduleId || !assignmentId) return;
@@ -191,7 +191,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setSelectedTask(normalized);
           setEditedCommand(normalized.command);
           setEditedName(normalized.name ?? '');
-          setEditedCoverage(!!normalized.code_coverage);
+          setEditedMode(normalized.task_type ?? 'normal');
 
           setBreadcrumbLabel(
             `modules/${moduleId}/assignments/${assignmentId}/tasks/${normalized.id}`,
@@ -214,7 +214,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       task_number: nextTaskNumber,
       name: `Task ${nextTaskNumber}`,
       command: 'echo Hello World',
-      code_coverage: false,
+      task_type: 'normal' as const,
     };
     try {
       const res = await createTask(moduleId, assignmentId, payload);
@@ -293,30 +293,41 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const res = await editTask(moduleId, assignmentId, selectedTask.id, {
         name: editedName,
         command: editedCommand,
-        code_coverage: editedCoverage,
+        task_type: editedMode,
       });
+
       if (res.success && res.data) {
         message.success(res.message);
         setSelectedTask((prev) =>
           prev
-            ? { ...prev, name: editedName, command: editedCommand, code_coverage: editedCoverage }
+            ? {
+                ...prev,
+                name: editedName,
+                command: editedCommand,
+                code_coverage: editedMode === 'coverage',
+                valgrind: editedMode === 'valgrind',
+              }
             : prev,
         );
         setTasks((prev) =>
           prev.map((t) =>
             t.id === selectedTask.id
-              ? { ...t, name: editedName, command: editedCommand, code_coverage: editedCoverage }
+              ? {
+                  ...t,
+                  name: editedName,
+                  command: editedCommand,
+                  code_coverage: editedMode === 'coverage',
+                  valgrind: editedMode === 'valgrind',
+                }
               : t,
           ),
         );
-      } else {
-        message.error(res.message);
       }
     } catch (e) {
       console.error(e);
       message.error('Failed to update task');
     }
-  }, [moduleId, assignmentId, selectedTask, editedName, editedCommand, editedCoverage]);
+  }, [moduleId, assignmentId, selectedTask, editedName, editedCommand, editedMode]);
 
   const deleteTask = useCallback(
     async (id: number) => {
@@ -401,14 +412,15 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const value = subsections.reduce((sum, c) => sum + c.value, 0);
       const name = (full?.name ?? t.name) || `Task ${t.task_number}`;
 
+      const effectiveType = (full?.task_type ?? t.task_type) as TaskType;
+      const isCoverage = effectiveType === 'coverage';
+
       return {
         task_number: t.task_number,
         name,
         value,
         subsections,
-        ...(typeof full?.code_coverage === 'boolean'
-          ? { code_coverage: !!full.code_coverage }
-          : {}),
+        code_coverage: isCoverage,
       };
     });
 
@@ -447,8 +459,8 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setEditedName,
       editedCommand,
       setEditedCommand,
-      editedCoverage,
-      setEditedCoverage,
+      editedMode,
+      setEditedMode,
       refreshTasks,
       createNewTask,
       saveTask,
@@ -471,7 +483,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       selectedTask,
       editedName,
       editedCommand,
-      editedCoverage,
+      editedMode,
       refreshTasks,
       createNewTask,
       saveTask,
@@ -484,7 +496,7 @@ export const TasksPageProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setSelectedId,
       setEditedName,
       setEditedCommand,
-      setEditedCoverage,
+      setEditedMode,
       setSelectedTask,
       setTaskDetails,
     ],

@@ -193,6 +193,7 @@ export default function MarkingPage() {
             mode="tags"
             tokenSeparators={[',', '\n']}
             placeholder="e.g., import forbidden_code, system(, eval("
+            style={{ maxWidth: 375 }}
           />
         </Form.Item>
       </SettingsGroup>

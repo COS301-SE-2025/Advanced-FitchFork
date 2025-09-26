@@ -9,7 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::Model as AssignmentModel,
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -113,9 +113,16 @@ mod tests {
         .await
         .unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(
+            db,
+            assignment.id,
+            1,
+            "Task 1",
+            "make task1",
+            TaskType::Normal,
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,
