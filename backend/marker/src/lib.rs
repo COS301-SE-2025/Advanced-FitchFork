@@ -204,7 +204,7 @@ impl<'a> MarkingJob<'a> {
 
             if let Some(task_output) = submission_task {
                 for (sub_index, subsection) in task_entry.subsections.iter().enumerate() {
-                    let student_lines = task_output
+                    let mut student_lines = task_output
                         .student_output
                         .subtasks
                         .get(sub_index)
@@ -221,6 +221,13 @@ impl<'a> MarkingJob<'a> {
                             .map(|s| s.lines.clone())
                             .unwrap_or_default(),
                     };
+
+                    if self.config.marking.reorder_by_memo && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex) {
+                        student_lines = crate::utilities::line_normalization::reorder_student_by_memo(
+                        student_lines,
+                        &memo_or_regex_lines,
+                        );
+                    }
 
                     let mut result =
                         self.comparator
