@@ -118,6 +118,11 @@ pub struct MarkingOptions {
 
     #[serde(default = "default_late_policy")]
     pub late: LatePolicy,
+    
+    /// If true, reorder test cases by memoization (to group similar test cases together).
+    #[serde(default)]
+    pub reorder_by_memo: bool,
+
 }
 
 fn default_late_policy() -> LatePolicy {
@@ -141,6 +146,7 @@ impl Default for MarkingOptions {
             allow_practice_submissions: default_allow_practice_submissions(),
             dissalowed_code: vec![],
             late: default_late_policy(),
+            reorder_by_memo: false,
         }
     }
 }
