@@ -202,19 +202,18 @@ const SubmissionTasks: React.FC<Props> = ({
         </div>
       );
 
-      const extra: React.ReactNode =
-        !isStudent && score.earned !== score.total ? (
-          <Button
-            type="link"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleViewDiff(name, task_number);
-            }}
-          >
-            View Diff
-          </Button>
-        ) : null;
+      const extra: React.ReactNode = !isStudent ? (
+        <Button
+          type="link"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewDiff(name, task_number);
+          }}
+        >
+          View Diff
+        </Button>
+      ) : null;
 
       const item: ItemType = { key: task_number, label, children, extra };
       return item;

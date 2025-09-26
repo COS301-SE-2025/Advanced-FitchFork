@@ -38,6 +38,12 @@ import { SubmissionProgressOverlay } from '@/components/submissions';
 import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
 import { CodeEditor } from '@/components/common';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
+import {
+  showMemoAllocatorForMode,
+  requiresMainForMode,
+  requiresInterpreterForMode,
+} from '@/policies/submission';
+import type { SubmissionMode } from '@/types/modules/assignments/config';
 
 const { Title, Paragraph } = Typography;
 
@@ -71,6 +77,13 @@ const AssignmentLayout = () => {
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
   const isSetupStage = assignment.status === 'setup';
   const isAssignmentReady = readiness?.is_ready ?? false;
+
+  const effectiveMode = (readiness?.submission_mode ?? policy?.submission_mode) as
+    | SubmissionMode
+    | undefined;
+  const needsMain = requiresMainForMode(effectiveMode);
+  const needsInterpreter = requiresInterpreterForMode(effectiveMode);
+  const showMemoAllocator = showMemoAllocatorForMode(effectiveMode);
 
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
@@ -325,25 +338,31 @@ const AssignmentLayout = () => {
   const hasRequiredFilesForMemoOutput = Boolean(
     readiness?.memo_present &&
       readiness?.makefile_present &&
-      (readiness?.submission_mode === 'gatlam'
-        ? readiness?.interpreter_present
-        : readiness?.main_present),
+      (needsInterpreter
+        ? (readiness as any)?.interpreter_present
+        : needsMain
+          ? readiness?.main_present
+          : true),
   );
+
   const hasAtLeastOneTask = Boolean(readiness?.tasks_present);
 
   const shouldOfferMemoAction = Boolean(
-    isTeachingStaff &&
-      policy?.submission_mode === 'manual' &&
-      hasRequiredFilesForMemoOutput &&
-      hasAtLeastOneTask,
+    isTeachingStaff && showMemoAllocator && hasRequiredFilesForMemoOutput && hasAtLeastOneTask,
   );
   const shouldOfferMarkAction = Boolean(
-    isTeachingStaff && policy?.submission_mode === 'manual' && readiness?.memo_output_present,
+    isTeachingStaff && showMemoAllocator && readiness?.memo_output_present,
   );
+
+  const setupArtifactsReady =
+    !!readiness?.memo_output_present &&
+    // if your mode requires a mark allocator, ensure it's present too
+    (!showMemoAllocator || !!readiness?.mark_allocator_present);
 
   const canGenerateMemoOutput = shouldOfferMemoAction && !readiness?.memo_output_present;
   const canGenerateMarkAllocator = shouldOfferMarkAction && !readiness?.mark_allocator_present;
-  const canSubmitAssignment = assignment.status !== 'setup';
+  const canSubmitAssignment =
+    assignment.status !== 'setup' || (isTeachingStaff && setupArtifactsReady);
 
   const primaryAction: PrimaryAction | null = canGenerateMemoOutput
     ? { key: 'memo', label: 'Generate Memo Output', onClick: handleGenerateMemoOutput }
@@ -538,7 +557,7 @@ const AssignmentLayout = () => {
                   {/* Right section: Actions */}
                   <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-end gap-2 w-full sm:w-auto">
                     {/** View Memo Output button (left of the main action) */}
-                    {isTeachingStaff && readiness?.memo_output_present && (
+                    {isTeachingStaff && showMemoAllocator && readiness?.memo_output_present && (
                       <Button
                         icon={<FileTextOutlined />}
                         onClick={openMemoModal}

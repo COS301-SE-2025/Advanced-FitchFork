@@ -33,6 +33,7 @@ import {
   SubmissionLateTag,
   SubmissionListItem,
   SubmissionPracticeTag,
+  SubmissionProgressOverlay,
   SubmissionsEmptyState,
   SubmissionStatusTag,
   SubmitAssignmentModal,
@@ -137,13 +138,15 @@ export default function SubmissionsList() {
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
 
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   // summary modal state
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState<ResubmitResponse | undefined>(undefined);
   const [summaryRequested, setSummaryRequested] = useState<number | undefined>(undefined);
   const [summaryTitle, setSummaryTitle] = useState('Resubmission summary');
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<number | null>(null);
+  const [deferredSubmit, setDeferredSubmit] = useState<null | (() => Promise<number | null>)>(null);
 
   const isAssignmentOpen = assignment.status === 'open';
   const isStudent = auth.isStudent(module.id);
@@ -280,20 +283,39 @@ export default function SubmissionsList() {
     attestOwnership: boolean,
   ) => {
     setSubmitModalOpen(false);
-    setSubmitting(true);
-    const hide = message.loading('Submitting assignment...');
-    try {
-      await submitAssignment(module.id, assignment.id, file, isPractice, attestOwnership);
-      await refreshAssignment();
-      message.success('Submission successful');
-      EventBus.emit('submission:updated');
-      entityListRef.current?.refresh();
-    } catch {
-      message.error('Submission failed');
-    } finally {
-      hide();
-      setSubmitting(false);
-    }
+    setProgressOpen(true);
+
+    // exactly like AssignmentLayout: build a deferred thunk for the overlay
+    setDeferredSubmit(() => async () => {
+      try {
+        // IMPORTANT: pass the final `true` to enable WS-correlation on the server
+        const res = await submitAssignment(
+          module.id,
+          assignment.id,
+          file,
+          isPractice,
+          attestOwnership,
+          true, // ← enable overlay/WS flow (matches AssignmentLayout)
+        );
+
+        const newId = (res as any)?.data?.id as number | undefined;
+        if (newId) setActiveSubmissionId(newId);
+
+        if (!res.success) {
+          message.error(res.message || 'Submission failed');
+          setProgressOpen(false);
+          setActiveSubmissionId(null);
+          return null;
+        }
+
+        return newId ?? null;
+      } catch {
+        message.error('Submission failed');
+        setProgressOpen(false);
+        setActiveSubmissionId(null);
+        return null;
+      }
+    });
   };
 
   const columns: EntityColumnType<StudentSubmission>[] = [
@@ -726,19 +748,48 @@ export default function SubmissionsList() {
         onRefreshClick={() => {
           entityListRef.current?.refresh();
         }}
+        filtersStorageKey={`modules:${module.id}:assignments:${assignment.id}:submissions:filters:v1`}
       />
 
       <SubmitAssignmentModal
         open={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}
         onSubmit={handleSubmitAssignment}
-        loading={submitting}
         title="Submit Assignment"
         accept=".zip,.tar,.gz,.tgz"
         maxSizeMB={50}
         defaultIsPractice={false}
         allowPractice={policy?.allow_practice_submissions && !auth.isStaff(module.id)}
       />
+
+      {progressOpen && auth.user?.id && (
+        <SubmissionProgressOverlay
+          moduleId={module.id}
+          assignmentId={assignment.id}
+          userId={auth.user.id}
+          submissionId={activeSubmissionId ?? undefined}
+          triggerSubmit={deferredSubmit ?? undefined}
+          wsConnectTimeoutMs={2500}
+          onClose={() => {
+            setProgressOpen(false);
+            setActiveSubmissionId(null);
+            setDeferredSubmit(null);
+            refreshAssignment?.();
+            entityListRef.current?.refresh();
+          }}
+          onDone={(submissionId) => {
+            setProgressOpen(false);
+            setActiveSubmissionId(null);
+            setDeferredSubmit(null);
+            refreshAssignment?.();
+            entityListRef.current?.refresh();
+            navigate(
+              `/modules/${module.id}/assignments/${assignment.id}/submissions/${submissionId}`,
+              { replace: true },
+            );
+          }}
+        />
+      )}
 
       {/* Separate Summary Modal */}
       <ResubmitSummaryModal

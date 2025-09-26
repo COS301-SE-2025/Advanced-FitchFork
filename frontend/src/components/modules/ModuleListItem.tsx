@@ -1,5 +1,5 @@
-import { List, Avatar, Typography, Tooltip } from 'antd';
-import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
+import { List, Avatar, Typography } from 'antd';
+import { BookOutlined } from '@ant-design/icons';
 import { useAuth } from '@/context/AuthContext';
 import type { Module } from '@/types/modules';
 import React from 'react';
@@ -20,19 +20,15 @@ interface Props {
 
 const ModuleListItem: React.FC<Props> = ({
   module,
-  isFavorite,
-  onToggleFavorite,
-  showFavorite = true,
+  isFavorite: _isFavorite,
+  onToggleFavorite: _onToggleFavorite,
+  showFavorite: _showFavorite = true,
   onClick,
 }) => {
   const { getModuleRole } = useAuth();
   const role = getModuleRole(module.id);
 
   const handleRowClick = () => onClick?.(module);
-  const handleStarClick: React.MouseEventHandler<HTMLSpanElement> = (e) => {
-    e.stopPropagation();
-    onToggleFavorite(module.id);
-  };
 
   return (
     <List.Item
@@ -52,19 +48,7 @@ const ModuleListItem: React.FC<Props> = ({
             <div className="ml-auto flex items-center gap-1">
               {role && <ModuleRoleTag role={role} />}
               <ModuleYearTag year={module.year} />
-
-              {showFavorite && (
-                <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
-                  <span
-                    onClick={handleStarClick}
-                    className="ml-1 text-yellow-400 text-lg leading-none flex items-center"
-                    role="button"
-                    aria-label={isFavorite ? 'Unfavorite module' : 'Favorite module'}
-                  >
-                    {isFavorite ? <StarFilled /> : <StarOutlined />}
-                  </span>
-                </Tooltip>
-              )}
+              {/* favorite UI removed */}
             </div>
           </div>
         }

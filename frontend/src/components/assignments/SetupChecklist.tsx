@@ -1,7 +1,13 @@
+// src/components/assignments/SetupChecklist.tsx
 import { Button } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
-
 import type { AssignmentReadiness } from '@/types/modules/assignments';
+import type { SubmissionMode } from '@/types/modules/assignments/config';
+import {
+  showMemoAllocatorForMode,
+  requiresMainForMode,
+  requiresInterpreterForMode,
+} from '@/policies/submission';
 
 type ChecklistAction =
   | { type: 'navigate'; href: string; label: string }
@@ -36,7 +42,11 @@ const SetupChecklist = ({
   onGenerateMark,
   onNavigate,
 }: Props) => {
-  const submissionMode = readiness?.submission_mode;
+  const submissionMode = readiness?.submission_mode as SubmissionMode | undefined;
+
+  const needsMain = requiresMainForMode(submissionMode);
+  const needsInterpreter = requiresInterpreterForMode(submissionMode);
+  const showMemoAllocator = showMemoAllocatorForMode(submissionMode);
 
   const items: ChecklistItem[] = [
     {
@@ -48,7 +58,7 @@ const SetupChecklist = ({
     {
       key: 'main_present',
       label: 'Main file',
-      show: submissionMode !== 'gatlam',
+      show: needsMain,
       action: {
         type: 'navigate',
         href: `${basePath}/config/files/main`,
@@ -58,7 +68,7 @@ const SetupChecklist = ({
     {
       key: 'interpreter_present',
       label: 'Interpreter',
-      show: submissionMode === 'gatlam',
+      show: needsInterpreter,
       action: {
         type: 'navigate',
         href: `${basePath}/config/interpreter`,
@@ -95,16 +105,17 @@ const SetupChecklist = ({
         label: 'Manage tasks',
       },
     },
+    // Show memo/mark items **only** if the mode supports that step (manual)
     {
       key: 'memo_output_present',
       label: 'Memo Output',
-      show: true,
+      show: showMemoAllocator,
       action: { type: 'generateMemo' },
     },
     {
       key: 'mark_allocator_present',
       label: 'Mark Allocator',
-      show: true,
+      show: showMemoAllocator,
       action: { type: 'generateMark' },
     },
   ];
@@ -140,6 +151,7 @@ const SetupChecklist = ({
           </Button>
         );
       case 'generateMemo':
+        // Only reachable when showMemoAllocator === true
         return shouldOfferMemoAction ? (
           <Button
             size="small"
@@ -157,6 +169,7 @@ const SetupChecklist = ({
           </span>
         );
       case 'generateMark':
+        // Only reachable when showMemoAllocator === true
         return shouldOfferMarkAction ? (
           <Button
             size="small"
@@ -185,7 +198,7 @@ const SetupChecklist = ({
       {visibleItems.map((item, index) => {
         const complete =
           item.key === 'interpreter_present'
-            ? readiness?.interpreter_present
+            ? (readiness as any)?.interpreter_present
             : readiness?.[item.key as keyof AssignmentReadiness];
 
         return (

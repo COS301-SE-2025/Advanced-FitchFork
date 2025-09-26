@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { PlusOutlined, DeleteOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-
 import { useAssignment } from '@/context/AssignmentContext';
 import { useAuth } from '@/context/AuthContext';
 import { useModule } from '@/context/ModuleContext';
-
 import {
   TICKET_STATUSES,
   type Ticket,
   type TicketStatus,
 } from '@/types/modules/assignments/tickets';
 import type { SortOption } from '@/types/common';
-
 import { type EntityListHandle, EntityList } from '@/components/EntityList';
-import CreateModal from '@/components/common/CreateModal';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 import { message } from '@/utils/message';
 import { deleteTicket } from '@/services/modules/assignments/tickets/delete';
 import { listTickets } from '@/services/modules/assignments/tickets/get';
@@ -27,6 +24,23 @@ import { Typography } from 'antd';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import TicketListItem from '@/components/tickets/TicketListItem';
 import { TicketsEmptyState } from '@/components/tickets';
+
+const ticketFields: FormModalField[] = [
+  {
+    name: 'title',
+    label: 'Title',
+    type: 'text',
+    constraints: { required: true, length: { min: 3, max: 160 } },
+  },
+  {
+    name: 'description',
+    label: 'Description',
+    type: 'textarea',
+    constraints: { length: { max: 4000 } },
+    // optional UI hints:
+    ui: { props: { rows: 4, showCount: true, maxLength: 4000 } },
+  },
+];
 
 const Tickets = () => {
   const auth = useAuth();
@@ -231,22 +245,23 @@ const Tickets = () => {
               }
             : undefined
         }
-        emptyNoEntities={<TicketsEmptyState onCreate={() => setCreateOpen(true)} />}
+        emptyNoEntities={
+          <TicketsEmptyState
+            onCreate={() => setCreateOpen(true)}
+            onRefresh={() => listRef.current?.refresh()}
+          />
+        }
+        filtersStorageKey={`modules:${module.id}:assignments:${assignment.id}:tickets:filters:v1`}
       />
 
-      <CreateModal
+      <FormModal
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
-        onCreate={handleCreate}
+        onSubmit={handleCreate}
         title="Create Ticket"
-        fields={[
-          { name: 'title', label: 'Title', type: 'text', required: true },
-          { name: 'description', label: 'Description', type: 'textarea' },
-        ]}
-        initialValues={{
-          title: '',
-          description: '',
-        }}
+        submitText="Create"
+        initialValues={{ title: '', description: '' }}
+        fields={ticketFields}
       />
     </>
   );
