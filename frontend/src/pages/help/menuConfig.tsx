@@ -17,10 +17,7 @@ export const HELP_MENU_ITEMS: HelpMenuItem[] = [
     icon: <AppstoreOutlined />,
     label: 'Modules',
     children: [
-      { key: 'modules/overview', label: 'Module Overview' },
-      { key: 'modules/announcements', label: 'Announcements' },
       { key: 'modules/attendance', label: 'Attendance' },
-      { key: 'modules/grades', label: 'Module Grades' },
       { key: 'modules/personnel', label: 'Personnel & Roles' },
     ],
   },
@@ -93,7 +90,6 @@ export const HELP_MENU_ITEMS: HelpMenuItem[] = [
     icon: <SettingOutlined />,
     label: 'Support',
     children: [
-      { key: 'support/troubleshooting', label: 'Troubleshooting' },
       { key: 'support/system-monitoring', label: 'System Monitoring' },
       { key: 'support/contact', label: 'Contact' },
     ],

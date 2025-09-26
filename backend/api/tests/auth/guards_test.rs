@@ -807,6 +807,8 @@ mod tests {
     }
 
     mod test_validate_known_ids {
+        use db::models::assignment_task::TaskType;
+
         use super::*;
 
         fn create_router(app_state: AppState, path: &'static str) -> Router {
@@ -940,8 +942,7 @@ mod tests {
                 1,
                 "T1",
                 "echo",
-                false,
-                false,
+                TaskType::Normal,
             )
             .await
             .unwrap();
@@ -989,8 +990,7 @@ mod tests {
                 1,
                 "T2",
                 "echo",
-                false,
-                false,
+                TaskType::Normal,
             )
             .await
             .unwrap();

@@ -6,7 +6,7 @@ export async function createTasksFromMakefileTargets(
   assignmentId: number,
   targets: string[],
   refreshAssignment?: () => Promise<void>
-) : Promise<number> {
+): Promise<number> {
   if (targets.length === 0) return 0;
 
   let next = await getNextTaskNumber(moduleId, assignmentId);
@@ -21,7 +21,7 @@ export async function createTasksFromMakefileTargets(
       task_number: next++,
       name,
       command,
-      code_coverage: false,
+      task_type: 'normal'
     });
 
     if (res.success) created++;

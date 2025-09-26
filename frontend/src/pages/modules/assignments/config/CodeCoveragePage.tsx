@@ -102,7 +102,7 @@ export default function CodeCoveragePage() {
             mode="tags"
             tokenSeparators={[',', ' ']}
             placeholder="e.g., main.cpp, utils.c, MyClass.java"
-            style={{ minWidth: 360 }}
+            style={{ maxWidth: 375 }}
           />
         </Form.Item>
 

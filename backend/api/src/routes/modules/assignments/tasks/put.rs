@@ -9,22 +9,19 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment_task;
+use db::models::assignment_task::{self, TaskType};
 use sea_orm::DbErr;
 use serde::Deserialize;
 use util::state::AppState;
 
-/// The request payload for editing a task's command.
 #[derive(Deserialize)]
 pub struct EditTaskRequest {
     /// Optional new name
     name: Option<String>,
     /// Optional new command
     command: Option<String>,
-    /// Optional toggle for coverage
-    code_coverage: Option<bool>,
-    /// Optional toggle for valgrind
-    valgrind: Option<bool>,
+    /// Optional new task type: "normal" | "coverage" | "valgrind"
+    task_type: Option<TaskType>,
 }
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tasks/{task_id}
@@ -35,7 +32,7 @@ pub struct EditTaskRequest {
 /// This endpoint updates task metadata used during evaluation. You can change:
 /// - `name` (label shown to users)
 /// - `command` (shell command executed by the runner)
-/// - `code_coverage` (whether this task is a **coverage-type** task)
+/// - `task_type` (one of: "normal", "coverage", "valgrind")
 ///
 /// > Note: `code_coverage: true` marks the task as a **code coverage task**. The evaluator
 /// > may apply coverage-specific handling (e.g., expecting coverage artifacts). It does **not**
@@ -49,11 +46,7 @@ pub struct EditTaskRequest {
 /// ### Request Body
 /// Any subset of fields may be provided; at least one is required.
 /// ```json
-/// {
-///   "name": "Unit tests",
-///   "command": "cargo test --lib --release",
-///   "code_coverage": true
-/// }
+/// { "name": "Unit tests", "command": "cargo test --lib --release", "task_type": "coverage" }
 /// ```
 ///
 /// ### Request Body Fields
@@ -65,24 +58,21 @@ pub struct EditTaskRequest {
 /// Update only the command:
 /// ```bash
 /// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
-///   -H "Authorization: Bearer <token>" \
-///   -H "Content-Type: application/json" \
+///   -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
 ///   -d '{"command":"cargo test --lib --release"}'
 /// ```
 ///
-/// Mark the task as a coverage-type task (or unset it):
+/// Mark as coverage-type:
 /// ```bash
 /// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
-///   -H "Authorization: Bearer <token)" \
-///   -H "Content-Type: application/json" \
-///   -d '{"code_coverage": true}'
+///   -H "Authorization: Bearer <token)" -H "Content-Type: application/json" \
+///   -d '{"task_type":"coverage"}'
 /// ```
 ///
 /// Rename and change command:
 /// ```bash
 /// curl -X PUT http://localhost:3000/api/modules/1/assignments/2/tasks/3 \
-///   -H "Authorization: Bearer <token)" \
-///   -H "Content-Type: application/json" \
+///   -H "Authorization: Bearer <token)" -H "Content-Type: application/json" \
 ///   -d '{"name":"Coverage run","command":"cargo llvm-cov --no-report"}'
 /// ```
 ///
@@ -96,7 +86,7 @@ pub struct EditTaskRequest {
 ///     "task_number": 1,
 ///     "name": "Coverage run",
 ///     "command": "cargo llvm-cov --no-report",
-///     "code_coverage": true,
+///     "task_type": "coverage",
 ///     "created_at": "2024-01-01T00:00:00Z",
 ///     "updated_at": "2024-01-01T12:30:00Z"
 ///   }
@@ -207,28 +197,29 @@ pub async fn edit_task(
     let db = app_state.db();
 
     // Must provide something to change
-    if payload.name.is_none() && payload.command.is_none() && payload.code_coverage.is_none() {
+    if payload.name.is_none() && payload.command.is_none() && payload.task_type.is_none() {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ApiResponse::<()>::error(
-                "At least one of 'name', 'command', or 'code_coverage' must be provided",
+                "At least one of 'name', 'command', or 'task_type' must be provided",
             )),
         )
             .into_response();
     }
 
     // If present, basic validation
-    if payload
+    let name_empty = payload
         .name
         .as_deref()
         .map(|s| s.trim().is_empty())
-        .unwrap_or(false)
-        || payload
-            .command
-            .as_deref()
-            .map(|s| s.trim().is_empty())
-            .unwrap_or(false)
-    {
+        .unwrap_or(false);
+    let command_empty = payload
+        .command
+        .as_deref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(false);
+
+    if name_empty || command_empty {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ApiResponse::<()>::error(
@@ -243,8 +234,7 @@ pub async fn edit_task(
         task_id,
         payload.name.as_deref(),
         payload.command.as_deref(),
-        payload.code_coverage,
-        payload.valgrind,
+        payload.task_type,
     )
     .await
     {
@@ -270,7 +260,7 @@ pub async fn edit_task(
         task_number: updated.task_number,
         name: updated.name,
         command: updated.command,
-        code_coverage: updated.code_coverage,
+        task_type: updated.task_type,
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
     };

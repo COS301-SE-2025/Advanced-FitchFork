@@ -5,7 +5,7 @@ use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as Ass
 use db::models::assignment_submission::{
     ActiveModel as SubmissionActiveModel, Model as SubmissionModel,
 };
-use db::models::assignment_task::Model as AssignmentTaskModel;
+use db::models::assignment_task::{Model as AssignmentTaskModel, TaskType};
 use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
 use db::models::user::{ActiveModel as UserActiveModel, Entity as UserEntity};
 use db::test_utils::setup_test_db;
@@ -146,8 +146,7 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
             task_number,
             "Untitled Task",
             command,
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create assignment task");

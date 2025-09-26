@@ -20,7 +20,7 @@ use db::models::{
         Model as AssignmentFileModel,
     },
     assignment_memo_output::{Column as MemoOutCol, Entity as MemoOutEntity},
-    assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel},
+    assignment_task::{Column as TaskCol, Entity as TaskEntity, Model as TaskModel, TaskType},
 };
 use db::models::{assignment_memo_output, assignment_task};
 use util::{
@@ -47,9 +47,7 @@ struct TaskSeed {
     name: String,
     command: String,
     #[serde(default)]
-    code_coverage: bool,
-    #[serde(default)]
-    valgrind: bool,
+    task_type: TaskType,
 }
 
 // TODO
@@ -353,8 +351,7 @@ async fn create_tasks_from_assets_root(
             t.task_number,
             &t.name,
             &t.command,
-            t.code_coverage,
-            t.valgrind,
+            t.task_type,
         )
         .await
         .map_err(|e| format!("Failed to create task {}: {}", t.task_number, e))?;
@@ -387,8 +384,8 @@ async fn try_generate_allocator(
         let info = TaskInfo {
             id: t.id,
             task_number: t.task_number,
-            code_coverage: t.code_coverage,
-            valgrind: t.valgrind,
+            code_coverage: matches!(t.task_type, TaskType::Coverage),
+            valgrind: matches!(t.task_type, TaskType::Valgrind),
             name: if t.name.trim().is_empty() {
                 format!("Task {}", t.task_number)
             } else {

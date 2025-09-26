@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use serde::Serialize;
-use serde_json::json;
 use sysinfo::{CpuRefreshKind, Disks, System};
 
 #[derive(Debug, Serialize, Clone)]
@@ -110,46 +109,4 @@ pub fn sample_system_metrics() -> SystemMetrics {
         disks: disk_summaries,
         uptime_seconds,
     }
-}
-
-/// Builds JSON payloads for general and admin consumers given sampled metrics
-/// and code manager stats.
-pub fn build_health_payloads(
-    metrics: &SystemMetrics,
-    cm_running: usize,
-    cm_waiting: usize,
-    cm_max: Option<usize>,
-    env: &str,
-    host: &str,
-) -> (serde_json::Value, serde_json::Value) {
-    let now = chrono::Utc::now().to_rfc3339();
-
-    let general = json!({
-        "ts": now,
-        "load": {"one": metrics.load_one, "five": metrics.load_five, "fifteen": metrics.load_fifteen},
-        "code_manager": {"running": cm_running, "waiting": cm_waiting},
-        // (optional) include here too if you want:
-        // "uptime_seconds": metrics.uptime_seconds,
-    });
-
-    let admin = json!({
-        "ts": now,
-        "env": env,
-        "host": host,
-        "uptime_seconds": metrics.uptime_seconds,
-        "load": {"one": metrics.load_one, "five": metrics.load_five, "fifteen": metrics.load_fifteen},
-        "cpu": {
-            "cores": metrics.cpu_cores,
-            "avg_usage": metrics.cpu_avg_usage,
-            "per_core": metrics.cpu_per_core,
-        },
-        "memory": {
-            "total": metrics.mem_total, "used": metrics.mem_used,
-            "swap_total": metrics.swap_total, "swap_used": metrics.swap_used
-        },
-        "disks": metrics.disks,
-        "code_manager": {"running": cm_running, "waiting": cm_waiting, "max_concurrent": cm_max},
-    });
-
-    (general, admin)
 }

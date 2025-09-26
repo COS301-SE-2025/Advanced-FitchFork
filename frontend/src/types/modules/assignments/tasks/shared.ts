@@ -1,11 +1,14 @@
 import type { Timestamp } from "@/types/common";
 
+export const TASK_TYPES = ['normal', 'coverage', 'valgrind'] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
 export interface Task extends Timestamp {
   id: number;
   assignment_id: number;
   task_number: number;
   name: string;
-  code_coverage: boolean;
+  task_type: TaskType;
   command: string;
 }
 

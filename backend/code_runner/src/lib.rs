@@ -14,7 +14,7 @@ use crate::validate_files::validate_memo_files;
 // Models
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
-use db::models::assignment_task::Model as AssignmentTask;
+use db::models::assignment_task::{Model as AssignmentTask, TaskType};
 use reqwest::Client;
 use serde_json::json;
 use util::code_coverage_report::CoverageProcessor;
@@ -140,7 +140,7 @@ pub async fn create_memo_outputs_for_all_tasks(
     let mut join_set = JoinSet::new();
 
     for task in tasks.into_iter() {
-        if task.code_coverage {
+        if task.task_type == TaskType::Coverage {
             continue;
         }
 
@@ -390,10 +390,9 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
     let mut join_set = JoinSet::new();
 
     for task in tasks.into_iter() {
-        if task.code_coverage {
+        if task.task_type == TaskType::Coverage {
             continue;
         }
-
         let filename = format!("task_{}_output.txt", task.task_number);
         let task_files_base = base_files.clone();
         let client_cloned = client.clone();
@@ -641,7 +640,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     // Only build coverage files if at least one task needs it
     let mut code_coverage_files = Vec::new();
-    if tasks.iter().any(|t| t.code_coverage) {
+    if tasks.iter().any(|t| t.task_type == TaskType::Coverage) {
         let code_coverage_archive_paths = vec![
             first_archive_in(&submission_path)?,
             first_archive_in(makefile_dir(module_id, assignment_id))?,
@@ -697,7 +696,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         );
 
         // Choose appropriate file set based on whether this is a code coverage task
-        let task_files_base = if task.code_coverage {
+        let task_files_base = if task.task_type == TaskType::Coverage {
             code_coverage_files.clone()
         } else {
             files.clone()
@@ -798,7 +797,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
                     let output_combined = output_vec.join("\n");
 
-                    if task.code_coverage {
+                    if task.task_type == TaskType::Coverage {
                         match CoverageProcessor::process_report(config.project.language, &output_combined, &whitelist) {
                             Ok(coverage_json) => {
                                 let coverage_report_path = submission_path_cloned.join("coverage_report.json");
@@ -853,7 +852,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                             return false;
                         }
 
-                        if task.valgrind {
+                        if task.task_type == TaskType::Valgrind {
                             let task_number = task.task_number;
                             let output_for_valgrind = output_combined.clone();
                             let mut outputs = valgrind_outputs_cloned.lock().await;

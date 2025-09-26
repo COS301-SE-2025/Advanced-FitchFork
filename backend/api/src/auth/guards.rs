@@ -64,7 +64,7 @@ async fn extract_and_insert_authuser(
 }
 
 /// Helper to check if user has any of the specified roles
-async fn user_has_any_role(
+pub async fn user_has_any_role(
     db: &DatabaseConnection,
     user_id: i64,
     module_id: i64,

@@ -21,8 +21,10 @@ use axum::{
 use chrono::{DateTime, Utc};
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
-    assignment_submission::{self, Entity as SubmissionEntity},
-    assignment_submission::{Column as SubmissionColumn, Model as SubmissionModel},
+    assignment_submission::{
+        self, Column as SubmissionColumn, Entity as SubmissionEntity, Model as SubmissionModel,
+        SubmissionStatus,
+    },
     assignment_submission_output::Model as SubmissionOutput,
     assignment_task,
     plagiarism_case::{
@@ -44,6 +46,25 @@ use util::state::AppState;
 
 fn is_late(submission: DateTime<Utc>, due_date: DateTime<Utc>) -> bool {
     submission > due_date
+}
+
+fn parse_statuses_csv(csv: &str) -> Vec<SubmissionStatus> {
+    csv.split(',')
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter_map(|s| match s.as_str() {
+            "queued" => Some(SubmissionStatus::Queued),
+            "running" => Some(SubmissionStatus::Running),
+            "grading" => Some(SubmissionStatus::Grading),
+            "graded" => Some(SubmissionStatus::Graded),
+            "failed_upload" => Some(SubmissionStatus::FailedUpload),
+            "failed_compile" => Some(SubmissionStatus::FailedCompile),
+            "failed_execution" => Some(SubmissionStatus::FailedExecution),
+            "failed_grading" => Some(SubmissionStatus::FailedGrading),
+            "failed_internal" => Some(SubmissionStatus::FailedInternal),
+            "failed_disallowed_code" => Some(SubmissionStatus::FailedDisallowedCode),
+            _ => None,
+        })
+        .collect()
 }
 
 /// GET /api/modules/:module_id/assignments/:assignment_id/submissions
@@ -125,6 +146,13 @@ async fn get_user_submissions(
 
     if let Some(ignored) = params.ignored {
         condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
+    }
+
+    if let Some(ref status_csv) = params.status {
+        let statuses = parse_statuses_csv(status_csv);
+        if !statuses.is_empty() {
+            condition = condition.add(assignment_submission::Column::Status.is_in(statuses));
+        }
     }
 
     let mut query = assignment_submission::Entity::find().filter(condition);
@@ -387,6 +415,13 @@ async fn get_list_submissions(
 
     if let Some(ignored) = params.ignored {
         condition = condition.add(assignment_submission::Column::Ignored.eq(ignored));
+    }
+
+    if let Some(ref status_csv) = params.status {
+        let statuses = parse_statuses_csv(status_csv);
+        if !statuses.is_empty() {
+            condition = condition.add(assignment_submission::Column::Status.is_in(statuses));
+        }
     }
 
     let mut query = assignment_submission::Entity::find()

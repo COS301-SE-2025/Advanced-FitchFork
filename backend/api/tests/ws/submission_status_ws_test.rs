@@ -4,8 +4,6 @@ mod tests {
     use crate::helpers::{connect_ws, spawn_server};
 
     use api::auth::generate_jwt;
-    // NOTE: don't use submission_topic(); we build the path explicitly to match the router.
-
     use chrono::Utc;
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
@@ -15,7 +13,29 @@ mod tests {
     };
     use futures_util::{SinkExt, StreamExt};
     use sea_orm::{ActiveModelTrait, Set};
-    use tokio_tungstenite::tungstenite::{Error, protocol::Message};
+    use tokio_tungstenite::tungstenite::protocol::Message;
+
+    // ---------- small helpers for the multiplex protocol ----------
+    fn owner_topic_json(assignment_id: i64, user_id: i64) -> serde_json::Value {
+        serde_json::json!({
+            "kind": "assignment_submissions_owner",
+            "assignment_id": assignment_id,
+            "user_id": user_id
+        })
+    }
+
+    fn owner_topic_path(assignment_id: i64, user_id: i64) -> String {
+        format!("assignment:{assignment_id}.submissions:user:{user_id}")
+    }
+
+    fn subscribe_frame(topics: Vec<serde_json::Value>) -> String {
+        serde_json::json!({
+            "type": "subscribe",
+            "topics": topics,
+            "since": serde_json::Value::Null
+        })
+        .to_string()
+    }
 
     /// seed: one module, one assignment, three users (owner / other / admin)
     async fn seed(
@@ -50,6 +70,10 @@ mod tests {
         .await
         .unwrap();
 
+        UserModuleRoleModel::assign_user_to_module(db, owner.id, m.id, ModuleRole::Student)
+            .await
+            .unwrap();
+
         let a = AssignmentModel::create(
             db,
             m.id,
@@ -65,58 +89,56 @@ mod tests {
         (m, a, owner, other, admin)
     }
 
-    /// Helper to build the WS topic path that matches the nested router:
-    fn topic_for(module_id: i64, assignment_id: i64, user_id: i64) -> String {
-        format!(
-            "modules/{}/assignments/{}/submissions/{}",
-            module_id, assignment_id, user_id
-        )
-    }
-
     #[tokio::test]
     async fn owner_can_connect_and_ping() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let addr = spawn_server(app).await;
-        let (m, a, owner, _other, _admin) = seed(app_state.db()).await;
+        let (_, a, owner, _other, _admin) = seed(app_state.db()).await;
 
         let (token, _) = generate_jwt(owner.id, owner.admin);
-        let topic = format!(
-            "modules/{}/assignments/{}/submissions/{}",
-            m.id, a.id, owner.id
-        );
 
-        let (mut ws, _) = connect_ws(&addr.to_string(), &topic, Some(&token))
+        // 1) connect to /ws
+        let (mut ws, _) = connect_ws(&addr.to_string(), Some(&token))
             .await
-            .expect("owner connect failed");
+            .expect("connect");
 
-        // Some handlers emit an initial "ready" event as soon as the socket opens.
-        // If we get it, just ignore and proceed.
-        if let Some(Ok(Message::Text(received))) = ws.next().await {
-            let v: serde_json::Value = serde_json::from_str(&received).unwrap();
-            if v["event"] != "ready" {
-                // If it's already a "pong" (or something else), keep it around by asserting here.
-                // Most likely it's "ready", but accept "pong" too.
-                assert_eq!(v["event"], "pong", "unexpected first event: {v}");
-                // if it was "pong", we're done
-                ws.close(None).await.unwrap();
-                return;
-            }
+        // 2) read initial ready
+        if let Some(Ok(Message::Text(txt))) = ws.next().await {
+            let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+            assert_eq!(v["type"], "ready");
+        } else {
+            panic!("expected initial ready");
         }
 
-        // Now ping -> expect a subsequent pong (skip any non-pong noise just in case)
-        let ping = serde_json::json!({ "type": "ping" });
-        ws.send(Message::Text(ping.to_string().into()))
-            .await
-            .unwrap();
+        // 3) subscribe to the owner's stream
+        let sub = subscribe_frame(vec![owner_topic_json(a.id, owner.id)]);
+        ws.send(Message::Text(sub.into())).await.unwrap();
+
+        // 4) expect subscribe_ok with accepted path
+        let ok = ws.next().await.expect("subscribe_ok msg").expect("ok");
+        let Message::Text(txt) = ok else {
+            panic!("expected text");
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(v["type"], "subscribe_ok");
+        let accepted = v["accepted"].as_array().cloned().unwrap_or_default();
+        let path = owner_topic_path(a.id, owner.id);
+        assert!(
+            accepted.iter().any(|x| x.as_str() == Some(&path)),
+            "owner path not accepted"
+        );
+
+        // 5) ping → pong
+        let ping = serde_json::json!({ "type": "ping" }).to_string();
+        ws.send(Message::Text(ping.into())).await.unwrap();
 
         loop {
             match ws.next().await {
-                Some(Ok(Message::Text(received))) => {
-                    let v: serde_json::Value = serde_json::from_str(&received).unwrap();
-                    if v["event"] == "pong" {
+                Some(Ok(Message::Text(txt))) => {
+                    let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+                    if v["type"] == "pong" {
                         break;
                     }
-                    // ignore other events (e.g., periodic heartbeats)
                 }
                 other => panic!("expected pong, got {:?}", other),
             }
@@ -126,94 +148,90 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admin_cannot_connect_to_owners_stream() {
+    async fn admin_subscription_is_rejected_not_owner() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let addr = spawn_server(app).await;
-        let (m, a, owner, _other, admin) = seed(app_state.db()).await;
+        let (_, a, owner, _other, admin) = seed(app_state.db()).await;
 
         let (token, _) = generate_jwt(admin.id, admin.admin);
-        let topic = topic_for(m.id, a.id, owner.id);
 
-        match connect_ws(&addr.to_string(), &topic, Some(&token)).await {
-            Ok(_) => panic!("admin should be forbidden"),
-            Err(Error::Http(resp)) => {
-                assert_eq!(resp.status(), 403);
-                let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
-                let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert_eq!(
-                    json["message"],
-                    "Not allowed to access this submission websocket"
-                );
-            }
-            Err(e) => panic!("unexpected error: {:?}", e),
-        }
+        let (mut ws, _) = connect_ws(&addr.to_string(), Some(&token))
+            .await
+            .expect("connect");
+        // consume ready
+        let _ = ws.next().await;
+
+        let sub = subscribe_frame(vec![owner_topic_json(a.id, owner.id)]);
+        ws.send(Message::Text(sub.into())).await.unwrap();
+
+        let msg = ws.next().await.expect("message").expect("ok");
+        let Message::Text(txt) = msg else {
+            panic!("expected text");
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(v["type"], "subscribe_ok");
+        let rejected = v["rejected"].as_array().cloned().unwrap_or_default();
+        let path = owner_topic_path(a.id, owner.id);
+
+        // rejected is array of [path, code]
+        let has_not_owner = rejected.iter().any(|r| {
+            r.get(0).and_then(|s| s.as_str()) == Some(&path)
+                && r.get(1).and_then(|s| s.as_str()) == Some("not_owner")
+        });
+        assert!(has_not_owner, "expected not_owner rejection");
+
+        ws.close(None).await.unwrap();
     }
 
     #[tokio::test]
-    async fn lecturer_cannot_connect_to_owners_stream() {
+    async fn lecturer_subscription_is_rejected_not_owner() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let addr = spawn_server(app).await;
         let (m, a, owner, lecturer, _admin) = seed(db).await;
 
-        // give lecturer a staff role anyway (should still be forbidden)
+        // give lecturer role (still should be rejected to owner stream)
         UserModuleRoleModel::assign_user_to_module(db, lecturer.id, m.id, ModuleRole::Lecturer)
             .await
-            .expect("assign lecturer");
+            .unwrap();
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
-        let topic = topic_for(m.id, a.id, owner.id);
+        let (mut ws, _) = connect_ws(&addr.to_string(), Some(&token))
+            .await
+            .expect("connect");
+        // consume ready
+        let _ = ws.next().await;
 
-        match connect_ws(&addr.to_string(), &topic, Some(&token)).await {
-            Ok(_) => panic!("lecturer should be forbidden"),
-            Err(Error::Http(resp)) => {
-                assert_eq!(resp.status(), 403);
-                let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
-                let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert_eq!(
-                    json["message"],
-                    "Not allowed to access this submission websocket"
-                );
-            }
-            Err(e) => panic!("unexpected error: {:?}", e),
-        }
+        let sub = subscribe_frame(vec![owner_topic_json(a.id, owner.id)]);
+        ws.send(Message::Text(sub.into())).await.unwrap();
+
+        let msg = ws.next().await.expect("message").expect("ok");
+        let Message::Text(txt) = msg else {
+            panic!("expected text");
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(v["type"], "subscribe_ok");
+        let rejected = v["rejected"].as_array().cloned().unwrap_or_default();
+        let path = owner_topic_path(a.id, owner.id);
+        let has_not_owner = rejected.iter().any(|r| {
+            r.get(0).and_then(|s| s.as_str()) == Some(&path)
+                && r.get(1).and_then(|s| s.as_str()) == Some("not_owner")
+        });
+        assert!(has_not_owner, "expected not_owner rejection");
+
+        ws.close(None).await.unwrap();
     }
 
     #[tokio::test]
-    async fn random_other_user_is_forbidden() {
+    async fn unauthenticated_is_401_on_upgrade() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let addr = spawn_server(app).await;
-        let (m, a, owner, other, _admin) = seed(app_state.db()).await;
+        let (_m, _a, _owner, _other, _admin) = seed(app_state.db()).await;
 
-        let (token, _) = generate_jwt(other.id, other.admin);
-        let topic = topic_for(m.id, a.id, owner.id);
-
-        match connect_ws(&addr.to_string(), &topic, Some(&token)).await {
-            Ok(_) => panic!("non-owner should be forbidden"),
-            Err(Error::Http(resp)) => {
-                assert_eq!(resp.status(), 403);
-                let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
-                let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert_eq!(
-                    json["message"],
-                    "Not allowed to access this submission websocket"
-                );
-            }
-            Err(e) => panic!("unexpected error: {:?}", e),
-        }
-    }
-
-    #[tokio::test]
-    async fn unauthenticated_is_401() {
-        let (app, app_state, _tmp) = make_test_app_with_storage().await;
-        let addr = spawn_server(app).await;
-        let (m, a, owner, _other, _admin) = seed(app_state.db()).await;
-
-        let topic = topic_for(m.id, a.id, owner.id);
-
-        match connect_ws(&addr.to_string(), &topic, None).await {
+        // No token → guard rejects at upgrade with 401
+        match connect_ws(&addr.to_string(), None).await {
             Ok(_) => panic!("unauthenticated user should not connect"),
-            Err(Error::Http(resp)) => {
+            Err(tokio_tungstenite::tungstenite::Error::Http(resp)) => {
                 assert_eq!(resp.status(), 401);
                 let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
                 let json: serde_json::Value = serde_json::from_str(body).unwrap();
@@ -224,14 +242,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn assignment_not_in_module_is_404() {
+    async fn assignment_not_found_rejected() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let db = app_state.db();
         let addr = spawn_server(app).await;
-        let (_, a1, owner, _other, _admin) = seed(db).await;
+        let (_m1, a1, owner, _other, _admin) = seed(db).await;
 
-        // mismatch module (create another)
-        let m2 = module::ActiveModel {
+        // create mismatched module m2 (assignment a1 is not in m2)
+        let _m2 = module::ActiveModel {
             code: Set("COS000".into()),
             year: Set(2025),
             description: Set(Some("Other Module".into())),
@@ -245,48 +263,72 @@ mod tests {
         .unwrap();
 
         let (token, _) = generate_jwt(owner.id, owner.admin);
-        let topic = topic_for(m2.id, a1.id, owner.id); // mismatched
+        let (mut ws, _) = connect_ws(&addr.to_string(), Some(&token))
+            .await
+            .expect("connect");
+        // consume ready
+        let _ = ws.next().await;
 
-        match connect_ws(&addr.to_string(), &topic, Some(&token)).await {
-            Ok(_) => panic!("should not connect when assignment not in module"),
-            Err(Error::Http(resp)) => {
-                assert_eq!(resp.status(), 404);
-                let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
-                let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert_eq!(json["message"], "Assignment not found in module");
-            }
-            Err(e) => panic!("unexpected error: {:?}", e),
-        }
+        // even though old router used module path, new protocol only uses assignment_id+user_id.
+        // To simulate "not found in module", we can subscribe to an *unknown* assignment id.
+        // Use a1.id + large offset to guarantee it doesn't exist.
+        let unknown_assignment = a1.id + 1_000_000;
+        let sub = subscribe_frame(vec![owner_topic_json(unknown_assignment, owner.id)]);
+        ws.send(Message::Text(sub.into())).await.unwrap();
+
+        let msg = ws.next().await.expect("message").expect("ok");
+        let Message::Text(txt) = msg else {
+            panic!("expected text");
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(v["type"], "subscribe_ok");
+        let rejected = v["rejected"].as_array().cloned().unwrap_or_default();
+        let path = owner_topic_path(unknown_assignment, owner.id);
+        let has_nf = rejected.iter().any(|r| {
+            r.get(0).and_then(|s| s.as_str()) == Some(&path)
+                && r.get(1).and_then(|s| s.as_str()) == Some("assignment_not_found")
+        });
+        assert!(has_nf, "expected assignment_not_found rejection");
+
+        ws.close(None).await.unwrap();
     }
 
     #[tokio::test]
-    async fn bad_ids_are_400() {
+    async fn malformed_subscribe_yields_bad_request_error() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let addr = spawn_server(app).await;
+        let db = app_state.db();
 
-        // send a valid token so we pass the top-level /ws auth layer and hit ID validation
-        let u = UserModel::create(app_state.db(), "u-any", "any@test.com", "pw", false)
+        // make any user for auth
+        let u = UserModel::create(db, "u-any", "any@test.com", "pw", false)
             .await
             .unwrap();
         let (token, _) = generate_jwt(u.id, u.admin);
 
-        // non-numeric params (this must still go through the same nested route)
-        let topic = "modules/abc/assignments/def/submissions/ghi";
+        let (mut ws, _) = connect_ws(&addr.to_string(), Some(&token))
+            .await
+            .expect("connect");
+        // consume ready
+        let _ = ws.next().await;
 
-        match connect_ws(&addr.to_string(), topic, Some(&token)).await {
-            Ok(_) => panic!("should not connect with bad IDs"),
-            Err(Error::Http(resp)) => {
-                assert_eq!(resp.status(), 400);
-                let body = std::str::from_utf8(resp.body().as_ref().unwrap()).unwrap();
-                let json: serde_json::Value = serde_json::from_str(body).unwrap();
-                assert!(
-                    json["message"]
-                        .as_str()
-                        .unwrap()
-                        .starts_with("Missing or invalid")
-                );
-            }
-            Err(e) => panic!("unexpected error: {:?}", e),
-        }
+        // send a malformed frame (wrong shape for topics)
+        let bad = serde_json::json!({
+            "type": "subscribe",
+            "topics": [{"kind":"assignment_submissions_owner","assignment_id":"oops","user_id":"nope"}],
+            "since": null
+        }).to_string();
+
+        ws.send(Message::Text(bad.into())).await.unwrap();
+
+        // expect an error frame (not an HTTP status)
+        let msg = ws.next().await.expect("message").expect("ok");
+        let Message::Text(txt) = msg else {
+            panic!("expected text");
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap();
+        assert_eq!(v["type"], "error");
+        assert_eq!(v["code"], "bad_request");
+
+        ws.close(None).await.unwrap();
     }
 }

@@ -24,6 +24,7 @@ pub struct ListSubmissionsQuery {
     pub username: Option<String>,
     pub late: Option<bool>,
     pub ignored: Option<bool>,
+    pub status: Option<String>,
 }
 
 /// Represents a user associated with a submission.

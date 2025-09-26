@@ -1,3 +1,4 @@
+// src/types/modules/assignments/submissions.ts
 import type { Timestamp } from "@/types/common";
 
 // ─────────────────────────────────────────────────────────────
@@ -17,10 +18,16 @@ export const SUBMISSION_STATUSES = [
 ] as const;
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
-
 // ─────────────────────────────────────────────────────────────
 // Shared Types
 // ─────────────────────────────────────────────────────────────
+
+export interface PlagiarismInfo {
+  flagged: boolean;
+  similarity: number;
+  lines_matched: number;
+  description: string;
+}
 
 export interface Submission extends Timestamp {
   id: number;
@@ -36,6 +43,7 @@ export interface Submission extends Timestamp {
   tasks?: TaskBreakdown[];
   code_coverage?: CodeCoverage;
   user?: SubmissionUserInfo;
+  plagiarism?: PlagiarismInfo;
 }
 
 export interface SubmissionMark {
@@ -48,7 +56,7 @@ export interface SubsectionBreakdown {
   status: string;
   earned: number;
   total: number;
-  feedback?: string; 
+  feedback?: string;
 }
 
 export interface TaskBreakdown {
@@ -58,8 +66,28 @@ export interface TaskBreakdown {
   subsections: SubsectionBreakdown[];
 }
 
-export interface CodeCoverageFile { path: string; earned: number; total: number }
-export interface CodeCoverage { summary?: SubmissionMark; files: CodeCoverageFile[] }
+// ─────────────────────────────────────────────────────────────
+// Code Coverage (aligned with backend)
+// ─────────────────────────────────────────────────────────────
+
+export interface CodeCoverageSummary {
+  earned: number;
+  total: number;
+  total_lines: number;
+  covered_lines: number;
+  coverage_percent: number;
+}
+
+export interface CodeCoverageFile {
+  path: string;
+  earned: number; 
+  total: number;  
+}
+
+export interface CodeCoverage {
+  summary?: CodeCoverageSummary;
+  files: CodeCoverageFile[];
+}
 
 export interface SubmissionUserInfo {
   id: number;
@@ -71,7 +99,6 @@ export interface SubmissionTaskOutput {
   task_number: number;
   raw: string;
 }
-
 
 // Request payload: either specific IDs or all=true (mutually exclusive)
 export type ResubmitRequest =
@@ -86,6 +113,7 @@ export interface FailedResubmission {
 
 // Response shape from the endpoint
 export interface ResubmitResponse {
-  resubmitted: number;
+  started: number;
+  skipped_in_progress: number;
   failed: FailedResubmission[];
 }

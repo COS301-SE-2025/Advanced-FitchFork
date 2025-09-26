@@ -12,7 +12,7 @@ mod tests {
         assignment_file::{FileType, Model as AssignmentFileModel},
         assignment_memo_output::Model as AssignmentMemoOutputModel,
         assignment_submission::Model as AssignmentSubmissionModel,
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::{ActiveModel as ModuleActiveModel, Model as ModuleModel},
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -135,9 +135,10 @@ mod tests {
         )
         .await
         .unwrap();
-        let task = AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello", false, false)
-            .await
-            .unwrap();
+        let task =
+            AssignmentTaskModel::create(db, a1.id, 1, "Task 1", "echo Hello", TaskType::Normal)
+                .await
+                .unwrap();
         let memo_output =
             AssignmentMemoOutputModel::save_file(db, a1.id, task.id, "memo.txt", b"memo")
                 .await

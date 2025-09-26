@@ -13,13 +13,13 @@ import {
   Divider,
   Tooltip,
   Tag,
+  message,
 } from 'antd';
 import { DownloadOutlined, InfoCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { Column, type ColumnConfig } from '@ant-design/plots';
 import { useTheme } from '@/context/ThemeContext';
 import { useUI } from '@/context/UIContext';
-import { useSystemHealthAdminWs } from '@/hooks/useSystemHealthAdminWs';
 import {
   getSystemMetrics,
   exportSystemMetrics,
@@ -31,6 +31,11 @@ import {
   type SubmissionsPoint,
 } from '@/services/system/submissions/get';
 import { scaleColor } from '@/utils/color';
+import { useWsEvents, Topics, type PayloadOf } from '@/ws';
+import {
+  getMaxConcurrent,
+  setMaxConcurrent as setMaxConcurrentApi,
+} from '@/services/system/code_manager';
 
 const PercentBar: React.FC<{
   percent: number | null | undefined;
@@ -228,13 +233,56 @@ const AdminDashboard: React.FC = () => {
   const { isDarkMode } = useTheme();
   const { isXl, isMobile } = useUI();
 
-  const {
-    data: live,
-    maxConcurrent,
-    saving,
-    refreshMaxConcurrent,
-    updateMaxConcurrent,
-  } = useSystemHealthAdminWs();
+  // live system health (admin-only stream)
+  const [live, setLive] = useState<PayloadOf<'system.health_admin'> | null>(null);
+
+  // optional override set via the modal (kept same name you used before)
+  const [maxConcurrent, setMaxConcurrent] = useState<number | null>(null);
+
+  // saving flag while we hit the REST endpoint to update maxConcurrent
+  const [saving, setSaving] = useState<boolean>(false);
+
+  // Subscribe to the admin topic and keep `live` updated
+  useWsEvents([Topics.systemAdmin()], {
+    'system.health_admin': (p) => setLive(p),
+  });
+
+  const refreshMaxConcurrent = useCallback(async () => {
+    try {
+      const res = await getMaxConcurrent();
+      if (res.success && typeof res.data === 'number') {
+        setMaxConcurrent(res.data);
+      } else {
+        throw new Error(res.message || 'Failed to load max concurrency');
+      }
+    } catch (e: any) {
+      message.error(e?.message ?? 'Failed to load max concurrency');
+    }
+  }, []);
+
+  const updateMaxConcurrent = useCallback(async (next: number) => {
+    setSaving(true);
+    try {
+      const res = await setMaxConcurrentApi(next);
+      if (!res.success) throw new Error(res.message || 'Update failed');
+
+      // server echoes the number in data
+      const newVal = typeof res.data === 'number' ? res.data : next;
+      setMaxConcurrent(newVal);
+      message.success('Updated code manager capacity');
+      return { success: true };
+    } catch (e: any) {
+      message.error(e?.message ?? 'Failed to update capacity');
+      return { success: false };
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // NOTE: if you ALSO want the general stream (non-admin) available to the same page,
+  // you can add Topics.system() and a handler for 'system.health' too.
+  // Example:
+  // useWsEvents([Topics.system()], { 'system.health': (p) => {/* optional */} });
 
   const [mBucket, setMBucket] = useState<UiBucket>('day');
   const [mRange, setMRange] = useState<[Dayjs, Dayjs]>(() => naturalRange('day'));

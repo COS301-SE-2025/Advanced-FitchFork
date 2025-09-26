@@ -1,6 +1,8 @@
+import type { TaskType } from "./shared";
+
 export type PostTaskRequest = {
   task_number: number;
   name: string;
   command: string;
-  code_coverage: boolean;
+  task_type: TaskType;
 };

@@ -9,6 +9,7 @@ mod tests {
         response::Response,
     };
     use chrono::{Datelike, Duration, Utc};
+    use db::models::assignment_task::TaskType;
     use db::models::{
         assignment::{
             ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
@@ -95,9 +96,16 @@ mod tests {
         active_assignment.updated_at = Set(now);
         let assignment = active_assignment.update(db).await.unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(
+            db,
+            assignment.id,
+            1,
+            "Task 1",
+            "make task1",
+            TaskType::Normal,
+        )
+        .await
+        .unwrap();
 
         create_assignment_structure(module.id, assignment.id);
         create_mark_allocator(module.id, assignment.id);
@@ -2052,6 +2060,14 @@ mod tests {
         .await
         .unwrap();
 
+        // Mark it as a final state so resubmit won't skip it
+        use sea_orm::{ActiveModelTrait, Set};
+        let mut am: db::models::assignment_submission::ActiveModel = submission.clone().into();
+        am.status = Set(db::models::assignment_submission::SubmissionStatus::Graded);
+        am.earned = Set(10.0);
+        am.total = Set(10.0);
+        let submission = am.update(db).await.unwrap();
+
         // Seed an output row (empty path is fine for resubmit tests)
         let task = assignment_task::Entity::find()
             .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
@@ -2119,7 +2135,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 
@@ -2166,7 +2182,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 

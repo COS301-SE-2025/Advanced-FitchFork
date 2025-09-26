@@ -31,7 +31,7 @@ const AssessmentSection: React.FC = () => {
   const { isMobile } = useUI();
   const [rawView, setRawView] = useState<Record<string, boolean>>({});
 
-  if (!selectedTask || selectedTask.code_coverage) return null;
+  if (!selectedTask || selectedTask.task_type === 'coverage') return null;
   const subs: SubRow[] = (selectedTask.subsections ?? []) as SubRow[];
   if (!subs.length) return null;
 

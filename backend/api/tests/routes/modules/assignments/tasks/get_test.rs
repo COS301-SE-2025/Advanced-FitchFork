@@ -9,7 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -80,8 +80,7 @@ mod tests {
             1,
             "echo 'Task 1'",
             "Task 1 Name",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task 1");
@@ -92,8 +91,7 @@ mod tests {
             2,
             "echo 'Task 2'",
             "Task 2 Name",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task 2");
@@ -454,8 +452,7 @@ mod tests {
             1,
             "echo 'Other'",
             "Task in Ass 2",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task in second assignment");

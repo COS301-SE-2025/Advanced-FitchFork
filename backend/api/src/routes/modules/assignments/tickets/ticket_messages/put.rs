@@ -14,10 +14,10 @@ use axum::{
 use db::models::ticket_messages::Model as TicketMessageModel;
 use util::state::AppState;
 
+use crate::ws::tickets::{emit as t_emit, payload as t_payload};
 use crate::{
     auth::AuthUser, response::ApiResponse,
     routes::modules::assignments::tickets::ticket_messages::common::MessageResponse,
-    ws::tickets::topics::ticket_chat_topic,
 };
 
 /// PUT /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
@@ -102,7 +102,7 @@ use crate::{
 /// ```
 pub async fn edit_ticket_message(
     // NOTE: we now extract module_id, assignment_id, and ticket_id so we can build the WS topic
-    Path((_, _, ticket_id, message_id)): Path<(i64, i64, i64, i64)>,
+    Path((_, _, _, message_id)): Path<(i64, i64, i64, i64)>,
     State(app_state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(req): Json<serde_json::Value>,
@@ -155,22 +155,17 @@ pub async fn edit_ticket_message(
     };
 
     // --- WebSocket broadcast: message_updated ---
-    let topic = ticket_chat_topic(ticket_id);
-    let payload = serde_json::json!({
-        "event": "message_updated",
-        "payload": {
-            "id": message.id,
-            "ticket_id": message.ticket_id,
-            "content": message.content,
-            "created_at": message.created_at.to_rfc3339(),
-            "updated_at": message.updated_at.to_rfc3339(),
-            "user": null
-        }
-    });
-    app_state
-        .ws_clone()
-        .broadcast(&topic, payload.to_string())
-        .await;
+    let ws = app_state.ws_clone();
+
+    let payload = t_payload::Message {
+        id: message.id,
+        ticket_id: message.ticket_id,
+        content: message.content.clone(),
+        created_at: message.created_at.to_rfc3339(),
+        updated_at: message.updated_at.to_rfc3339(),
+        user: None,
+    };
+    t_emit::message_updated(&ws, payload).await;
 
     (
         StatusCode::OK,

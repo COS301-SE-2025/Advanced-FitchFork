@@ -16,6 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 use util::{
     execution_config::{ExecutionConfig, GradingPolicy},
+    mark_allocator::load_allocator,
     paths::submission_report_path,
     state::AppState,
 };
@@ -109,6 +110,11 @@ fn stddev(xs: &[i64]) -> f64 {
         .sum::<f64>()
         / (xs.len() as f64 - 1.0);
     var.sqrt()
+}
+
+#[inline]
+fn r2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
 }
 
 #[inline]
@@ -381,8 +387,12 @@ pub async fn get_assignment_stats(
         (num_passed as f64 / graded as f64) * 100.0
     };
 
-    // totals across counted rows only
-    let total_marks: f64 = rows.iter().map(|s| s.total).sum();
+    // Use allocator's total_value (assignment max marks), not a sum over submissions
+    let total_marks: f64 = match load_allocator(module_id, assignment_id) {
+        Ok(alloc) => alloc.total_value,
+        Err(_) => 0.0, // fallback if allocator is missing/invalid
+    };
+
     let num_students_submitted = rows.iter().map(|s| s.user_id).collect::<HashSet<_>>().len();
 
     // aggregates on effective marks
@@ -397,15 +407,15 @@ pub async fn get_assignment_stats(
         total,   // counted attempts only (non-practice, non-ignored)
         graded,  // students with an effective mark among counted rows
         pending, // counted attempts minus graded
-        pass_rate: (pass_rate * 10.0).round() / 10.0,
-        avg_mark: (avg_mark * 10.0).round() / 10.0,
-        median: (median_mark * 10.0).round() / 10.0,
-        p75: (p75_mark * 10.0).round() / 10.0,
-        stddev: (stddev_mark * 10.0).round() / 10.0,
+        pass_rate: r2(pass_rate),
+        avg_mark: r2(avg_mark),
+        median: r2(median_mark),
+        p75: r2(p75_mark),
+        stddev: r2(stddev_mark),
         best,
         worst,
-        total_marks,            // sum over counted rows
-        num_students_submitted, // students with at least one counted row
+        total_marks: r2(total_marks), // assignment max marks (from allocator)
+        num_students_submitted,       // students with at least one counted row
         num_passed,
         num_failed,
         num_full_marks,

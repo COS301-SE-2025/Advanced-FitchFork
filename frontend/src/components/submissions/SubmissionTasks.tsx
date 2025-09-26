@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Collapse, Tag, Typography, Modal, Button } from 'antd';
+import { Collapse, Tag, Typography, Modal, Button, Tooltip } from 'antd';
 import type { CollapseProps } from 'antd';
 import type {
   CodeCoverage,
@@ -66,41 +66,76 @@ const SubmissionTasks: React.FC<Props> = ({
     setVisible(true);
   };
 
-  // Optional coverage panel: tag (earned/total) left, title center, percentage right; no summary row in body
+  // Coverage panel: now uses summary.coverage_percent, total_lines, covered_lines
   const coverageItem: ItemType | null = useMemo(() => {
     if (!codeCoverage) return null;
 
     const summary = codeCoverage.summary;
     const files = codeCoverage.files ?? [];
-    const pct =
-      summary && summary.total > 0 ? `${Math.round((summary.earned / summary.total) * 100)}%` : '—';
+
+    const pctText =
+      summary && Number.isFinite(summary.coverage_percent)
+        ? `${Math.round(summary.coverage_percent)}%`
+        : '—';
+
+    const linesText =
+      summary && Number.isFinite(summary.covered_lines) && Number.isFinite(summary.total_lines)
+        ? `${summary.covered_lines}/${summary.total_lines} lines`
+        : '—';
 
     const fileList = files.length ? (
       <ul className="space-y-1 pl-0">
-        {files.map((f, i) => (
-          <li key={`${f.path}-${i}`} className="flex items-center gap-2 text-sm">
-            <Tag color={getScoreTagColor(f.earned, f.total)}>
-              {f.earned}/{f.total}
-            </Tag>
-            <span className="truncate">{f.path}</span>
-          </li>
-        ))}
+        {files.map((f, i) => {
+          const filePct = f.total > 0 ? Math.round((f.earned / f.total) * 100) : null;
+          return (
+            <li key={`${f.path}-${i}`} className="flex items-center gap-2 text-sm">
+              <Tag color={getScoreTagColor(f.earned, f.total)}>
+                {f.earned}/{f.total}
+              </Tag>
+              <span className="truncate">{f.path}</span>
+              <span className="ml-auto text-xs text-gray-500">
+                {filePct !== null ? `${filePct}%` : '—'}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     ) : (
       <Text type="secondary">No per-file details.</Text>
+    );
+
+    const labelLeft = (
+      <Tag color={summary ? getScoreTagColor(summary.earned, summary.total) : 'default'}>
+        {summary ? `${summary.earned} / ${summary.total}` : '—'}
+      </Tag>
+    );
+
+    const labelMiddle = (
+      <div className="flex items-center gap-2 min-w-0">
+        <Text className="font-medium truncate">Code Coverage</Text>
+        {summary ? (
+          <Tooltip title={`${linesText} covered`}>
+            <Text type="secondary" className="shrink-0">
+              ({linesText})
+            </Text>
+          </Tooltip>
+        ) : null}
+      </div>
+    );
+
+    const labelRight = (
+      <Text type="secondary" className="ml-auto shrink-0">
+        {pctText}
+      </Text>
     );
 
     const item: ItemType = {
       key: -1, // numeric & non-colliding (tasks are positive)
       label: (
         <div className="flex items-center gap-2 min-w-0 w-full">
-          <Tag color={summary ? getScoreTagColor(summary.earned, summary.total) : 'default'}>
-            {summary ? `${summary.earned} / ${summary.total}` : '—'}
-          </Tag>
-          <Text className="font-medium truncate">Code Coverage</Text>
-          <Text type="secondary" className="ml-auto shrink-0">
-            {pct}
-          </Text>
+          {labelLeft}
+          {labelMiddle}
+          {labelRight}
         </div>
       ),
       children: <div className="pl-2">{fileList}</div>,

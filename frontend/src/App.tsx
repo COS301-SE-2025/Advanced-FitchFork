@@ -59,6 +59,9 @@ import TasksHelp from './pages/help/assignments/TasksHelp';
 import SystemMonitoringHelp from './pages/help/system/SystemMonitoring';
 import MobileHelpPageMenu from './pages/help/MobileHelpPageMenu';
 import FitchforkOverview from './pages/help/Overview';
+import ModuleAttendanceHelp from './pages/help/modules/AttendanceHelp';
+import ModulePersonnelHelp from './pages/help/modules/PersonnelHelp';
+import HelpContactSupport from './pages/help/support/ContactHelp';
 import Announcements from './pages/modules/announcements/Announcements';
 import AnnouncementView from './pages/modules/announcements/AnnouncementView';
 import AccessDeniedPage from './pages/modules/assignments/AccessDeniedPage';
@@ -98,6 +101,19 @@ import ModuleOverview from './pages/modules/ModuleOverview';
 import ModulePersonnel from './pages/modules/ModulePersonnel';
 import ModulesList from './pages/modules/ModulesList';
 import SettingsMobileMenu from './pages/settings/SettingsMobileMenu';
+import AssignmentStatisticsPage from './pages/modules/assignments/AssignmentStatisticsPage';
+import { WS_BASE_URL } from './config/api';
+import { WsProvider } from './ws';
+
+// helper to pass AuthContext into WsProvider (keep this in App.tsx)
+const WithWs: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const auth = useAuth();
+  return (
+    <WsProvider url={WS_BASE_URL} auth={auth} log={true}>
+      {children}
+    </WsProvider>
+  );
+};
 
 export default function App() {
   const { isMobile } = useUI();
@@ -133,7 +149,13 @@ export default function App() {
 
         {/* Protected Auth Routes */}
         <Route element={<ProtectedAuthRoute />}>
-          <Route element={<AppLayout />}>
+          <Route
+            element={
+              <WithWs>
+                <AppLayout />
+              </WithWs>
+            }
+          >
             <Route path="/dashboard" element={<Dashboard />} />
 
             <Route path="/settings" element={<SettingsLayout />}>
@@ -206,6 +228,7 @@ export default function App() {
                       <Route index element={<PlagiarismCases />} />
                       <Route path=":plagiarism_id" element={<></>} />
                     </Route>
+                    <Route path="statistics" element={<AssignmentStatisticsPage />} />
                     <Route path="config" element={<AssignmentConfigLayout />}>
                       <Route
                         index
@@ -275,101 +298,6 @@ export default function App() {
               </Route>
             </Route>
 
-            {/* Help Routes */}
-            <Route path="/help" element={<HelpPageLayout />}>
-              {/* Default → Getting Started / Overview */}
-              <Route
-                index
-                element={
-                  isMobile ? (
-                    <MobileHelpPageMenu />
-                  ) : (
-                    <Navigate to="getting-started/overview" replace />
-                  )
-                }
-              />
-
-              {/* Ambiguous roots → first leaf */}
-              <Route path="getting-started" element={<Navigate to="getting-started/overview" />} />
-              <Route path="modules" element={<Navigate to="modules/overview" replace />} />
-              <Route path="assignments" element={<Navigate to="assignments/setup" replace />} />
-              <Route
-                path="assignments/config-sections"
-                element={<Navigate to="assignments/config" replace />}
-              />
-              <Route
-                path="assignments/files"
-                element={<Navigate to="assignments/files/main-files" replace />}
-              />
-              <Route
-                path="assignments/concepts"
-                element={<Navigate to="assignments/tasks" replace />}
-              />
-              <Route
-                path="assignments/submissions"
-                element={<Navigate to="assignments/submissions/how-to-submit" replace />}
-              />
-              <Route
-                path="assignments/plagiarism"
-                element={<Navigate to="assignments/plagiarism/moss" replace />}
-              />
-              {/* Grading wasn't a clickable key, but support a direct path anyway */}
-              <Route
-                path="assignments/grading"
-                element={<Navigate to="assignments/memo-output" replace />}
-              />
-              <Route path="support" element={<Navigate to="support/troubleshooting" replace />} />
-
-              {/* Getting Started */}
-              <Route path="getting-started/overview" element={<FitchforkOverview />} />
-
-              {/* Modules */}
-              <Route path="modules/overview" element={<UnderConstruction />} />
-              <Route path="modules/announcements" element={<UnderConstruction />} />
-              <Route path="modules/attendance" element={<UnderConstruction />} />
-              <Route path="modules/grades" element={<UnderConstruction />} />
-              <Route path="modules/personnel" element={<UnderConstruction />} />
-
-              {/* Assignments → Setup */}
-              <Route path="assignments/setup" element={<AssignmentSetupHelp />} />
-
-              {/* Assignments → Assignment Config (Overview + subsections) */}
-              <Route path="assignments/config" element={<Navigate to="overview" replace />} />
-              <Route path="assignments/config/overview" element={<ConfigOverviewHelp />} />
-              <Route path="assignments/config/project" element={<ProjectHelp />} />
-              <Route path="assignments/config/execution" element={<ExecutionHelp />} />
-              <Route path="assignments/config/output" element={<OutputHelp />} />
-              <Route path="assignments/config/marking" element={<MarkingHelp />} />
-              <Route path="assignments/config/security" element={<SecurityHelp />} />
-              <Route path="assignments/config/gatlam" element={<GATLAMHelp />} />
-
-              {/* Assignments → Files */}
-              <Route path="assignments/files/main-files" element={<MainFile />} />
-              <Route path="assignments/files/makefile" element={<MakefileHelp />} />
-              <Route path="assignments/files/memo-files" element={<MemoFiles />} />
-              <Route path="assignments/files/specification" element={<Specification />} />
-
-              {/* Assignments → Concepts */}
-              <Route path="assignments/tasks" element={<TasksHelp />} />
-              <Route path="assignments/code-coverage" element={<ConceptCodeCoverage />} />
-              <Route path="assignments/gatlam" element={<ConceptGATLAM />} />
-
-              {/* Assignments → Submissions */}
-              <Route path="assignments/submissions/how-to-submit" element={<HowToSubmitHelp />} />
-
-              {/* Assignments → Plagiarism */}
-              <Route path="assignments/plagiarism/moss" element={<PlagiarismMossHelp />} />
-
-              {/* Assignments → Grading */}
-              <Route path="assignments/memo-output" element={<MemoOutputHelp />} />
-              <Route path="assignments/mark-allocator" element={<MarkAllocatorHelp />} />
-
-              {/* Support */}
-              <Route path="support/troubleshooting" element={<UnderConstruction />} />
-              <Route path="support/contact" element={<UnderConstruction />} />
-              <Route path="support/system-monitoring" element={<SystemMonitoringHelp />} />
-            </Route>
-
             {/* Explicit Unauthorized Fallbacks */}
             <Route path="/modules/:module_id/assignments" element={<Unauthorized />} />
             <Route
@@ -377,6 +305,100 @@ export default function App() {
               element={<Unauthorized />}
             />
             <Route path="/reports" element={<UnderConstruction />} />
+          </Route>
+
+          <Route
+            path="/help"
+            element={
+              <WithWs>
+                <HelpPageLayout />
+              </WithWs>
+            }
+          >
+            {/* Default → Getting Started / Overview */}
+            <Route
+              index
+              element={
+                isMobile ? (
+                  <MobileHelpPageMenu />
+                ) : (
+                  <Navigate to="getting-started/overview" replace />
+                )
+              }
+            />
+
+            {/* Ambiguous roots → first leaf */}
+            <Route path="getting-started" element={<Navigate to="getting-started/overview" replace />} />
+            <Route path="modules" element={<Navigate to="modules/attendance" replace />} />
+            <Route path="assignments" element={<Navigate to="assignments/setup" replace />} />
+            <Route
+              path="assignments/config-sections"
+              element={<Navigate to="assignments/config" replace />}
+            />
+            <Route
+              path="assignments/files"
+              element={<Navigate to="assignments/files/main-files" replace />} />
+            <Route
+              path="assignments/concepts"
+              element={<Navigate to="assignments/tasks" replace />} />
+            <Route
+              path="assignments/submissions"
+              element={<Navigate to="assignments/submissions/how-to-submit" replace />} />
+            <Route
+              path="assignments/plagiarism"
+              element={<Navigate to="assignments/plagiarism/moss" replace />} />
+            <Route
+              path="assignments/grading"
+              element={<Navigate to="assignments/memo-output" replace />} />
+            <Route path="support" element={<Navigate to="support/contact" replace />} />
+
+            {/* Getting Started */}
+            <Route path="getting-started/overview" element={<FitchforkOverview />} />
+
+            {/* Modules */}
+            <Route path="modules/overview" element={<Navigate to="/help/modules/attendance" replace />} />
+            <Route path="modules/announcements" element={<Navigate to="/help/modules/attendance" replace />} />
+            <Route path="modules/grades" element={<Navigate to="/help/modules/personnel" replace />} />
+            <Route path="modules/attendance" element={<ModuleAttendanceHelp />} />
+            <Route path="modules/personnel" element={<ModulePersonnelHelp />} />
+
+            {/* Assignments → Setup */}
+            <Route path="assignments/setup" element={<AssignmentSetupHelp />} />
+
+            {/* Assignments → Assignment Config (Overview + subsections) */}
+            <Route path="assignments/config" element={<Navigate to="overview" replace />} />
+            <Route path="assignments/config/overview" element={<ConfigOverviewHelp />} />
+            <Route path="assignments/config/project" element={<ProjectHelp />} />
+            <Route path="assignments/config/execution" element={<ExecutionHelp />} />
+            <Route path="assignments/config/output" element={<OutputHelp />} />
+            <Route path="assignments/config/marking" element={<MarkingHelp />} />
+            <Route path="assignments/config/security" element={<SecurityHelp />} />
+            <Route path="assignments/config/gatlam" element={<GATLAMHelp />} />
+
+            {/* Assignments → Files */}
+            <Route path="assignments/files/main-files" element={<MainFile />} />
+            <Route path="assignments/files/makefile" element={<MakefileHelp />} />
+            <Route path="assignments/files/memo-files" element={<MemoFiles />} />
+            <Route path="assignments/files/specification" element={<Specification />} />
+
+            {/* Assignments → Concepts */}
+            <Route path="assignments/tasks" element={<TasksHelp />} />
+            <Route path="assignments/code-coverage" element={<ConceptCodeCoverage />} />
+            <Route path="assignments/gatlam" element={<ConceptGATLAM />} />
+
+            {/* Assignments → Submissions */}
+            <Route path="assignments/submissions/how-to-submit" element={<HowToSubmitHelp />} />
+
+            {/* Assignments → Plagiarism */}
+            <Route path="assignments/plagiarism/moss" element={<PlagiarismMossHelp />} />
+
+            {/* Assignments → Grading */}
+            <Route path="assignments/memo-output" element={<MemoOutputHelp />} />
+            <Route path="assignments/mark-allocator" element={<MarkAllocatorHelp />} />
+
+            {/* Support */}
+            <Route path="support/system-monitoring" element={<SystemMonitoringHelp />} />
+            <Route path="support/contact" element={<HelpContactSupport />} />
           </Route>
         </Route>
       </Routes>
