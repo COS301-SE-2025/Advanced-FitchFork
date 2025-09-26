@@ -23,6 +23,11 @@ use util::{
     state::AppState,
 };
 use validator::Validate;
+use sea_orm::QueryOrder;
+use db::models::{
+    module::{Entity as ModuleEntity, Column as ModuleColumn},
+    user_module_role::{Model as UserModuleRoleModel, Role as ModuleRole},
+};
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -157,6 +162,27 @@ pub async fn register(
                 );
             }
         };
+
+    // -----------------------------------------------------------------------------
+    // TODO(BI-REMOVE-LATER): Temporary auto-enrolment of all new users into UTM001.
+    // If multiple UTM001 modules exist, prefer the most recent year.
+    // Any error here is logged but does NOT fail registration.
+    // -----------------------------------------------------------------------------
+    if let Ok(Some(default_mod)) = ModuleEntity::find()
+        .filter(ModuleColumn::Code.eq("UTM001"))
+        .order_by_desc(ModuleColumn::Year)
+        .one(db)
+        .await
+    {
+        // Ignore duplicate / FK errors silently; this is best-effort.
+        let _ = UserModuleRoleModel::assign_user_to_module(
+            db,
+            inserted_user.id,
+            default_mod.id,
+            ModuleRole::Student,
+        )
+        .await;
+    }
 
     let (token, expiry) = generate_jwt(inserted_user.id, inserted_user.admin);
     let user_response = UserResponse {
