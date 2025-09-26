@@ -207,7 +207,7 @@ mod tests {
             json["message"]
                 .as_str()
                 .unwrap()
-                .contains("Credits must be a positive number")
+                .contains("Credits must be between 1 and 9999")
         );
     }
 
@@ -344,7 +344,7 @@ mod tests {
         assert!(message.contains("Module code must be in format ABC123"));
         assert!(message.contains("Year must be current year or later"));
         assert!(message.contains("Description must be at most 1000 characters"));
-        assert!(message.contains("Credits must be a positive number"));
+        assert!(message.contains("Credits must be between 1 and 9999"));
     }
 
     /// Test Case: Update with same code (should succeed)
