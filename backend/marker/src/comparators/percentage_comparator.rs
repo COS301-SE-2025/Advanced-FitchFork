@@ -16,8 +16,6 @@ use util::mark_allocator::Subsection;
 /// **Note:** Line order matters. Only lines at the same index in both memo and student outputs are considered for matching.
 pub struct PercentageComparator;
 
-/// TODO: Add the ability to toggle between line order matters and line order doesn't matter.
-
 impl OutputComparator for PercentageComparator {
     /// Compares student and memo outputs based on the percentage of matching lines.
     ///
