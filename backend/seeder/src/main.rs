@@ -10,7 +10,7 @@ use crate::seeds::{
     assignment_submission_output::AssignmentSubmissionOutputSeeder,
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder,
     plagiarism_case::PlagiarismCaseSeeder, tickets::TicketSeeder, user::UserSeeder,
-    user_role::UserRoleSeeder,
+    user_role::UserRoleSeeder, achievements::AchievementSeeder,
 };
 
 mod seed;
@@ -48,6 +48,7 @@ async fn main() {
             "AssignmentInterpreter",
         ),
         (Box::new(TicketSeeder), "Ticket"),
+        (Box::new(AchievementSeeder), "Achievement"),
     ] {
         run_seeder(&*seeder, name, &db).await;
     }

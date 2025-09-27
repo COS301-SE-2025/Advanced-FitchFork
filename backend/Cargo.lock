@@ -3574,6 +3574,7 @@ dependencies = [
  "migration",
  "rand 0.8.5",
  "sea-orm",
+ "serde_json",
  "tokio",
  "zip 5.1.1",
 ]

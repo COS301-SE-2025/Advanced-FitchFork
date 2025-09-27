@@ -17,3 +17,4 @@ pub mod m202509080001_create_attendance;
 pub mod m202509120001_create_moss_reports;
 pub mod m202509120002_create_plagiarism_cases;
 pub mod m202509150003_create_system_metrics;
+pub mod m202509270001_create_achievements;

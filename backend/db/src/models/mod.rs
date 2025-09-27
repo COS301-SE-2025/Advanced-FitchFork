@@ -1,3 +1,4 @@
+pub mod achievements;
 pub mod announcements;
 pub mod assignment;
 pub mod assignment_file;
