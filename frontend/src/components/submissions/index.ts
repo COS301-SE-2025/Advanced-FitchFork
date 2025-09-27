@@ -6,3 +6,7 @@ export {default as SubmissionsEmptyState} from "./SubmissionsEmptyState";
 export {default as SubmitAssignmentModal} from "./SubmitAssignmentModal";
 export {default as SubmissionProgressOverlay} from "./SubmissionProgressOverlay";
 export {default as SubmissionStatusTag} from "./SubmissionStatusTag";
+export {default as SubmissionLateTag} from "./SubmissionLateTag";
+export {default as SubmissionIgnoredTag} from "./SubmissionIgnoredTag";
+export {default as SubmissionPracticeTag} from "./SubmissionPracticeTag";
+export {default as SubmissionAttemptTag} from "./SubmissionAttemptTag";

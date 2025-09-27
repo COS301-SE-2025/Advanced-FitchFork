@@ -13,10 +13,10 @@ pub fn assert_default_config(d: &Value) {
     // ---------- marking ----------
     assert_eq!(d["marking"]["marking_scheme"], "exact");
     assert_eq!(d["marking"]["feedback_scheme"], "auto");
-    assert_eq!(d["marking"]["deliminator"], "&-=-&");
+    assert_eq!(d["marking"]["deliminator"], "###");
     assert_eq!(d["marking"]["grading_policy"], "last");
     assert_eq!(d["marking"]["max_attempts"], 10);
-    assert_eq!(d["marking"]["limit_attempts"], false);
+    assert_eq!(d["marking"]["limit_attempts"], true);
     assert_eq!(d["marking"]["pass_mark"], 50);
     assert_eq!(d["marking"]["allow_practice_submissions"], false);
     assert!(
@@ -29,7 +29,7 @@ pub fn assert_default_config(d: &Value) {
     // NEW: late policy defaults
     assert_eq!(d["marking"]["late"]["allow_late_submissions"], false);
     assert_eq!(d["marking"]["late"]["late_window_minutes"], 0);
-    assert_eq!(d["marking"]["late"]["late_max_percent"], 100);
+    assert_eq!(d["marking"]["late"]["late_max_percent"], 100.0);
 
     // ---------- project ----------
     assert_eq!(d["project"]["language"], "cpp"); // serde rename_all = "lowercase"

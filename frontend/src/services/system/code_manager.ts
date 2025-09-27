@@ -1,11 +1,13 @@
 import { api } from '@/utils/api';
 
+export type MaxConcurrent = number;
 
-export async function getMaxConcurrent() {
-  return api.get('/system/code-manager/max-concurrent');
+export function getMaxConcurrent() {
+  return api.get<MaxConcurrent>('/system/code-manager/max-concurrent');
 }
 
-export async function setMaxConcurrent(max: number) {
-  return api.post('/system/code-manager/max-concurrent', { max_concurrent: max });
+export function setMaxConcurrent(max: number) {
+  return api.post<MaxConcurrent>('/system/code-manager/max-concurrent', {
+    max_concurrent: max,
+  });
 }
-

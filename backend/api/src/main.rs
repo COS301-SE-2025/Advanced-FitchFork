@@ -1,6 +1,9 @@
 use api::auth::guards::{SUPERUSER_IDS, validate_known_ids};
 use api::routes::routes;
-use api::ws::system::topics; // for topic helpers
+use api::ws::system::payload::{
+    CodeManagerAdmin, CodeManagerGeneral, CpuInfo, DiskSummary, LoadAverages, MemoryInfo,
+    SystemHealthAdminPayload, SystemHealthGeneralPayload,
+};
 use api::{auth::middleware::log_request, ws::ws_routes};
 use axum::{
     Router,
@@ -19,8 +22,11 @@ use std::{
 };
 use tower_http::cors::CorsLayer;
 use tracing_appender::rolling;
-use util::system_health::{build_health_payloads, sample_system_metrics};
+
+use util::system_health::sample_system_metrics;
 use util::{config, state::AppState, ws::WebSocketManager};
+
+use api::ws::system::emit::{health_admin, health_general};
 
 #[tokio::main]
 async fn main() {
@@ -123,8 +129,6 @@ fn spawn_system_health_broadcaster(app_state: AppState) {
 
     tokio::spawn(async move {
         let client = reqwest::Client::new();
-        let general_topic = topics::system_health_topic();
-        let admin_topic = topics::system_health_admin_topic();
         let persist_interval = Duration::from_secs(config::system_health_persist_seconds());
         let mut last_persist = Instant::now();
         let mut first_persist = true;
@@ -136,7 +140,8 @@ fn spawn_system_health_broadcaster(app_state: AppState) {
             // Code manager stats
             let mut cm_running: usize = 0;
             let mut cm_waiting: usize = 0;
-            let mut cm_max: usize = 0;
+            let mut cm_max: Option<usize> = None;
+
             let cm_url = format!("http://{}:{}/stats", cm_host, cm_port);
             if let Ok(resp) = client.get(&cm_url).send().await {
                 if resp.status().is_success() {
@@ -148,35 +153,78 @@ fn spawn_system_health_broadcaster(app_state: AppState) {
                         cm_max = v
                             .get("max_concurrent")
                             .and_then(|x| x.as_u64())
-                            .unwrap_or(0) as usize;
+                            .map(|n| n as usize);
                     }
                 }
             }
 
-            let (general, admin) = build_health_payloads(
-                &metrics,
-                cm_running,
-                cm_waiting,
-                Some(cm_max),
-                &config::env(),
-                &config::host(),
-            );
+            // ----- build typed payloads -----
+            let ts = chrono::Utc::now().to_rfc3339();
 
-            ws.broadcast(&general_topic, general.to_string()).await;
-            ws.broadcast(&admin_topic, admin.to_string()).await;
+            let load = LoadAverages {
+                one: metrics.load_one,
+                five: metrics.load_five,
+                fifteen: metrics.load_fifteen,
+            };
 
+            let general_payload = SystemHealthGeneralPayload {
+                ts: ts.clone(),
+                load: load.clone(),
+                code_manager: CodeManagerGeneral {
+                    running: cm_running,
+                    waiting: cm_waiting,
+                },
+            };
+
+            let admin_payload = SystemHealthAdminPayload {
+                ts,
+                env: config::env().to_string(),
+                host: config::host().to_string(),
+                uptime_seconds: metrics.uptime_seconds,
+                load,
+                cpu: CpuInfo {
+                    cores: metrics.cpu_cores,
+                    avg_usage: metrics.cpu_avg_usage,
+                    per_core: metrics.cpu_per_core.clone(),
+                },
+                memory: MemoryInfo {
+                    total: metrics.mem_total,
+                    used: metrics.mem_used,
+                    swap_total: metrics.swap_total,
+                    swap_used: metrics.swap_used,
+                },
+                disks: metrics
+                    .disks
+                    .iter()
+                    .map(|d| DiskSummary {
+                        name: d.name.clone(),
+                        total: d.total,
+                        available: d.available,
+                        file_system: d.file_system.clone(),
+                        mount_point: d.mount_point.clone(),
+                    })
+                    .collect(),
+                code_manager: CodeManagerAdmin {
+                    running: cm_running,
+                    waiting: cm_waiting,
+                    max_concurrent: cm_max,
+                },
+            };
+
+            // ----- emit via WS (typed events → enveloped & serialized once) -----
+            health_general(&ws, general_payload).await;
+            health_admin(&ws, admin_payload).await;
+
+            // ----- periodic persistence -----
             if first_persist || last_persist.elapsed() >= persist_interval {
-                // Option A: compute here if you have used/total (bytes)
+                // If you need a mem %:
                 let mem_used_bytes = metrics.mem_used as f64;
-                let mem_total_bytes = metrics.mem_total as f64; // ensure sampler provides this
+                let mem_total_bytes = metrics.mem_total as f64;
                 let mem_pct = if mem_total_bytes > 0.0 {
                     (mem_used_bytes / mem_total_bytes) * 100.0
                 } else {
                     0.0
                 };
-
-                // Option B: if sampler already has metrics.mem_pct (0..100), just use that
-                // let mem_pct = metrics.mem_pct as f64;
 
                 let rec = SystemMetricActive {
                     id: NotSet,

@@ -531,8 +531,8 @@ mod tests {
 
     #[test]
     fn parse_labeled_sections_with_delim_basic() {
-        let delim = "&-=-&";
-        let txt = "&-=-&task1\n12\n34\n\n&-=-&task2\nx\ny\n";
+        let delim = "###";
+        let txt = "###task1\n12\n34\n\n###task2\nx\ny\n";
         let map = super::parse_labeled_sections_with_delim(txt, delim);
         assert_eq!(
             map.get("task1").unwrap(),
@@ -639,7 +639,7 @@ mod tests {
     fn forbidden_output_detected_on_exact_line_match() {
         let ev = Evaluator::new();
         let spec = spec_cpp_forbidden(&["BAD", "forbidden"]);
-        let blob = "&-=-&X\nok\nBAD\n\nRetcode: 0\n";
+        let blob = "###X\nok\nBAD\n\nRetcode: 0\n";
         let view = ev.parse(1, blob);
         let eval = ev.evaluate_task(&spec, &view);
         assert!(eval.violated.contains(&Property::IllegalOutput));
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn memo_exact_and_contains_both_pass_yield_zero_ltl() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo has two labels with exact lines
         let memo_txt = build_labeled_stdout(
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     fn memo_exact_fails_but_contains_passes_yields_fractional_ltl() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo: one label with one line
         let memo_txt = build_labeled_stdout(delim, &[("L", &["abc"])], 0, None);
@@ -706,7 +706,7 @@ mod tests {
     #[test]
     fn memo_contains_fails_when_output_missing_line() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo expects two lines
         let memo_txt = build_labeled_stdout(delim, &[("L", &["a", "b"])], 0, None);
@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn memo_missing_label_counts_as_two_violations_for_that_label() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo has label L with one line
         let memo_txt = build_labeled_stdout(delim, &[("L", &["xyz"])], 0, None);
@@ -747,7 +747,7 @@ mod tests {
     #[test]
     fn memo_multiple_labels_some_match_some_dont() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo has 2 labels
         let memo_txt = build_labeled_stdout(delim, &[("A", &["1", "2"]), ("B", &["x"])], 0, None);
@@ -769,7 +769,7 @@ mod tests {
     // #[test]
     // fn derive_props_failure_fraction_when_nonzero_retcode() {
     //     let ev = Evaluator::new();
-    //     let delim = "&-=-&";
+    //     let delim = "###";
 
     //     let memo_txt = build_labeled_stdout(delim, &[("L", &["ok"])], 0, None);
     //     // Out has Retcode 1 -> failure; memo label present and matching to avoid LTL noise
@@ -787,7 +787,7 @@ mod tests {
     // #[test]
     // fn derive_props_forbidden_output_violation_included() {
     //     let ev = Evaluator::new();
-    //     let delim = "&-=-&";
+    //     let delim = "###";
 
     //     let memo_txt = build_labeled_stdout(delim, &[("L", &["ok"])], 0, None);
     //     let out_txt  = format!("{}L\nok\nforbidden\n\nRetcode: 0\n", delim);
@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn memo_and_core_both_violate_accumulate() {
         let ev = Evaluator::new();
-        let delim = "&-=-&";
+        let delim = "###";
 
         // Memo expects "good"
         let memo_txt = build_labeled_stdout(delim, &[("L", &["good"])], 0, None);
@@ -832,7 +832,7 @@ mod tests {
     // #[test]
     // fn multiple_tasks_aggregate_fail_fraction() {
     //     let ev = Evaluator::new();
-    //     let delim = "&-=-&";
+    //     let delim = "###";
 
     //     let memo_txt = build_labeled_stdout(delim, &[("L", &["ok"])], 0, None);
 

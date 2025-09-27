@@ -1,5 +1,5 @@
-import { Card, Avatar, Typography, Tooltip } from 'antd';
-import { BookOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
+import { Card, Avatar, Typography } from 'antd';
+import { BookOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import type { Module } from '@/types/modules';
@@ -20,10 +20,10 @@ interface Props {
 
 const ModuleCard = ({
   module,
-  isFavorite,
-  onToggleFavorite,
+  isFavorite: _isFavorite,
+  onToggleFavorite: _onToggleFavorite,
   actions,
-  showFavorite = true,
+  showFavorite: _showFavorite = true,
 }: Props) => {
   const navigate = useNavigate();
   const { getModuleRole } = useAuth();
@@ -31,11 +31,6 @@ const ModuleCard = ({
 
   const handleClick = () => {
     navigate(`/modules/${module.id}`);
-  };
-
-  const handleStarClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleFavorite(module.id);
   };
 
   return (
@@ -46,16 +41,7 @@ const ModuleCard = ({
       cover={
         <div className="h-[140px] !flex items-center justify-center bg-gray-100 dark:bg-neutral-700 relative">
           <BookOutlined className="text-5xl !text-gray-400 dark:!text-neutral-400" />
-          {showFavorite && (
-            <Tooltip title={isFavorite ? 'Unfavorite' : 'Favorite'}>
-              <div
-                onClick={handleStarClick}
-                className="absolute top-2 right-2 text-xl text-yellow-400"
-              >
-                {isFavorite ? <StarFilled /> : <StarOutlined />}
-              </div>
-            </Tooltip>
-          )}
+          {/* favorite UI removed */}
         </div>
       }
       actions={actions}

@@ -2,7 +2,7 @@
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use api::{auth::generate_jwt, ws::attendance::topics::attendance_session_topic};
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         extract::ConnectInfo,
@@ -200,6 +200,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_student_ok_and_broadcast_received() {
+        use tokio::time::{Duration, timeout};
+
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
@@ -219,8 +221,8 @@ mod tests {
         .await
         .unwrap();
 
-        // Subscribe to the topic BEFORE marking
-        let topic = attendance_session_topic(fresh.id);
+        // Subscribe BEFORE marking (new topic path)
+        let topic = format!("attendance:session:{}", fresh.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
 
         // Student token + compute current code
@@ -245,15 +247,28 @@ mod tests {
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
-        // Ensure broadcast arrived
-        use tokio::time::{Duration, timeout};
-        let msg = timeout(Duration::from_millis(300), rx.recv())
-            .await
-            .expect("broadcast not timed out")
-            .expect("broadcast ok");
+        // Wait for the attendance.marked event for this topic
+        async fn next_marked(
+            rx: &mut tokio::sync::broadcast::Receiver<String>,
+            topic: &str,
+        ) -> serde_json::Value {
+            loop {
+                let msg = timeout(Duration::from_millis(400), rx.recv())
+                    .await
+                    .expect("broadcast not timed out")
+                    .expect("broadcast ok");
+                let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+                if v["type"] == "event" && v["event"] == "attendance.marked" && v["topic"] == topic
+                {
+                    return v;
+                }
+            }
+        }
 
-        let v: Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["event"], "attendance_marked");
+        let v = next_marked(&mut rx, &topic).await;
+        assert_eq!(v["type"], "event");
+        assert_eq!(v["event"], "attendance.marked");
+        assert_eq!(v["topic"], topic);
         assert_eq!(v["payload"]["session_id"], fresh.id);
         assert_eq!(v["payload"]["user_id"], ctx.student.id);
         assert_eq!(v["payload"]["count"], 1); // first mark for this fresh session
@@ -728,6 +743,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_attendance_two_students_broadcast_counts_1_then_2() {
+        use tokio::time::{Duration, timeout};
+
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
 
@@ -765,8 +782,28 @@ mod tests {
         .await
         .unwrap();
 
-        let topic = attendance_session_topic(sess.id);
+        // Subscribe to the new topic path
+        let topic = format!("attendance:session:{}", sess.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
+
+        // Helper: wait for the next attendance.marked event on this topic
+        async fn next_marked(
+            rx: &mut tokio::sync::broadcast::Receiver<String>,
+            topic: &str,
+        ) -> serde_json::Value {
+            loop {
+                let msg = timeout(Duration::from_millis(400), rx.recv())
+                    .await
+                    .expect("broadcast not timed out")
+                    .expect("broadcast ok");
+                let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+                if v["type"] == "event" && v["event"] == "attendance.marked" && v["topic"] == topic
+                {
+                    return v;
+                }
+                // else: keep looping (could be session_updated or other noise)
+            }
+        }
 
         // first mark
         let (t1, _) = generate_jwt(ctx.student.id, false);
@@ -787,12 +824,11 @@ mod tests {
         let req1 = with_connect_info(req1, [198, 51, 100, 70]);
         let _ = app.clone().oneshot(req1).await.unwrap();
 
-        use tokio::time::{Duration, timeout};
-        let msg1 = timeout(Duration::from_millis(300), rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        let v1: Value = serde_json::from_str(&msg1).unwrap();
+        let v1 = next_marked(&mut rx, &topic).await;
+        assert_eq!(v1["type"], "event");
+        assert_eq!(v1["event"], "attendance.marked");
+        assert_eq!(v1["topic"], topic);
+        assert_eq!(v1["payload"]["session_id"], sess.id);
         assert_eq!(v1["payload"]["count"], 1);
 
         // second mark
@@ -807,11 +843,11 @@ mod tests {
         let req2 = with_connect_info(req2, [198, 51, 100, 71]);
         let _ = app.clone().oneshot(req2).await.unwrap();
 
-        let msg2 = timeout(Duration::from_millis(300), rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        let v2: Value = serde_json::from_str(&msg2).unwrap();
+        let v2 = next_marked(&mut rx, &topic).await;
+        assert_eq!(v2["type"], "event");
+        assert_eq!(v2["event"], "attendance.marked");
+        assert_eq!(v2["topic"], topic);
+        assert_eq!(v2["payload"]["session_id"], sess.id);
         assert_eq!(v2["payload"]["count"], 2);
     }
 
@@ -846,10 +882,9 @@ mod tests {
         let ctx = setup(app_state.db()).await;
 
         let (token, _) = generate_jwt(ctx.lecturer.id, ctx.lecturer.admin);
-        let uri = format!(
-            "/ws/attendance/sessions/{}?token={}",
-            ctx.sess_active.id, token
-        );
+
+        // With the WS refactor there is a single entrypoint; token can be passed via query.
+        let uri = format!("/ws?token={}", token);
 
         // No Authorization header on purpose; guard should accept ?token=
         let req = Request::builder()
@@ -859,8 +894,8 @@ mod tests {
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
-        // It will pass middleware and reach the handler; since we didn't do an upgrade,
-        // we only assert it isn't rejected by auth/guard:
+
+        // We don’t assert upgrade; just that auth was accepted at connect time.
         assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
         assert_ne!(resp.status(), StatusCode::FORBIDDEN);
         assert_ne!(resp.status(), StatusCode::NOT_FOUND);
@@ -896,18 +931,49 @@ mod tests {
     async fn test_ws_guard_forbidden_for_tutor() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let ctx = setup(app_state.db()).await;
-        let (token, _) = generate_jwt(ctx.tutor.id, ctx.tutor.admin);
 
-        let uri = format!("/ws/attendance/sessions/{}", ctx.sess_active.id);
+        // HTTP connect should succeed; authorization is enforced at Subscribe.
+        let (token, _) = generate_jwt(ctx.tutor.id, ctx.tutor.admin);
         let req = Request::builder()
             .method("GET")
-            .uri(&uri)
+            .uri("/ws")
             .header("Authorization", format!("Bearer {}", token))
             .body(AxumBody::empty())
             .unwrap();
 
         let resp = app.oneshot(req).await.unwrap();
-        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_ne!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Now unit-check the topic guard for a Tutor on AttendanceSession.
+        use api::auth::claims::{AuthUser, Claims};
+        use api::ws::auth::{TopicAuth, authorize_topic};
+        use api::ws::types::ClientTopic;
+
+        // Build Claims explicitly (no Default)
+        let tutor_user = AuthUser(Claims {
+            sub: ctx.tutor.id,
+            admin: ctx.tutor.admin,
+            exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as usize,
+        });
+
+        let auth = authorize_topic(
+            app_state.db(),
+            &tutor_user,
+            &ClientTopic::AttendanceSession {
+                session_id: ctx.sess_active.id,
+            },
+        )
+        .await;
+
+        assert!(
+            !auth.is_allowed(),
+            "Tutor should not be authorized to subscribe to attendance session topic"
+        );
+        // Optionally, check the reason code:
+        if let TopicAuth::Denied(code) = auth {
+            assert_eq!(code, "not_module_staff");
+        }
     }
 
     #[tokio::test]
@@ -1294,8 +1360,8 @@ mod tests {
         .await
         .unwrap();
 
-        // subscribe before action
-        let topic = attendance_session_topic(sess.id);
+        // subscribe before action (new topic path)
+        let topic = format!("attendance:session:{}", sess.id);
         let mut rx = app_state.ws().subscribe(&topic).await;
 
         // mark via lecturer
@@ -1324,8 +1390,14 @@ mod tests {
             .expect("broadcast not timed out")
             .expect("broadcast ok");
 
-        let v: Value = serde_json::from_str(&msg).unwrap();
-        assert_eq!(v["event"], "attendance_marked");
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+
+        // New envelope + event name
+        assert_eq!(v["type"], "event");
+        assert_eq!(v["event"], "attendance.marked");
+        assert_eq!(v["topic"], topic);
+
+        // Payload unchanged
         assert_eq!(v["payload"]["session_id"], sess.id);
         assert_eq!(v["payload"]["user_id"], student2.id);
         assert_eq!(v["payload"]["method"], "admin_manual");

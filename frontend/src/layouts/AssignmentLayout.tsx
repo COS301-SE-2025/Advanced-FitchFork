@@ -1,9 +1,20 @@
 // src/pages/modules/assignments/AssignmentLayout.tsx
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { Dropdown, Button, Alert, Tag, Typography, Segmented, Modal, message } from 'antd';
+import {
+  Dropdown,
+  Button,
+  Alert,
+  Tag,
+  Typography,
+  Segmented,
+  Modal,
+  message,
+  Collapse,
+  Empty,
+} from 'antd';
 import type { MenuProps } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 
 import { useModule } from '@/context/ModuleContext';
 import { useAuth } from '@/context/AuthContext';
@@ -14,7 +25,7 @@ import {
   downloadAssignmentFile,
   openAssignment,
 } from '@/services/modules/assignments';
-import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
+import { generateMemoOutput, getMemoOutput } from '@/services/modules/assignments/memo-output';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
 import { submitAssignment } from '@/services/modules/assignments/submissions/post';
 
@@ -25,6 +36,14 @@ import SetupChecklist from '@/components/assignments/SetupChecklist';
 import Tip from '@/components/common/Tip';
 import { SubmissionProgressOverlay } from '@/components/submissions';
 import AssignmentSetup from '@/pages/modules/assignments/steps/AssignmentSetup';
+import { CodeEditor } from '@/components/common';
+import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
+import {
+  showMemoAllocatorForMode,
+  requiresMainForMode,
+  requiresInterpreterForMode,
+} from '@/policies/submission';
+import type { SubmissionMode } from '@/types/modules/assignments/config';
 
 const { Title, Paragraph } = Typography;
 
@@ -45,6 +64,9 @@ const AssignmentLayout = () => {
   const [outletNonce, setOutletNonce] = useState(0);
   const [activeSubmissionId, setActiveSubmissionId] = useState<number | null>(null);
   const [deferredSubmit, setDeferredSubmit] = useState<null | (() => Promise<number | null>)>(null);
+  const [memoModalOpen, setMemoModalOpen] = useState(false);
+  const [memoLoading, setMemoLoading] = useState(false);
+  const [memoData, setMemoData] = useState<MemoTaskOutput[] | null>(null);
 
   // Overlay open state (overlay only shows progress; it does not submit)
   const [progressOpen, setProgressOpen] = useState(false);
@@ -55,6 +77,13 @@ const AssignmentLayout = () => {
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
   const isSetupStage = assignment.status === 'setup';
   const isAssignmentReady = readiness?.is_ready ?? false;
+
+  const effectiveMode = (readiness?.submission_mode ?? policy?.submission_mode) as
+    | SubmissionMode
+    | undefined;
+  const needsMain = requiresMainForMode(effectiveMode);
+  const needsInterpreter = requiresInterpreterForMode(effectiveMode);
+  const showMemoAllocator = showMemoAllocatorForMode(effectiveMode);
 
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
@@ -86,6 +115,12 @@ const AssignmentLayout = () => {
           {
             value: `${basePath}/plagiarism`,
             label: 'Plagiarism',
+            show: true,
+            disabled: !isAssignmentReady,
+          },
+          {
+            value: `${basePath}/statistics`,
+            label: 'Statistics',
             show: true,
             disabled: !isAssignmentReady,
           },
@@ -129,6 +164,25 @@ const AssignmentLayout = () => {
       </span>
     ),
   }));
+
+  const openMemoModal = async () => {
+    setMemoModalOpen(true);
+    setMemoLoading(true);
+    try {
+      const res = await getMemoOutput(module.id, assignment.id);
+      if (!res?.success) {
+        message.error(res?.message || 'Failed to load memo output');
+        setMemoData(null);
+        return;
+      }
+      setMemoData(res.data ?? []);
+    } catch {
+      message.error('Unexpected error while loading memo output');
+      setMemoData(null);
+    } finally {
+      setMemoLoading(false);
+    }
+  };
 
   const handleOpenAssignment = async () => {
     setLoading(true);
@@ -284,25 +338,31 @@ const AssignmentLayout = () => {
   const hasRequiredFilesForMemoOutput = Boolean(
     readiness?.memo_present &&
       readiness?.makefile_present &&
-      (readiness?.submission_mode === 'gatlam'
-        ? readiness?.interpreter_present
-        : readiness?.main_present),
+      (needsInterpreter
+        ? (readiness as any)?.interpreter_present
+        : needsMain
+          ? readiness?.main_present
+          : true),
   );
+
   const hasAtLeastOneTask = Boolean(readiness?.tasks_present);
 
   const shouldOfferMemoAction = Boolean(
-    isTeachingStaff &&
-      policy?.submission_mode === 'manual' &&
-      hasRequiredFilesForMemoOutput &&
-      hasAtLeastOneTask,
+    isTeachingStaff && showMemoAllocator && hasRequiredFilesForMemoOutput && hasAtLeastOneTask,
   );
   const shouldOfferMarkAction = Boolean(
-    isTeachingStaff && policy?.submission_mode === 'manual' && readiness?.memo_output_present,
+    isTeachingStaff && showMemoAllocator && readiness?.memo_output_present,
   );
+
+  const setupArtifactsReady =
+    !!readiness?.memo_output_present &&
+    // if your mode requires a mark allocator, ensure it's present too
+    (!showMemoAllocator || !!readiness?.mark_allocator_present);
 
   const canGenerateMemoOutput = shouldOfferMemoAction && !readiness?.memo_output_present;
   const canGenerateMarkAllocator = shouldOfferMarkAction && !readiness?.mark_allocator_present;
-  const canSubmitAssignment = assignment.status !== 'setup';
+  const canSubmitAssignment =
+    assignment.status !== 'setup' || (isTeachingStaff && setupArtifactsReady);
 
   const primaryAction: PrimaryAction | null = canGenerateMemoOutput
     ? { key: 'memo', label: 'Generate Memo Output', onClick: handleGenerateMemoOutput }
@@ -495,7 +555,19 @@ const AssignmentLayout = () => {
                   </div>
 
                   {/* Right section: Actions */}
-                  <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                  <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-end gap-2 w-full sm:w-auto">
+                    {/** View Memo Output button (left of the main action) */}
+                    {isTeachingStaff && showMemoAllocator && readiness?.memo_output_present && (
+                      <Button
+                        icon={<FileTextOutlined />}
+                        onClick={openMemoModal}
+                        disabled={loading}
+                        className="w-full sm:w-auto"
+                      >
+                        View Memo Output
+                      </Button>
+                    )}
+
                     {primaryAction &&
                       (isTeachingStaff ? (
                         <Dropdown.Button
@@ -709,6 +781,43 @@ const AssignmentLayout = () => {
             }}
           />
         )}
+
+        <Modal
+          title="Memo Output"
+          open={memoModalOpen}
+          onCancel={() => setMemoModalOpen(false)}
+          footer={null}
+          width={900}
+          destroyOnHidden
+        >
+          {memoLoading ? (
+            <div className="py-8 text-center text-gray-500">Loading memo output…</div>
+          ) : !memoData || memoData.length === 0 ? (
+            <Empty
+              description="No memo output available"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              style={{ padding: '32px 0' }}
+            />
+          ) : (
+            <Collapse accordion>
+              {memoData.map((task) => (
+                <Collapse.Panel
+                  key={String(task.task_number)}
+                  header={`Task ${task.task_number}: ${task.name}`}
+                >
+                  <CodeEditor
+                    value={task.raw ?? ''}
+                    language="text"
+                    readOnly
+                    fitContent
+                    title="Raw"
+                    showLineNumbers={false}
+                  />
+                </Collapse.Panel>
+              ))}
+            </Collapse>
+          )}
+        </Modal>
 
         <Modal
           title={

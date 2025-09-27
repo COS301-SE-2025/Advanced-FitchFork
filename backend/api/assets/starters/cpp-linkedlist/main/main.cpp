@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include "LinkedList.hpp" // resolved via -I. -Imemo -Ispec
 
-// Delimiter token must match ExecutionConfig.default_deliminator() => "&-=-&"
-static constexpr const char *DELIM = "&-=-&";
+// Delimiter token must match ExecutionConfig.default_deliminator() => "###"
+static constexpr const char *DELIM = "###";
 
 static void print_section(const std::string &name)
 {

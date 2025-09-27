@@ -7,28 +7,30 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::Utc;
-use db::models::assignment_task::{ActiveModel, Column, Entity};
+use db::models::assignment_task::{ActiveModel, Column, Entity, TaskType};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use util::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
+    /// Unique sequential number within the assignment
     task_number: i64,
+    /// Short descriptive name
     name: String,
+    /// Command to execute
     command: String,
-    /// Optional; defaults to false. When true, this task is a **coverage-type** task.
-    code_coverage: Option<bool>,
+    /// Optional; defaults to "normal". One of: "normal" | "coverage" | "valgrind".
+    #[serde(default)]
+    task_type: Option<TaskType>,
 }
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///
-/// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles
-/// assigned to the module.
+/// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles.
 ///
 /// Each task must have a unique `task_number` within the assignment. The `name` field defines a short,
-/// human-readable title for the task, while the `command` field defines how the task will be executed
-/// during evaluation (e.g., test commands, build commands).
+/// human-readable title, while `command` defines how the task is executed during evaluation.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -40,27 +42,38 @@ pub struct CreateTaskRequest {
 ///   "task_number": 1,
 ///   "name": "Unit Tests",
 ///   "command": "cargo test --lib",
-///   "code_coverage": false
+///   "task_type": "normal"
 /// }
 /// ```
 ///
-/// ### Request Body Fields
-/// - `task_number` (i64, required): Unique sequential number for the task within the assignment
-/// - `name` (string, required): Short descriptive name for the task (e.g., "Compile", "Unit Tests")
-/// - `command` (string, required): Command to execute for this task (e.g., test commands, build scripts)
-/// - `code_coverage` (boolean, optional, default: false): Marks this task as a **coverage-type** task
+/// #### `task_type`
+/// - `"normal"`: Regular task (default)
+/// - `"coverage"`: Code coverage task (special handling)
+/// - `"valgrind"`: Memory leak test (Valgrind)
 ///
-/// ### Example Request
+/// ### Example Requests
+/// Normal:
 /// ```bash
 /// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
-///   -H "Authorization: Bearer <token)" \
+///   -H "Authorization: Bearer <token>" \
 ///   -H "Content-Type: application/json" \
-///   -d '{
-///     "task_number": 1,
-///     "name": "Coverage run",
-///     "command": "cargo llvm-cov --no-report",
-///     "code_coverage": true
-///   }'
+///   -d '{"task_number":1,"name":"Build","command":"cargo build"}'
+/// ```
+///
+/// Coverage:
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number":2,"name":"Coverage run","command":"cargo llvm-cov --no-report","task_type":"coverage"}'
+/// ```
+///
+/// Valgrind:
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number":3,"name":"Memcheck","command":"valgrind --leak-check=full ./app","task_type":"valgrind"}'
 /// ```
 ///
 /// ### Success Response (201 Created)
@@ -70,58 +83,20 @@ pub struct CreateTaskRequest {
 ///   "message": "Task created successfully",
 ///   "data": {
 ///     "id": 123,
-///     "task_number": 1,
-///     "name": "Coverage run",
-///     "command": "cargo llvm-cov --no-report",
-///     "code_coverage": true,
-///     "created_at": "2024-01-01T00:00:00Z",
-///     "updated_at": "2024-01-01T00:00:00Z"
+///     "task_number": 3,
+///     "name": "Memcheck",
+///     "command": "valgrind --leak-check=full ./app",
+///     "task_type": "valgrind",
+///     "created_at": "2025-05-29T00:00:00Z",
+///     "updated_at": "2025-05-29T00:00:00Z"
 ///   }
 /// }
 /// ```
 ///
 /// ### Error Responses
-///
-/// **400 Bad Request** - Invalid JSON body
-/// ```json
-/// { "success": false, "message": "Invalid JSON body" }
-/// ```
-///
-/// **403 Forbidden** - Insufficient permissions
-/// ```json
-/// { "success": false, "message": "Access denied" }
-/// ```
-///
-/// **404 Not Found** - Assignment or module not found
-/// ```json
-/// { "success": false, "message": "Assignment or module not found" }
-/// ```
-///
-/// **422 Unprocessable Entity** - Validation errors
-/// ```json
-/// { "success": false, "message": "Invalid task_number, name, or command" }
-/// ```
-/// or
-/// ```json
-/// { "success": false, "message": "task_number must be unique" }
-/// ```
-///
-/// **500 Internal Server Error** - Database or server error
-/// ```json
-/// { "success": false, "message": "Failed to create task" }
-/// ```
-///
-/// ### Validation Rules
-/// - `task_number` must be greater than 0
-/// - `name` must not be empty or whitespace-only
-/// - `command` must not be empty or whitespace-only
-/// - `task_number` must be unique within the assignment
-/// - Assignment must exist and belong to the specified module
-///
-/// ### Notes
-/// - Tasks are executed in order of their `task_number` during assignment evaluation
-/// - `code_coverage: true` designates a **coverage-type** task (the evaluator may apply coverage-specific handling)
-/// - Task creation is restricted to users with appropriate module permissions
+/// - 422: `"Invalid task_number, name, or command"`
+/// - 422: `"task_number must be unique"`
+/// - 500: `"Failed to create task"`
 pub async fn create_task(
     State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
@@ -143,7 +118,7 @@ pub async fn create_task(
             .into_response();
     }
 
-    // Ensure task_number uniqueness
+    // Ensure task_number uniqueness within the assignment
     match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .filter(Column::TaskNumber.eq(payload.task_number))
@@ -168,12 +143,14 @@ pub async fn create_task(
     }
 
     let now = Utc::now();
+    let task_type = payload.task_type.unwrap_or(TaskType::Normal);
+
     let new_task = ActiveModel {
         assignment_id: sea_orm::ActiveValue::Set(assignment_id),
         task_number: sea_orm::ActiveValue::Set(payload.task_number),
         name: sea_orm::ActiveValue::Set(payload.name.clone()),
         command: sea_orm::ActiveValue::Set(payload.command.clone()),
-        code_coverage: sea_orm::ActiveValue::Set(payload.code_coverage.unwrap_or(false)),
+        task_type: sea_orm::ActiveValue::Set(task_type),
         created_at: sea_orm::ActiveValue::Set(now),
         updated_at: sea_orm::ActiveValue::Set(now),
         ..Default::default()
@@ -186,7 +163,7 @@ pub async fn create_task(
                 task_number: task.task_number,
                 name: task.name,
                 command: task.command,
-                code_coverage: task.code_coverage,
+                task_type: task.task_type,
                 created_at: task.created_at.to_rfc3339(),
                 updated_at: task.updated_at.to_rfc3339(),
             };

@@ -1,10 +1,10 @@
 javac … && java Main task3
-&-=-&Sub1
+###Sub1
 Memo line G1
 Memo line G2
-&-=-&Sub2
+###Sub2
 Memo line H1
 Memo line H2
-&-=-&Sub3
+###Sub3
 Memo line I1
 Memo line I2

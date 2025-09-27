@@ -89,9 +89,9 @@ pub struct FilterAssignmentResponse {
 
 #[derive(Serialize)]
 pub struct AssignmentGrade {
-    pub percentage: f32,
-    pub earned: i64,
-    pub total: i64,
+    pub percentage: f64,
+    pub earned: f64,
+    pub total: f64,
 }
 
 #[derive(Serialize)]

@@ -15,7 +15,8 @@ import {
 import type { AssignmentFile } from '@/types/modules/assignments';
 import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
 import Tip from '@/components/common/Tip';
-
+import { requiresInterpreterForMode } from '@/policies/submission';
+import type { SubmissionMode } from '@/types/modules/assignments/config';
 
 const { Title, Paragraph } = Typography;
 
@@ -24,11 +25,11 @@ type RowKey = 'main' | 'memo' | 'makefile' | 'interpreter';
 const StepFilesResources = () => {
   const module = useModule();
   const { assignmentId, assignment, readiness, refreshAssignment } = useAssignmentSetup();
+  const effectiveMode = (readiness?.submission_mode ?? undefined) as SubmissionMode | undefined;
+  const needsInterpreter = requiresInterpreterForMode(effectiveMode);
 
   const [files, setFiles] = useState<AssignmentFile[]>(assignment?.files ?? []);
   useEffect(() => setFiles(assignment?.files ?? []), [assignment?.files]);
-
-  const isGatlam = readiness?.submission_mode === 'gatlam';
 
   // interpreter UI state
   const [command, setCommand] = useState('');
@@ -36,7 +37,7 @@ const StepFilesResources = () => {
   useEffect(() => {
     (async () => {
       if (!assignmentId) return;
-      if (isGatlam && readiness?.interpreter_present) {
+      if (needsInterpreter && readiness?.interpreter_present) {
         const res = await getInterpreterInfo(module.id, assignmentId);
         if (res.success) setInterpreterInfo(res.data);
       } else {
@@ -44,7 +45,7 @@ const StepFilesResources = () => {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGatlam, readiness?.interpreter_present, assignmentId]);
+  }, [needsInterpreter, readiness?.interpreter_present, assignmentId]);
 
   type RowItem = {
     key: RowKey;
@@ -55,12 +56,12 @@ const StepFilesResources = () => {
   };
 
   const list: RowItem[] = useMemo(() => {
-    return isGatlam
+    return needsInterpreter
       ? [
           {
             key: 'interpreter',
             title: 'Interpreter',
-            present: !!readiness?.interpreter_present,
+            present: !!(readiness as any)?.interpreter_present,
             desc: 'Upload the interpreter archive and command used to execute generated programs.',
           },
           {
@@ -101,7 +102,7 @@ const StepFilesResources = () => {
             fileType: '.zip',
           },
         ];
-  }, [isGatlam, readiness]);
+  }, [needsInterpreter, readiness]);
 
   const uploadedFor = (k: RowKey) =>
     k === 'interpreter' ? [] : files.filter((f) => f.file_type === k);

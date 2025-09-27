@@ -1,30 +1,22 @@
-import {
-  MailOutlined,
-  PhoneOutlined,
-  UserOutlined,
-  CalendarOutlined,
-  PlusOutlined,
-} from '@ant-design/icons';
-import { useEffect } from 'react';
-import { Button, Divider, Input, message, Upload } from 'antd';
+import { MailOutlined, UserOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons';
+import { useEffect, useMemo } from 'react';
+import { Divider, Input, message, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import PageHeader from '@/components/PageHeader';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useAuth } from '@/context/AuthContext';
-import useNotImplemented from '@/hooks/useNotImplemented';
 import { uploadProfilePicture } from '@/services/auth';
 import { API_BASE_URL } from '@/config/api';
 import UserAvatar from '@/components/common/UserAvatar';
 
 const Account = () => {
-  const notImplemented = useNotImplemented();
   const { user, setProfilePictureUrl } = useAuth();
 
   useEffect(() => {
     if (user?.id) {
       setProfilePictureUrl(`${API_BASE_URL}/auth/avatar/${user.id}?bust=${Date.now()}`);
     }
-  }, [user?.id]);
+  }, [user?.id, setProfilePictureUrl]);
 
   const handleUpload: UploadProps['customRequest'] = async ({ file, onSuccess, onError }) => {
     const form = new FormData();
@@ -33,14 +25,14 @@ const Account = () => {
     try {
       const res = await uploadProfilePicture(form);
       if (res.success && user?.id) {
-        const bust = Date.now();
-        const newUrl = `${API_BASE_URL}/auth/avatar/${user.id}?bust=${bust}`;
+        const newUrl = `${API_BASE_URL}/auth/avatar/${user.id}?bust=${Date.now()}`;
         setProfilePictureUrl(newUrl);
         message.success('Profile picture updated!');
         onSuccess?.({}, new XMLHttpRequest());
       } else {
-        message.error(res.message || 'Upload failed');
-        onError?.(new Error(res.message || 'Upload failed'));
+        const msg = (res as any)?.message || 'Upload failed';
+        message.error(msg);
+        onError?.(new Error(msg));
       }
     } catch (err: any) {
       message.error('Upload failed.');
@@ -48,29 +40,32 @@ const Account = () => {
     }
   };
 
-  const formattedCreatedAt = user?.created_at
-    ? new Intl.DateTimeFormat('en-ZA', {
+  const formattedCreatedAt = useMemo(() => {
+    if (!user?.created_at) return '';
+    try {
+      return new Intl.DateTimeFormat('en-ZA', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-      }).format(new Date(user.created_at))
-    : '';
+      }).format(new Date(user.created_at));
+    } catch {
+      return '';
+    }
+  }, [user?.created_at]);
 
   return (
     <div className="bg-gray-50 dark:bg-gray-950 h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-12  max-w-6xl">
+        <div className="space-y-12 max-w-4xl">
           <PageHeader
             title="Account Settings"
-            description="Manage your profile, contact details, and account info."
+            description="Manage your profile picture and view account details."
           />
 
-          <SettingsGroup
-            title="Profile"
-            description="Update your profile picture and full name that others will see."
-          >
+          {/* Profile Picture */}
+          <SettingsGroup title="Profile Picture" description="Shown to other users.">
             <div className="relative w-[96px] h-[96px] group">
               <Upload
                 name="avatar"
@@ -81,7 +76,7 @@ const Account = () => {
                 <div className="relative cursor-pointer w-[96px] h-[96px] rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center overflow-hidden group">
                   <div className="w-full h-full flex items-center justify-center">
                     <UserAvatar
-                      user={{ id: user?.id ?? -1, username: user?.username ?? 'User' }}
+                      user={{ id: user?.id ?? -1, username: user?.username ?? '' }}
                       size={96}
                       className="transition group-hover:opacity-20"
                     />
@@ -92,61 +87,40 @@ const Account = () => {
                 </div>
               </Upload>
             </div>
-
-            <div>
-              <label className="block font-medium mb-1">Full Name</label>
-              <Input size="large" defaultValue={'Jane Doe'} prefix={<UserOutlined />} />
-            </div>
-
-            <div className="flex justify-end">
-              <Button type="primary" onClick={notImplemented}>
-                Save Name
-              </Button>
-            </div>
           </SettingsGroup>
 
           <Divider />
 
-          <SettingsGroup
-            title="Contact Information"
-            description="Used for account recovery and communication."
-          >
+          {/* Email (read-only) */}
+          <SettingsGroup title="Email" description="Used for sign-in and account recovery.">
             <div>
               <label className="block font-medium mb-1">Email Address</label>
               <Input
                 size="large"
-                defaultValue={user?.email || 'jane.doe@example.com'}
+                value={user?.email ?? ''}
+                readOnly
                 prefix={<MailOutlined />}
+                className="bg-gray-100 dark:bg-gray-800"
               />
-            </div>
-
-            <div>
-              <label className="block font-medium mb-1">Phone Number</label>
-              <Input size="large" defaultValue={'+27 61 123 4567'} prefix={<PhoneOutlined />} />
-            </div>
-
-            <div className="flex justify-end">
-              <Button type="primary" onClick={notImplemented}>
-                Save Contact Info
-              </Button>
             </div>
           </SettingsGroup>
 
           <Divider />
 
+          {/* Read-only account facts */}
           <SettingsGroup
             title="Account Details"
-            description="Some information is unique to your account and cannot be changed."
+            description="Immutable identifiers and timestamps."
           >
             <div>
               <label className="block font-medium mb-1">Username</label>
-              <Input size="large" defaultValue={'janedoe123'} prefix={<UserOutlined />} />
-            </div>
-
-            <div className="flex justify-end">
-              <Button type="primary" onClick={notImplemented}>
-                Update Username
-              </Button>
+              <Input
+                size="large"
+                value={user?.username ?? ''}
+                readOnly
+                prefix={<UserOutlined />}
+                className="bg-gray-100 dark:bg-gray-800"
+              />
             </div>
 
             <div>

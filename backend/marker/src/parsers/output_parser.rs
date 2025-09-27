@@ -138,10 +138,22 @@ fn parse_task_output(
         .lines()
         .map(|s| s.to_string())
         .collect();
+
     if lines.is_empty() {
-        return Err(MarkerError::ParseOutputError(
-            "Content is empty".to_string(),
-        ));
+        if stderr.is_some() || return_code.is_some() {
+            let mut subtasks = Vec::new();
+            for i in 0..expected_subtask_count {
+                subtasks.push(SubtaskOutput {
+                    name: format!("Subtask{}", i + 1),
+                    lines: Vec::new(),
+                });
+            }
+            return Ok((TaskOutput { subtasks }, stderr, return_code));
+        } else {
+            return Err(MarkerError::ParseOutputError(
+                "Content is empty".to_string(),
+            ));
+        }
     }
 
     let content_lines = &lines[1..];
@@ -210,9 +222,37 @@ fn extract_crash_info(content: &str) -> (String, Option<String>, Option<i32>) {
 
     let stderr_marker = "&FITCHFORK&StandardError";
     let ret_marker = "&FITCHFORK&ReturnCode";
+    let error_marker = "&FITCHFORK&Error";
 
     let stderr_start = lines.iter().position(|l| l.trim() == stderr_marker);
     let return_code_start = lines.iter().position(|l| l.trim() == ret_marker);
+    let error_start = lines.iter().position(|l| l.trim() == error_marker);
+
+    // If we have a &FITCHFORK&Error marker, treat the content after it as stderr
+    // and set a non-zero return code to indicate failure
+    if let Some(epos) = error_start {
+        let error_content = if epos + 1 < lines.len() {
+            let slice = &lines[epos + 1..];
+            let mut start = 0usize;
+            let mut end = slice.len();
+            while start < end && slice[start].trim().is_empty() {
+                start += 1;
+            }
+            while end > start && slice[end - 1].trim().is_empty() {
+                end -= 1;
+            }
+            if start < end {
+                Some(slice[start..end].join("\n").trim().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Return empty clean content, error message as stderr, and -1 return code for error cases
+        return ("".to_string(), error_content, Some(-1));
+    }
 
     let clean_content = if let Some(spos) = stderr_start {
         lines[..spos].join("\n")
@@ -280,10 +320,10 @@ mod tests {
     #[test]
     fn test_parse_task_output_valid_format() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
+###Subtask1
 line1
 line2
-&-=-&Subtask2
+###Subtask2
 line3"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
@@ -298,8 +338,8 @@ line3"#;
     #[test]
     fn test_parse_task_output_empty_subtask_content() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
-&-=-&Subtask2
+###Subtask1
+###Subtask2
 line1
 line2"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());

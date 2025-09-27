@@ -4,17 +4,53 @@ import PageHeader from '@/components/PageHeader';
 import { message } from '@/utils/message';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
-import CreateModal from '@/components/common/CreateModal';
-import EditModal from '@/components/common/EditModal';
 import UserCard from '@/components/users/UserCard';
 import UserAdminTag from '@/components/users/UserAdminTag';
-
 import { listUsers, editUser, deleteUser } from '@/services/users';
-import type { User } from '@/types/users';
-import dayjs from 'dayjs';
 import { createUser } from '@/services/users/post';
+import type { CreateUserPayload, User } from '@/types/users';
+import dayjs from 'dayjs';
 import UserListItem from '@/components/users/UserListItem';
 import { UsersEmptyState } from '@/components/users';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
+
+const userEditFields: FormModalField[] = [
+  {
+    name: 'username',
+    label: 'Username',
+    type: 'text',
+    constraints: {
+      required: true,
+      length: { min: 3, max: 32 },
+      pattern: { regex: /^[A-Za-z0-9_\-.]+$/, message: 'Only letters, numbers, _ - .' },
+    },
+  },
+  { name: 'email', label: 'Email', type: 'email', constraints: { required: true, email: {} } },
+  { name: 'admin', label: 'Admin', type: 'boolean' },
+];
+
+const userCreateFields: FormModalField[] = [
+  {
+    name: 'username',
+    label: 'Username',
+    type: 'text',
+    constraints: {
+      required: true,
+      length: { min: 3, max: 32 },
+      pattern: { regex: /^[A-Za-z0-9_\-.]+$/, message: 'Only letters, numbers, _ - .' },
+    },
+  },
+  { name: 'email', label: 'Email', type: 'email', constraints: { required: true, email: {} } },
+  {
+    name: 'password',
+    label: 'Password',
+    type: 'password',
+    constraints: {
+      required: true,
+      length: { min: 6, max: 128, messageMin: 'At least 6 characters' },
+    },
+  },
+];
 
 const UsersList = () => {
   const navigate = useNavigate();
@@ -59,14 +95,11 @@ const UsersList = () => {
     return { items: [], total: 0 };
   };
 
-  const handleAddUser = async (formValues: Record<string, any>) => {
-    const { username, email, password } = formValues;
+  const handleAddUser = async (values: Record<string, any>) => {
+    const { username, email, password } = values; // ← no admin here
 
-    const res = await createUser({
-      username,
-      email,
-      password,
-    });
+    const payload: CreateUserPayload = { username, email, password };
+    const res = await createUser(payload);
 
     if (res.success) {
       message.success(res.message || 'User created successfully');
@@ -83,6 +116,7 @@ const UsersList = () => {
     const updated: User = {
       ...editingItem,
       ...values,
+      admin: !!values.admin,
       updated_at: new Date().toISOString(),
     };
 
@@ -114,10 +148,7 @@ const UsersList = () => {
         label: 'Add User',
         icon: <PlusOutlined />,
         isPrimary: true,
-        handler: ({ refresh }: { refresh: () => void }) => {
-          setCreateOpen(true);
-          refresh();
-        },
+        handler: () => setCreateOpen(true),
       },
     ],
     entity: (user: User) => [
@@ -125,10 +156,9 @@ const UsersList = () => {
         key: 'edit',
         label: 'Edit',
         icon: <EditOutlined />,
-        handler: ({ refresh }) => {
+        handler: () => {
           setEditingItem(user);
           setEditOpen(true);
-          refresh();
         },
       },
       {
@@ -243,49 +273,40 @@ const UsersList = () => {
                 onRefresh={() => listRef.current?.refresh()}
               />
             }
+            filtersStorageKey="users:filters:v1"
           />
 
-          <CreateModal
+          {/* Create User */}
+          <FormModal
             open={createOpen}
             onCancel={() => setCreateOpen(false)}
-            onCreate={handleAddUser}
+            onSubmit={handleAddUser}
+            title="Add User"
+            submitText="Create"
             initialValues={{
               username: '',
               email: '',
-              admin: false,
+              // password is typed by the user; no default recommended
             }}
-            fields={[
-              { name: 'username', label: 'Username', type: 'text', required: true },
-              { name: 'email', label: 'Email', type: 'email', required: true },
-              {
-                name: 'password',
-                label: 'Password',
-                type: 'password',
-                required: true,
-                defaultValue: 'changeme123',
-              },
-            ]}
-            title="Add User"
+            fields={userCreateFields}
           />
 
-          <EditModal
+          {/* Edit User */}
+          <FormModal
             open={editOpen}
             onCancel={() => {
               setEditOpen(false);
               setEditingItem(null);
             }}
-            onEdit={handleEditUser}
+            onSubmit={handleEditUser}
+            title="Edit User"
+            submitText="Save"
             initialValues={{
               username: editingItem?.username ?? '',
               email: editingItem?.email ?? '',
               admin: editingItem?.admin ?? false,
             }}
-            fields={[
-              { name: 'username', label: 'Username', type: 'text', required: true },
-              { name: 'email', label: 'Email', type: 'email', required: true },
-              { name: 'admin', label: 'Admin', type: 'boolean' },
-            ]}
-            title="Edit User"
+            fields={userEditFields}
           />
         </div>
       </div>

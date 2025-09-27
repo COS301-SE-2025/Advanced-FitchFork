@@ -100,7 +100,7 @@ mod tests {
             "marking": {
                 "marking_scheme": "exact",
                 "feedback_scheme": "auto",
-                "deliminator": "&-=-&"
+                "deliminator": "###"
             }
         });
 
@@ -160,7 +160,7 @@ mod tests {
             "marking": {
                 "marking_scheme": "exact",
                 "feedback_scheme": "auto",
-                "deliminator": "&-=-&"
+                "deliminator": "###"
             }
         });
 

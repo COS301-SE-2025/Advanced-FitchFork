@@ -55,7 +55,7 @@ impl Seeder for AssignmentFileSeeder {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let main_java = r#"
+                let main_java = r####"
 public class Main {
     public static void main(String[] args) {
         String task = args.length > 0 ? args[0] : "task1";
@@ -76,33 +76,33 @@ public class Main {
     }
 
     static void runTask1() {
-        System.out.println("" + "&-=-&Task1Subtask1");
+        System.out.println("" + "###Task1Subtask1");
         System.out.println(HelperOne.subtaskA());
-        System.out.println("&-=-&Task1Subtask2");
+        System.out.println("###Task1Subtask2");
         System.out.println(HelperTwo.subtaskB());
-        System.out.println("&-=-&Task1Subtask3");
+        System.out.println("###Task1Subtask3");
         System.out.println(HelperThree.subtaskC());
     }
 
     static void runTask2() {
-        System.out.println("&-=-&Task2Subtask1");
+        System.out.println("###Task2Subtask1");
         System.out.println(HelperTwo.subtaskX());
-        System.out.println("&-=-&Task2Subtask2");
+        System.out.println("###Task2Subtask2");
         System.out.println(HelperThree.subtaskY());
-        System.out.println("&-=-&Task2Subtask3");
+        System.out.println("###Task2Subtask3");
         System.out.println(HelperOne.subtaskZ());
     }
 
     static void runTask3() {
-        System.out.println("&-=-&Task3Subtask1");
+        System.out.println("###Task3Subtask1");
         System.out.println(HelperThree.subtaskAlpha());
-        System.out.println("&-=-&Task3Subtask2");
+        System.out.println("###Task3Subtask2");
         System.out.println(HelperOne.subtaskBeta());
-        System.out.println("&-=-&Task3Subtask3");
+        System.out.println("###Task3Subtask3");
         System.out.println(HelperTwo.subtaskGamma());
     }
 }
-"#;
+"####;
 
                 zip.start_file("Main.java", options).unwrap();
                 zip.write_all(main_java.as_bytes()).unwrap();
@@ -226,7 +226,7 @@ task4: compile
         }
 
         // New config file content
-        let config_json = r#"
+        let config_json = r####"
 {
   "execution": {
     "timeout_secs": 30,
@@ -238,7 +238,7 @@ task4: compile
   "marking": {
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "grading_policy": "last",
     "max_attempts": 10,
     "limit_attempts": false,
@@ -303,7 +303,7 @@ task4: compile
     ]
   }
 }
-"#;
+"####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_main_zip()),
@@ -338,7 +338,7 @@ task4: compile
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let main_cpp = r#"
+                let main_cpp = r####"
 #include <iostream>
 #include <string>
 #include "HelperOne.h"
@@ -346,21 +346,21 @@ task4: compile
 #include "HelperThree.h"
 
 void runTask1() {
-    std::cout << "&-=-&Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
-    std::cout << "&-=-&Task1Subtask2\n" << HelperTwo::subtaskB() << std::endl;
-    std::cout << "&-=-&Task1Subtask3\n" << HelperThree::subtaskC() << std::endl;
+    std::cout << "###Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+    std::cout << "###Task1Subtask2\n" << HelperTwo::subtaskB() << std::endl;
+    std::cout << "###Task1Subtask3\n" << HelperThree::subtaskC() << std::endl;
 }
 
 void runTask2() {
-    std::cout << "&-=-&Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
-    std::cout << "&-=-&Task2Subtask2\n" << HelperThree::subtaskY() << std::endl;
-    std::cout << "&-=-&Task2Subtask3\n" << HelperOne::subtaskZ() << std::endl;
+    std::cout << "###Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+    std::cout << "###Task2Subtask2\n" << HelperThree::subtaskY() << std::endl;
+    std::cout << "###Task2Subtask3\n" << HelperOne::subtaskZ() << std::endl;
 }
 
 void runTask3() {
-    std::cout << "&-=-&Task3Subtask1\n" << HelperThree::subtaskAlpha() << std::endl;
-    std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
-    std::cout << "&-=-&Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+    std::cout << "###Task3Subtask1\n" << HelperThree::subtaskAlpha() << std::endl;
+    std::cout << "###Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "###Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-"#;
+"####;
 
                 zip.start_file("Main.cpp", options).unwrap();
                 zip.write_all(main_cpp.as_bytes()).unwrap();
@@ -494,7 +494,7 @@ struct HelperThree {
                 let mut zip = zip::ZipWriter::new(&mut buf);
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
-                let makefile_content = r#"
+                let makefile_content = r####"
 CXX = g++
 CXXFLAGS = -fprofile-arcs -ftest-coverage -O0 -std=c++17
 LDFLAGS = -lgcov
@@ -524,7 +524,7 @@ task4: main
 	./main task2
 	./main task3
 	gcov $(SRC)
-"#;
+"####;
 
                 zip.start_file("Makefile", options).unwrap();
                 zip.write_all(makefile_content.as_bytes()).unwrap();
@@ -545,7 +545,7 @@ task4: main
   "marking": {
     "marking_scheme": "exact",
     "feedback_scheme": "auto",
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "grading_policy": "last",
     "max_attempts": 10,
     "limit_attempts": false,
@@ -651,7 +651,7 @@ task4: main
                 let options = SimpleFileOptions::default().unix_permissions(0o644);
 
                 // Minimal C++ main that calls into StudentSolution (in memo zip)
-                let main_cpp = r#"
+                let main_cpp = r####"
         #include <iostream>
         #include <string>
         #include "StudentSolution.h"
@@ -660,14 +660,14 @@ task4: main
             std::string task = argc > 1 ? argv[1] : "task1";
 
             if (task == "task1") {
-                std::cout << "&-=-&Task1Subtask1\n" << student::StudentSolution::hello() << std::endl;
+                std::cout << "###Task1Subtask1\n" << student::StudentSolution::hello() << std::endl;
             } else {
                 std::cout << task << " is not a valid task" << std::endl;
             }
 
             return 0;
         }
-        "#;
+        "####;
 
                 zip.start_file("Main.cpp", options).unwrap();
                 zip.write_all(main_cpp.as_bytes()).unwrap();
@@ -749,7 +749,7 @@ task4: main
         }
 
         // Config now explicitly cpp
-        let config_json_cpp_plag = r#"
+        let config_json_cpp_plag = r####"
         {
         "execution": {
             "timeout_secs": 10,
@@ -761,7 +761,7 @@ task4: main
         "marking": {
             "marking_scheme": "exact",
             "feedback_scheme": "auto",
-            "deliminator": "&-=-&"
+            "deliminator": "###"
         },
         "project": {
             "language": "cpp"
@@ -771,7 +771,7 @@ task4: main
             "stderr": true
         }
         }
-        "#;
+        "####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_plag_main_zip_cpp()),
@@ -899,7 +899,7 @@ task1:
         }
 
         // New config file content
-        let config_json = r#"
+        let config_json = r####"
 {
   "execution": {
     "max_cpus": 2,
@@ -941,7 +941,7 @@ task1:
     "verbose": false
   },
   "marking": {
-    "deliminator": "&-=-&",
+    "deliminator": "###",
     "feedback_scheme": "auto",
     "marking_scheme": "exact"
   },
@@ -954,7 +954,7 @@ task1:
     "submission_mode": "gatlam"
   }
 }
-"#;
+"####;
 
         let zipped_files = vec![
             (FileType::Main, "main.zip", create_interpreter_main_zip()),

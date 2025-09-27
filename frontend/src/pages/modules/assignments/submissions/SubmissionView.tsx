@@ -1,5 +1,10 @@
 import { Typography, Tag, Descriptions, Spin, Button, Alert, Tooltip } from 'antd';
-import { CodeOutlined, DownloadOutlined } from '@ant-design/icons';
+import {
+  CodeOutlined,
+  DownloadOutlined,
+  ExclamationCircleOutlined,
+  SafetyOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 
 import SubmissionTasks from '@/components/submissions/SubmissionTasks';
@@ -330,7 +335,7 @@ const SubmissionView = () => {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Normal (non-failed) view: original layout
+  // Normal (non-failed) view
   // ─────────────────────────────────────────────────────────────
 
   const isLate = !!submission.is_late;
@@ -342,85 +347,134 @@ const SubmissionView = () => {
   const capMax = total ? Math.round((lateMaxPercent * total) / 100) : null;
   const withinWindow = typeof minsLate === 'number' ? minsLate <= lateWindow : true;
 
-  const percentage = mark?.total ? Math.round((mark.earned / mark.total) * 100) : null;
-  const markColor =
-    percentage === null
-      ? 'default'
-      : percentage >= 75
-        ? 'green'
-        : percentage >= 50
-          ? 'orange'
-          : 'red';
-
-  const canDownload = true; // normal flow allows download
-  const canOpenIDE = true;
+  // is the submission fully graded?
+  const isGraded = status === 'graded';
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 pb-4">
-      {/* Left: Tasks */}
+      {/* Left Column */}
       <div className="order-2 lg:order-1 lg:w-2/3 !space-y-4">
-        {/* Status banner (non-failed) */}
-        {statusMeta?.alertType && (
+        {/* Status banner (hidden when graded) */}
+        {STATUS_META[status]?.alertType && !isGraded && (
           <Alert
             className="bg-white dark:bg-gray-900"
-            type={statusMeta.alertType}
+            type={STATUS_META[status].alertType}
             showIcon
             message={
               <div className="flex items-center gap-2">
-                <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-                <Text className="font-medium">{statusMeta.blurb}</Text>
+                <Tag color={STATUS_META[status].color}>{STATUS_META[status].label}</Tag>
+                <Text className="font-medium">{STATUS_META[status].blurb}</Text>
               </div>
             }
           />
         )}
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
-          <Title level={4} className="!mb-0">
-            Tasks
-          </Title>
-        </div>
+        {/* When not graded yet: show an info panel instead of tasks */}
+        {!isGraded ? (
+          <>
+            {isLate && (
+              <Alert
+                type={!allowLate ? 'error' : withinWindow ? 'warning' : 'error'}
+                showIcon
+                className="bg-white dark:bg-gray-900"
+                message={
+                  <div className="flex flex-wrap items-center gap-8">
+                    <div className="flex items-center gap-2">
+                      <Tag color="red">Late</Tag>
+                      <Text className="font-medium">
+                        {lateDelta
+                          ? `Submitted ${lateDelta} after the deadline`
+                          : 'Submitted after the deadline'}
+                      </Text>
+                    </div>
 
-        {isLate && (
-          <Alert
-            type={!allowLate ? 'error' : withinWindow ? 'warning' : 'error'}
-            showIcon
-            className="bg-white dark:bg-gray-900"
-            message={
-              <div className="flex flex-wrap items-center gap-8">
-                <div className="flex items-center gap-2">
-                  <Tag color="red">Late</Tag>
-                  <Text className="font-medium">
-                    {lateDelta
-                      ? `Submitted ${lateDelta} after the deadline`
-                      : 'Submitted after the deadline'}
-                  </Text>
-                </div>
+                    <div className="flex items-center gap-2">
+                      {allowLate && withinWindow && <Tag>Within window</Tag>}
+                      {allowLate && !withinWindow && <Tag color="volcano">Outside window</Tag>}
+                      {allowLate && total > 0 && (
+                        <Tooltip
+                          title={`Late cap: up to ${lateMaxPercent}% of total${capMax ? ` (max ${capMax}/${total})` : ''}`}
+                        >
+                          <Tag color="volcano">Cap {lateMaxPercent}%</Tag>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
+                }
+              />
+            )}
 
-                <div className="flex items-center gap-2">
-                  {allowLate && withinWindow && <Tag>Within window</Tag>}
-                  {allowLate && !withinWindow && <Tag color="volcano">Outside window</Tag>}
-                  {allowLate && total > 0 && (
-                    <Tooltip
-                      title={`Late cap: up to ${lateMaxPercent}% of total${capMax ? ` (max ${capMax}/${total})` : ''}`}
-                    >
-                      <Tag color="volcano">Cap {lateMaxPercent}%</Tag>
-                    </Tooltip>
-                  )}
+            {/* Info panel (replaces Tasks until graded) */}
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+              <Title level={4} className="!mb-2">
+                Submission Info
+              </Title>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="mb-2">
+                  This submission is currently{' '}
+                  <Tag color={STATUS_META[status].color} className="align-middle">
+                    {STATUS_META[status].label}
+                  </Tag>
+                  . Tasks will appear here once grading completes.
+                </p>
+
+                <div className="flex flex-wrap gap-3 mt-2">
+                  <Button icon={<DownloadOutlined />} size="small" onClick={handleDownload}>
+                    Download File
+                  </Button>
+                  <Button icon={<CodeOutlined />} size="small" onClick={handleViewInIDE}>
+                    View in IDE
+                  </Button>
                 </div>
               </div>
-            }
-          />
-        )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* If graded AND plagiarism is flagged: show an alert above the Tasks title */}
+            {submission.plagiarism?.flagged && (
+              <Alert
+                type="error"
+                showIcon
+                icon={<ExclamationCircleOutlined />}
+                className="bg-white dark:bg-gray-900"
+                message={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tag color="red">Plagiarism Flagged</Tag>
+                    <Text strong>{Math.round(submission.plagiarism.similarity)}% similarity</Text>
+                    <span className="text-gray-500">
+                      • {submission.plagiarism.lines_matched} lines matched
+                    </span>
+                  </div>
+                }
+                description={
+                  submission.plagiarism.description?.trim() ? (
+                    <div className="mt-1 whitespace-pre-wrap">
+                      {submission.plagiarism.description}
+                    </div>
+                  ) : null
+                }
+              />
+            )}
 
-        <SubmissionTasks
-          tasks={tasks ?? []}
-          memoOutput={memoOutput}
-          submisisonOutput={submissionOutput}
-          codeCoverage={submission.code_coverage}
-        />
+            {/* Tasks (only when graded) */}
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+              <Title level={4} className="!mb-0">
+                Tasks
+              </Title>
+            </div>
+
+            <SubmissionTasks
+              tasks={tasks ?? []}
+              memoOutput={memoOutput}
+              submisisonOutput={submissionOutput}
+              codeCoverage={submission.code_coverage}
+            />
+          </>
+        )}
       </div>
 
-      {/* Right: Description */}
+      {/* Right Column */}
       <div className="order-1 lg:order-2 lg:w-1/3 space-y-6">
         <Descriptions bordered column={1} size="middle" className="bg-white dark:bg-gray-900">
           {/* Status */}
@@ -437,13 +491,25 @@ const SubmissionView = () => {
             </>
           )}
 
+          {/* Mark */}
           <Descriptions.Item label="Mark">
             {mark ? (
               <>
-                <Tag color={markColor}>
+                <Tag
+                  color={(() => {
+                    const pct = mark.total ? Math.round((mark.earned / mark.total) * 100) : null;
+                    if (pct === null) return 'default';
+                    if (pct >= 75) return 'green';
+                    if (pct >= 50) return 'orange';
+                    return 'red';
+                  })()}
+                >
                   {mark.earned} / {mark.total}
                 </Tag>
-                <Text type="secondary"> ({percentage}%)</Text>
+                <Text type="secondary">
+                  {' '}
+                  ({mark.total ? Math.round((mark.earned / mark.total) * 100) : 0}%)
+                </Text>
                 {isLate && allowLate && (
                   <>
                     <span className="mx-2">•</span>
@@ -482,25 +548,22 @@ const SubmissionView = () => {
           </Descriptions.Item>
 
           <Descriptions.Item label="File">
-            <Button
-              icon={<DownloadOutlined />}
-              type="link"
-              size="small"
-              onClick={handleDownload}
-              disabled={!canDownload}
-            >
+            <Button icon={<DownloadOutlined />} type="link" size="small" onClick={handleDownload}>
               Download File
             </Button>
-            <Button
-              icon={<CodeOutlined />}
-              type="link"
-              size="small"
-              onClick={handleViewInIDE}
-              disabled={!canOpenIDE}
-            >
+            <Button icon={<CodeOutlined />} type="link" size="small" onClick={handleViewInIDE}>
               View in IDE
             </Button>
           </Descriptions.Item>
+
+          {/* Optional small indicator when NOT flagged (kept on the right, unobtrusive) */}
+          {submission.plagiarism && !submission.plagiarism.flagged && (
+            <Descriptions.Item label="Plagiarism">
+              <Tag icon={<SafetyOutlined />} color="green">
+                Not flagged
+              </Tag>
+            </Descriptions.Item>
+          )}
         </Descriptions>
       </div>
     </div>

@@ -3,7 +3,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
-use tempfile::tempdir;
+// use tempfile::tempdir;
+use tempdir::TempDir;
 use tokio::process::Command;
 use tokio::time::timeout;
 use util::execution_config::ExecutionConfig;
@@ -15,8 +16,8 @@ pub async fn run_container(
     commands: Vec<String>,
     files: Vec<(String, Vec<u8>)>,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let temp_code_dir = tempdir()?;
-    let temp_output_dir = tempdir()?;
+    let temp_code_dir = TempDir::new("code")?;
+    let temp_output_dir = TempDir::new("output")?;
 
     let code_path = temp_code_dir.path().to_path_buf();
     let output_path = temp_output_dir.path().to_path_buf();
@@ -47,9 +48,9 @@ pub async fn run_container(
             .arg("run")
             .arg("--rm")
             .arg("--network=none")
-            .arg(memory_arg.clone())
-            .arg(cpus_arg.clone())
-            .arg(pids_arg.clone())
+            .arg(&memory_arg)
+            .arg(&cpus_arg)
+            .arg(&pids_arg)
             .arg("--security-opt=no-new-privileges")
             .arg("-v")
             .arg(format!("{}:/code:rw", code_path.display()))
@@ -63,31 +64,36 @@ pub async fn run_container(
             .stderr(Stdio::piped())
             .spawn()?;
 
-        let output = timeout(
+        let output_result = timeout(
             Duration::from_secs(config.execution.timeout_secs),
             docker_output.wait_with_output(),
         )
-        .await??;
+        .await;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        let retcode = output.status.code().unwrap_or(-1);
+        let combined_output = match output_result {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+                let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+                let retcode = output.status.code().unwrap_or(-1);
 
-        let mut combined_output = String::new();
+                let mut combined = String::new();
+                combined.push_str(&stdout);
+                combined.push_str("&FITCHFORK&StandardError\n");
+                if !combined.is_empty() {
+                    combined.push('\n');
+                }
+                combined.push_str(&stderr);
+                combined.push_str("&FITCHFORK&ReturnCode\n");
+                if !combined.is_empty() {
+                    combined.push('\n');
+                }
+                combined.push_str(&format!("Retcode: {}", retcode));
 
-        combined_output.push_str(&stdout);
-
-        combined_output.push_str("&FITCHFORK&StandardError\n");
-        if !combined_output.is_empty() {
-            combined_output.push('\n');
-        }
-        combined_output.push_str(&stderr);
-
-        combined_output.push_str("&FITCHFORK&ReturnCode\n");
-        if !combined_output.is_empty() {
-            combined_output.push('\n');
-        }
-        combined_output.push_str(&format!("Retcode: {}", retcode));
+                combined
+            }
+            Ok(Err(e)) => format!("&FITCHFORK&Error\nCommand failed: {}", e),
+            Err(_) => "&FITCHFORK&Error\nCommand timed out (possible infinite loop)".to_string(),
+        };
 
         outputs.push(combined_output);
     }

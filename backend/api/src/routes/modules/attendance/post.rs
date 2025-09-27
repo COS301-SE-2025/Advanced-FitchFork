@@ -14,6 +14,8 @@ use super::common::{AttendanceSessionResponse, CreateSessionReq};
 use db::models::attendance_session as Sess;
 use sea_orm::PaginatorTrait;
 
+use crate::ws::attendance::emit;
+use crate::ws::attendance::payload as ap;
 use db::models::{
     attendance_record,
     attendance_session::{Column as SessionCol, Entity as SessionEntity},
@@ -21,9 +23,6 @@ use db::models::{
     user::{Column as UserCol, Entity as UserEntity},
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, Set};
-
-use crate::ws::attendance::topics::attendance_session_topic;
-use serde_json::json;
 
 pub async fn create_session(
     State(state): State<AppState>,
@@ -153,9 +152,7 @@ pub async fn mark_attendance(
     .await
     {
         Ok(_rec) => {
-            // Broadcast to this session’s topic
             let ws = state.ws_clone();
-            let topic = attendance_session_topic(session_id);
 
             let count = attendance_record::Entity::find()
                 .filter(attendance_record::Column::SessionId.eq(session_id))
@@ -163,16 +160,17 @@ pub async fn mark_attendance(
                 .await
                 .unwrap_or(0);
 
-            let event = json!({
-                "event": "attendance_marked",
-                "payload": {
-                    "session_id": session_id,
-                    "user_id": claims.sub,
-                    "taken_at": now.to_rfc3339(),
-                    "count": count
-                }
-            });
-            ws.broadcast(&topic, event.to_string()).await;
+            emit::attendance_marked(
+                &ws,
+                ap::AttendanceMarked {
+                    session_id,
+                    user_id: claims.sub,
+                    taken_at: now.to_rfc3339(),
+                    count,
+                    method: None,
+                },
+            )
+            .await;
 
             (
                 StatusCode::OK,
@@ -286,9 +284,7 @@ pub async fn mark_attendance_by_username(
 
     match am.insert(db).await {
         Ok(_rec) => {
-            // Broadcast to update UIs
             let ws = state.ws_clone();
-            let topic = attendance_session_topic(session_id);
 
             let count = attendance_record::Entity::find()
                 .filter(attendance_record::Column::SessionId.eq(session_id))
@@ -296,17 +292,17 @@ pub async fn mark_attendance_by_username(
                 .await
                 .unwrap_or(0);
 
-            let event = json!({
-                "event": "attendance_marked",
-                "payload": {
-                    "session_id": session_id,
-                    "user_id": student.id,
-                    "method": "admin_manual",
-                    "taken_at": now.to_rfc3339(),
-                    "count": count
-                }
-            });
-            ws.broadcast(&topic, event.to_string()).await;
+            emit::attendance_marked(
+                &ws,
+                ap::AttendanceMarked {
+                    session_id,
+                    user_id: student.id,
+                    taken_at: now.to_rfc3339(),
+                    count,
+                    method: Some("admin_manual".into()),
+                },
+            )
+            .await;
 
             (
                 StatusCode::OK,

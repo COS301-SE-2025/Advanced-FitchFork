@@ -187,7 +187,7 @@ mod tests {
             json["message"]
                 .as_str()
                 .unwrap()
-                .contains("Credits must be a positive number")
+                .contains("Credits must be between 1 and 9999")
         );
     }
 
@@ -289,7 +289,7 @@ mod tests {
         let message = json["message"].as_str().unwrap();
         assert!(message.contains("Module code must be in format ABC123"));
         assert!(message.contains("Year must be"));
-        assert!(message.contains("Credits must be a positive number"));
+        assert!(message.contains("Credits must be between 1 and 9999"));
     }
 
     /// Test Case: Missing required fields

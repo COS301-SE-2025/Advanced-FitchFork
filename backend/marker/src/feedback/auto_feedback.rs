@@ -16,6 +16,7 @@ use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
 use crate::types::TaskResult;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// Automatic feedback strategy: generates template-based feedback for each task.
 ///
@@ -56,26 +57,47 @@ impl Feedback for AutoFeedback {
             }
 
             if summary.is_empty() {
-                let student_set: std::collections::HashSet<&String> =
-                    result.student_output.iter().collect();
-                let memo_set: std::collections::HashSet<&String> =
-                    result.memo_output.iter().collect();
+                fn freq_map(lines: &[String]) -> HashMap<&String, usize> {
+                    let mut m = HashMap::new();
+                    for s in lines {
+                        *m.entry(s).or_insert(0) += 1;
+                    }
+                    m
+                }
 
-                let feedback_message =
-                    if memo_set.is_subset(&student_set) && memo_set.len() < student_set.len() {
-                        // println!("TOO MUCH OUTPUT DETECTED");
-                        "Too much output"
-                    } else if !result.missed_patterns.is_empty() {
-                        if student_set.is_subset(&memo_set) && student_set.len() < memo_set.len() {
-                            "Missing lines"
-                        } else {
-                            "Incorrect output"
-                        }
-                    } else if !result.matched_patterns.is_empty() {
+                let student_counts = freq_map(&result.student_output);
+                let memo_counts = freq_map(&result.memo_output);
+
+                let student_total = result.student_output.len();
+                let memo_total = result.memo_output.len();
+
+                let memo_is_multiset_subset = memo_counts
+                    .iter()
+                    .all(|(k, &v)| student_counts.get(k).unwrap_or(&0) >= &v);
+
+                let student_is_multiset_subset = student_counts
+                    .iter()
+                    .all(|(k, &v)| memo_counts.get(k).unwrap_or(&0) >= &v);
+
+                let multisets_equal = student_counts == memo_counts;
+
+                let feedback_message = if memo_is_multiset_subset && memo_total < student_total {
+                    "Too much output"
+                } else if !result.missed_patterns.is_empty() {
+                    if student_is_multiset_subset && student_total < memo_total {
+                        "Missing lines"
+                    } else {
+                        "Incorrect output"
+                    }
+                } else if !result.matched_patterns.is_empty() {
+                    if multisets_equal {
                         "All patterns matched"
                     } else {
-                        ""
-                    };
+                        "Incorrect output"
+                    }
+                } else {
+                    ""
+                };
 
                 summary.push_str(feedback_message);
             }
@@ -98,8 +120,8 @@ mod tests {
         name: &str,
         matched: &[&str],
         missed: &[&str],
-        awarded: i64,
-        possible: i64,
+        awarded: f64,
+        possible: f64,
         student_output: &[&str],
         memo_output: &[&str],
         stderr: Option<&str>,
@@ -125,8 +147,8 @@ mod tests {
             "Task1",
             &["a", "b"],
             &[],
-            2,
-            2,
+            2.0,
+            2.0,
             &vec![],
             &vec![],
             None,
@@ -148,8 +170,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b", "c"],
-            1,
-            3,
+            1.0,
+            3.0,
             &["a"],
             &["a", "b", "c"],
             None,
@@ -171,8 +193,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b"],
-            1,
-            2,
+            1.0,
+            2.0,
             &["a", "b", "extra"],
             &["a", "b"],
             None,
@@ -194,8 +216,8 @@ mod tests {
             "Task2",
             &["a"],
             &["b", "c"],
-            1,
-            3,
+            1.0,
+            3.0,
             &["a", "x"],
             &["a", "b", "c"],
             None,
@@ -217,8 +239,8 @@ mod tests {
             "Task3",
             &[],
             &["x", "y"],
-            0,
-            2,
+            0.0,
+            2.0,
             &[],
             &["x", "y"],
             None,
@@ -236,7 +258,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_patterns() {
-        let task = make_task("Task4", &[], &[], 0, 0, &vec![], &vec![], None, None);
+        let task = make_task("Task4", &[], &[], 0.0, 0.0, &vec![], &vec![], None, None);
         let feedback = AutoFeedback.assemble_feedback(&[task]).await.unwrap();
         assert_eq!(
             feedback,
@@ -249,9 +271,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_tasks() {
-        let t1 = make_task("T1", &["a"], &[], 1, 1, &vec![], &vec![], None, None);
-        let t2 = make_task("T2", &[], &["b"], 0, 1, &[], &["b"], None, None);
-        let t3 = make_task("T3", &["x"], &["y"], 1, 2, &["x"], &["x", "y"], None, None);
+        let t1 = make_task("T1", &["a"], &[], 1.0, 1.0, &vec![], &vec![], None, None);
+        let t2 = make_task("T2", &[], &["b"], 0.0, 1.0, &[], &["b"], None, None);
+        let t3 = make_task(
+            "T3",
+            &["x"],
+            &["y"],
+            1.0,
+            2.0,
+            &["x"],
+            &["x", "y"],
+            None,
+            None,
+        );
         let feedback = AutoFeedback.assemble_feedback(&[t1, t2, t3]).await.unwrap();
         assert_eq!(
             feedback,
@@ -278,8 +310,8 @@ mod tests {
             "CrashTask",
             &[],
             &["expected_output"],
-            0,
-            10,
+            0.0,
+            10.0,
             &[],
             &["expected_output"],
             Some(
@@ -303,8 +335,8 @@ mod tests {
             "CrashTask",
             &[],
             &["expected_output"],
-            0,
-            10,
+            0.0,
+            10.0,
             &[],
             &["expected_output"],
             None,

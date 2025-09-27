@@ -1,11 +1,18 @@
-import React, { useEffect } from 'react';
-import { Button, Input, Switch, Skeleton, Modal, Typography } from 'antd';
+import React, { useEffect, useMemo } from 'react';
+import { Button, Input, Skeleton, Modal, Typography, Segmented } from 'antd';
 import { DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useTasksPage } from './context';
 import OverwriteFilesSection from './sections/OverwriteFilesSection';
 import AssessmentSection from './sections/AssessmentSection';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import type { TaskType } from '@/types/modules/assignments/tasks';
+import { useAssignment } from '@/context/AssignmentContext';
+import {
+  taskTypeOptionsForLanguage,
+  isCoverageSupported,
+  isValgrindSupported,
+} from '@/policies/languages';
 
 const TaskSkeleton: React.FC = () => (
   <div className="space-y-6">
@@ -59,12 +66,24 @@ const TaskView: React.FC = () => {
     setEditedName,
     editedCommand,
     setEditedCommand,
-    editedCoverage,
-    setEditedCoverage,
+    editedMode,
+    setEditedMode,
     saveTask,
     deleteTask,
   } = useTasksPage();
   const { setValue, setBackTo } = useViewSlot();
+  const { config } = useAssignment();
+  const lang = config?.project?.language ?? null;
+
+  // Build allowed options for the Segmented control based on language
+  const modeOptions = useMemo(() => taskTypeOptionsForLanguage(lang), [lang]);
+
+  // If language or task changes and the current mode isn't supported, reset to 'normal'
+  useEffect(() => {
+    if (!selectedTask) return;
+    if (editedMode === 'coverage' && !isCoverageSupported(lang)) setEditedMode('normal');
+    if (editedMode === 'valgrind' && !isValgrindSupported(lang)) setEditedMode('normal');
+  }, [lang, selectedTask, editedMode, setEditedMode]);
 
   useEffect(() => {
     return () => {
@@ -138,11 +157,15 @@ const TaskView: React.FC = () => {
             />
           </div>
 
+          {/* Execution Mode (filtered by language policy) */}
           <div>
-            <label className="block font-medium mb-1">Code Coverage</label>
-            <div>
-              <Switch checked={editedCoverage} onChange={(checked) => setEditedCoverage(checked)} />
-            </div>
+            <label className="block font-medium mb-1">Execution Mode</label>
+            <Segmented
+              value={editedMode}
+              onChange={(v) => setEditedMode(v as TaskType)}
+              options={modeOptions}
+              className="w-full sm:w-auto"
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 justify-end">

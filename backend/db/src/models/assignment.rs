@@ -120,25 +120,24 @@ pub struct ReadinessReport {
 
 impl ReadinessReport {
     /// Readiness is conditional:
-    /// - Manual  -> require main
-    /// - GATLAM  -> require interpreter
-    /// - Others  -> neither main nor interpreter are required
+    /// - Manual         -> require main + memo_output + mark_allocator
+    /// - GATLAM/RNG/CC  -> require interpreter
     pub fn is_ready(&self) -> bool {
-        let common_ok = self.config_present
-            && self.tasks_present
-            && self.memo_present
-            && self.makefile_present
-            && self.memo_output_present
-            && self.mark_allocator_present;
+        // common across all modes
+        let base_ok =
+            self.config_present && self.tasks_present && self.memo_present && self.makefile_present;
 
-        if !common_ok {
+        if !base_ok {
             return false;
         }
 
         match self.submission_mode {
-            SubmissionMode::Manual => self.main_present,
-            SubmissionMode::GATLAM => self.interpreter_present,
-            _ => true, // RNG / CodeCoverage, etc.
+            util::execution_config::SubmissionMode::Manual => {
+                self.main_present && self.memo_output_present && self.mark_allocator_present
+            }
+            util::execution_config::SubmissionMode::GATLAM
+            | util::execution_config::SubmissionMode::RNG
+            | util::execution_config::SubmissionMode::CodeCoverage => self.interpreter_present,
         }
     }
 }

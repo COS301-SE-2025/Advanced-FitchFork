@@ -9,7 +9,8 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::Model as AssignmentModel,
-        assignment_memo_output, assignment_task,
+        assignment_memo_output,
+        assignment_task::{self, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -93,8 +94,7 @@ mod tests {
             task_number as i64,
             &format!("Task {}", task_number),
             "echo Hello", // dummy command
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .unwrap();

@@ -37,8 +37,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                 assignment_id,
                 user.id,
                 attempt_number,
-                80,
-                100,
+                80.0,
+                100.0,
                 false,
                 &filename,
                 "hash123#",
@@ -82,8 +82,8 @@ impl Seeder for AssignmentSubmissionSeeder {
                         assignment.id,
                         user.id,
                         counter,
-                        rand::random::<i64>() % 100,
-                        100,
+                        rand::random::<f64>() % 100.0,
+                        100.0,
                         false,
                         dummy_filename,
                         "hash123#",
@@ -266,7 +266,7 @@ struct HelperThree {
 #endif
 "#;
 
-                let main_cpp = r#"
+                let main_cpp = r####"
 #include <iostream>
 #include <string>
 #include "HelperOne.h"
@@ -274,17 +274,17 @@ struct HelperThree {
 #include "HelperThree.h"
 
 void runTask1() {
-    std::cout << "&-=-&Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
+    std::cout << "###Task1Subtask1\n" << HelperOne::subtaskA() << std::endl;
 }
 
 void runTask2() {
-    std::cout << "&-=-&Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
-        std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskZ() << std::endl;
+    std::cout << "###Task2Subtask1\n" << HelperTwo::subtaskX() << std::endl;
+        std::cout << "###Task3Subtask2\n" << HelperOne::subtaskZ() << std::endl;
 }
 
 void runTask3() {
-    std::cout << "&-=-&Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
-    std::cout << "&-=-&Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
+    std::cout << "###Task3Subtask2\n" << HelperOne::subtaskBeta() << std::endl;
+    std::cout << "###Task3Subtask3\n" << HelperTwo::subtaskGamma() << std::endl;
 }
 
 int main() {
@@ -293,7 +293,7 @@ int main() {
     runTask3();
     return 0;
 }
-"#;
+"####;
 
                 zip.start_file("HelperOne.cpp", options).unwrap();
                 zip.write_all(helper_one_cpp.as_bytes()).unwrap();
@@ -332,8 +332,8 @@ int main() {
             assignment_id_java,
             user_id,
             attempt_number,
-            80,
-            100,
+            80.0,
+            100.0,
             false,
             filename_java,
             "hash123#",
@@ -359,8 +359,8 @@ int main() {
             assignment_id_cpp,
             user_id,
             attempt_number,
-            90,
-            100,
+            90.0,
+            100.0,
             false,
             filename_cpp,
             "hash123#",

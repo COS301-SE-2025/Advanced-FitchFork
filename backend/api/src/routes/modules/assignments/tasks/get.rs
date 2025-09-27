@@ -10,12 +10,12 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use db::models::assignment::Entity as AssignmentEntity;
 use db::models::assignment_memo_output::{Column as MemoCol, Entity as MemoEntity};
 use db::models::assignment_overwrite_file::{
     Column as OverwriteFileColumn, Entity as OverwriteFileEntity,
 };
 use db::models::assignment_task::{Column, Entity};
+use db::models::{assignment::Entity as AssignmentEntity, assignment_task::TaskType};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use std::fs;
@@ -23,13 +23,23 @@ use util::paths::memo_output_dir;
 use util::paths::storage_root;
 use util::{execution_config::ExecutionConfig, state::AppState};
 
+/// Filters out system information that appears after the &FITCHFORK& marker.
+/// This information is for internal use only and should not be returned to the frontend.
+fn filter_system_info(content: &str) -> String {
+    if let Some(pos) = content.find("&FITCHFORK&") {
+        content[..pos].trim_end().to_string()
+    } else {
+        content.to_string()
+    }
+}
+
 /// Represents the details of a subsection within a task, including its name, mark value, and optional memo output.
 #[derive(Serialize)]
 pub struct SubsectionDetail {
     /// The name of the subsection.
     pub name: String,
     /// The value value assigned to this subsection.
-    pub value: i64,
+    pub value: f64,
     /// The memo output content for this subsection, if available.
     pub memo_output: Option<String>,
     pub feedback: Option<String>,
@@ -39,21 +49,14 @@ pub struct SubsectionDetail {
 /// The response structure for detailed information about a task, including its subsections.
 #[derive(Serialize)]
 pub struct TaskDetailResponse {
-    /// The unique database ID of the task.
     pub id: i64,
-    /// The task's ID (may be the same as `id`).
     pub task_id: i64,
-    /// The display name assigned to a task
     pub name: String,
-    /// The command associated with this task.
     pub command: String,
-    pub code_coverage: bool,
-    /// The creation timestamp of the task (RFC3339 format).
+    pub task_type: TaskType,
     pub created_at: String,
-    /// The last update timestamp of the task (RFC3339 format).
     pub updated_at: String,
     pub has_overwrite_files: bool,
-    /// The list of subsections for this task, with details and memo outputs.
     pub subsections: Vec<SubsectionDetail>,
 }
 
@@ -79,18 +82,12 @@ pub struct TaskDetailResponse {
 ///     "task_id": 123,
 ///     "name": "Compilation",
 ///     "command": "java -cp . Main",
-///     "code_coverage": false,
+///     "task_type": "normal",
 ///     "has_overwrite_files": false,
 ///     "created_at": "2024-01-01T00:00:00Z",
 ///     "updated_at": "2024-01-01T00:00:00Z",
 ///     "subsections": [
-///       {
-///         "name": "Compilation",
-///         "value": 10,
-///         "memo_output": "Code compiles successfully without errors.",
-///         "feedback": null,
-///         "regex": ["^OK$"]
-///       }
+///       { "name": "Compilation", "value": 10, "memo_output": "…", "feedback": null, "regex": ["^OK$"] }
 ///     ]
 ///   }
 /// }
@@ -128,7 +125,7 @@ pub struct TaskDetailResponse {
 /// - The mark allocator is **optional**. If absent or if the task is not defined within it, the
 ///   endpoint still returns `200 OK` with `"subsections": []`.
 /// - `code_coverage: true` marks this task as a **coverage-type** task (special handling by the evaluator).
-/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"&-=-&"`).
+/// - `subsections[*].memo_output` is parsed from the memo output file using the configured delimiter (default `"###"`).
 pub async fn get_task_details(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id, task_id)): Path<(i64, i64, i64)>,
@@ -154,7 +151,7 @@ pub async fn get_task_details(
         }
     };
 
-    // Validate assignment exists and belongs to module; task belongs to assignment
+    // Validate assignment exists/belongs and task belongs to assignment
     let assignment = match AssignmentEntity::find_by_id(assignment_id).one(db).await {
         Ok(Some(a)) => a,
         Ok(None) => {
@@ -193,7 +190,7 @@ pub async fn get_task_details(
             .into_response();
     }
 
-    // ── Memo output: prefer DB mapping; fall back to scanning memo_output_dir ─────────────
+    // Memo content (DB-backed, fallback to disk)
     let memo_content: Option<String> = match MemoEntity::find()
         .filter(MemoCol::AssignmentId.eq(assignment_id))
         .filter(MemoCol::TaskId.eq(task.id))
@@ -201,16 +198,17 @@ pub async fn get_task_details(
         .await
     {
         Ok(Some(mo)) => {
-            let full = storage_root().join(&mo.path); // relative to storage root
-            fs::read_to_string(full).ok()
+            let full = storage_root().join(&mo.path);
+            fs::read_to_string(full)
+                .ok()
+                .map(|content| filter_system_info(&content))
         }
         _ => {
             let dir = memo_output_dir(module_id, assignment_id);
             let conventional = dir.join(format!("task_{}.txt", task.task_number));
             if let Ok(s) = fs::read_to_string(&conventional) {
-                Some(s)
+                Some(filter_system_info(&s))
             } else {
-                // Otherwise first *.txt by name
                 let mut picked: Option<String> = None;
                 if let Ok(rd) = fs::read_dir(&dir) {
                     let mut txts: Vec<_> = rd
@@ -221,7 +219,7 @@ pub async fn get_task_details(
                     txts.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
                     for p in txts {
                         if let Ok(s) = fs::read_to_string(&p) {
-                            picked = Some(s);
+                            picked = Some(filter_system_info(&s));
                             break;
                         }
                     }
@@ -231,13 +229,11 @@ pub async fn get_task_details(
         }
     };
 
-    // Load ExecutionConfig delimiter
+    // Split memo into chunks per subsection
     let separator = match ExecutionConfig::get_execution_config(module_id, assignment_id) {
         Ok(cfg) => cfg.marking.deliminator,
-        Err(_) => "&-=-&".to_string(),
+        Err(_) => "###".to_string(),
     };
-
-    // Split memo into chunks per subsection; drop the leading chunk before the first delimiter
     let mut memo_chunks: Vec<Option<String>> = if let Some(ref memo) = memo_content {
         memo.split(&separator)
             .map(|s| {
@@ -248,16 +244,14 @@ pub async fn get_task_details(
                     Some(t.to_string())
                 }
             })
-            .skip(1) // first chunk is preamble before the first delimiter
+            .skip(1)
             .collect()
     } else {
         Vec::new()
     };
 
-    // ── Load allocator softly (optional) ──────────────────────────────────────────────────
     let allocator = util::mark_allocator::load_allocator(module_id, assignment_id).ok();
 
-    // Build subsections (optional): only when allocator is present and contains this task
     let subsections: Vec<SubsectionDetail> = if let Some(alloc) = allocator {
         if let Some(alloc_task) = alloc
             .tasks
@@ -276,15 +270,13 @@ pub async fn get_task_details(
                     value: s.value,
                     memo_output: memo_chunks.get(i).cloned().flatten(),
                     feedback: s.feedback.clone(),
-                    regex: s.regex.clone(), // preserve empties; one entry per memo line
+                    regex: s.regex.clone(),
                 })
                 .collect()
         } else {
-            // Allocator exists but task isn't defined → empty list
             Vec::new()
         }
     } else {
-        // No allocator yet → empty list
         Vec::new()
     };
 
@@ -307,7 +299,7 @@ pub async fn get_task_details(
         task_id: task.id,
         name: task.name.clone(),
         command: task.command,
-        code_coverage: task.code_coverage,
+        task_type: task.task_type,
         created_at: task.created_at.to_rfc3339(),
         updated_at: task.updated_at.to_rfc3339(),
         has_overwrite_files,
@@ -346,16 +338,7 @@ pub async fn get_task_details(
 ///       "task_number": 1,
 ///       "name": "Compilation",
 ///       "command": "java -cp . Main",
-///       "code_coverage": false,
-///       "created_at": "2024-01-01T00:00:00Z",
-///       "updated_at": "2024-01-01T00:00:00Z"
-///     },
-///     {
-///       "id": 124,
-///       "task_number": 2,
-///       "name": "Coverage run",
-///       "command": "cargo llvm-cov --no-report",
-///       "code_coverage": true,
+///       "task_type": "normal",
 ///       "created_at": "2024-01-01T00:00:00Z",
 ///       "updated_at": "2024-01-01T00:00:00Z"
 ///     }
@@ -402,7 +385,7 @@ pub async fn list_tasks(
                     task_number: task.task_number,
                     name: task.name,
                     command: task.command,
-                    code_coverage: task.code_coverage,
+                    task_type: task.task_type,
                     created_at: task.created_at.to_rfc3339(),
                     updated_at: task.updated_at.to_rfc3339(),
                 })

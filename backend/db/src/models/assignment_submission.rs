@@ -3,7 +3,7 @@ use crate::models::assignment::Model as AssignmentModel;
 use crate::models::user;
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, QueryOrder};
+use sea_orm::{ActiveValue::Set, ConnectionTrait, DatabaseConnection, EntityTrait, QueryOrder};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
@@ -92,9 +92,9 @@ pub struct Model {
     /// Attempt number
     pub attempt: i64,
     /// The score earned by the user.
-    pub earned: i64,
+    pub earned: f64,
     /// The total possible score.
-    pub total: i64,
+    pub total: f64,
     /// The original filename uploaded by the user.
     pub filename: String,
     /// The hash of the submitted files.
@@ -163,8 +163,8 @@ impl Model {
         assignment_id: i64,
         user_id: i64,
         attempt: i64,
-        earned: i64,
-        total: i64,
+        earned: f64,
+        total: f64,
         is_practice: bool,
         filename: &str,
         file_hash: &str,
@@ -335,7 +335,13 @@ impl Model {
 
         match cfg.marking.grading_policy {
             GradingPolicy::Best => {
-                subs.sort_by_key(|s| std::cmp::Reverse(s.earned * 1000 / s.total));
+                subs.sort_by(|a, b| {
+                    let score_a = a.earned / a.total;
+                    let score_b = b.earned / b.total;
+                    score_b
+                        .partial_cmp(&score_a)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 Ok(subs.into_iter().next())
             }
             GradingPolicy::Last => {
@@ -449,6 +455,23 @@ impl Model {
             SubmissionStatus::Queued | SubmissionStatus::Running | SubmissionStatus::Grading
         )
     }
+
+    /// Zeros out the `earned` mark for a submission.
+    pub async fn zero_out_marks<C>(db: &C, submission_id: i64) -> Result<Self, sea_orm::DbErr>
+    where
+        C: ConnectionTrait,
+    {
+        let submission = Entity::find_by_id(submission_id)
+            .one(db)
+            .await?
+            .ok_or_else(|| {
+                sea_orm::DbErr::Custom(format!("Submission {} not found", submission_id))
+            })?;
+
+        let mut active_model: ActiveModel = submission.into();
+        active_model.earned = Set(0.0);
+        active_model.update(db).await
+    }
 }
 
 #[cfg(test)]
@@ -512,8 +535,8 @@ mod tests {
             assignment_id: Set(assignment.id),
             user_id: Set(user.id),
             attempt: Set(1),
-            earned: Set(10),
-            total: Set(10),
+            earned: Set(10.0),
+            total: Set(10.0),
             filename: Set("solution.zip".to_string()),
             file_hash: Set("hash123#".to_string()),
             path: Set("".to_string()),
@@ -535,8 +558,8 @@ mod tests {
             assignment.id,
             user.id,
             6,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             "solution.zip",
             "hash123#",
@@ -612,8 +635,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "test.zip",
             "test_hash",
@@ -674,8 +697,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "status_test.zip",
             "status_hash",
@@ -768,8 +791,8 @@ mod tests {
             assignment.id,
             user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "helper_test.zip",
             "helper_hash",

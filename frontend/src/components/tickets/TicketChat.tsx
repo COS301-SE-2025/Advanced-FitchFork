@@ -8,12 +8,38 @@ import { useAssignment } from '@/context/AssignmentContext';
 import { message as toast } from '@/utils/message';
 
 import TicketChatMessage from '@/components/tickets/TicketChatMessage';
-import type { ChatEntry } from '@/hooks/tickets/useTicketChat';
-import { useTicketChat } from '@/hooks/tickets/useTicketChat';
-import type { Ticket } from '@/types/modules/assignments/tickets';
+import {
+  fromRestTicketMessage,
+  fromWsTicketMessage,
+  type Ticket,
+} from '@/types/modules/assignments/tickets';
+
+// —— services (REST) ——
+import {
+  listTicketMessages,
+  createTicketMessage,
+  editTicketMessage,
+  deleteTicketMessage,
+} from '@/services/modules/assignments/tickets/messages';
+
+// —— websocket (context) ——
+import { useWsEvents } from '@/ws/hooks';
+import { Topics } from '@/ws/topics';
+import type { TicketMessageId } from '@/ws/types';
 
 const { Text } = Typography;
 const MAX_MESSAGE_LENGTH = 500;
+
+/* --------- Local types --------- */
+type ChatEntry = {
+  id: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  sender: string | null;
+  user?: { id: number; username: string } | null;
+  system?: boolean;
+};
 
 /* --------- Props --------- */
 type TicketChatProps = {
@@ -32,7 +58,7 @@ type MessageListProps = {
   onStartEdit: (id: number, content: string) => void;
   onDelete: (id: number) => void;
   onEmptyAction?: () => void;
-  showEmpty?: boolean; // <-- NEW: render empty state only after data is loaded
+  showEmpty?: boolean;
   isClosed: boolean;
 };
 
@@ -53,7 +79,7 @@ const MessageList = React.memo(function MessageList({
   isClosed,
 }: MessageListProps) {
   if (messages.length === 0) {
-    if (!showEmpty) return null; // avoid premature flash
+    if (!showEmpty) return null;
 
     return (
       <div className="h-full min-h-[260px] flex items-center justify-center px-4">
@@ -132,26 +158,19 @@ const TicketChat: React.FC<TicketChatProps> = ({ ticket }) => {
   const module = useModule();
   const { assignment } = useAssignment();
 
-  const token =
-    typeof window !== 'undefined'
-      ? (JSON.parse(localStorage.getItem('auth') || '{}')?.token ?? null)
-      : null;
-
-  const { canUse, messages, send, update, remove, emitTyping, typingText, loaded } = useTicketChat({
-    moduleId: module?.id ?? null,
-    assignmentId: assignment?.id ?? null,
-    ticketId: ticket.id,
-    token,
-    username: user?.username ?? null,
-  });
+  // local state (replaces old hook)
+  const [messages, setMessages] = useState<ChatEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const isClosed = ticket.status === 'closed';
+  const canUse = !!module?.id && !!assignment?.id;
 
-  // --- state ---
+  // composer/edit state
   const [input, setInput] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editedContent, setEditedContent] = useState('');
 
+  // scrolling
   const listRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const initialScrolledRef = useRef(false);
@@ -173,6 +192,61 @@ const TicketChat: React.FC<TicketChatProps> = ({ ticket }) => {
   }, []);
 
   useEffect(() => {
+    if (!module?.id || !assignment?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await listTicketMessages(module.id, assignment.id, ticket.id, {
+          page: 1,
+          per_page: 200,
+        });
+        if (cancelled) return;
+
+        if (res.success) {
+          const rows: ChatEntry[] = (res.data?.tickets ?? [])
+            .map(fromRestTicketMessage)
+            .sort((a, b) => a.id - b.id);
+
+          setMessages(rows);
+        } else {
+          toast.error(res.message || 'Failed to load messages');
+          setMessages([]);
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error('Failed to load messages');
+          setMessages([]);
+        }
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [module?.id, assignment?.id, ticket.id]);
+
+  // subscribe to ticket WS topic
+  useWsEvents([Topics.ticketChat(ticket.id)], {
+    'ticket.message_created': (msg) => {
+      const row = fromWsTicketMessage(msg);
+      setMessages((prev) =>
+        prev.some((m) => m.id === row.id) ? prev : [...prev, row].sort((a, b) => a.id - b.id),
+      );
+    },
+    'ticket.message_updated': (msg) => {
+      const row = fromWsTicketMessage(msg);
+      setMessages((prev) => prev.map((m) => (m.id === row.id ? row : m)));
+    },
+    'ticket.message_deleted': (payload: TicketMessageId) => {
+      setMessages((prev) => prev.filter((m) => m.id !== payload.id));
+    },
+  });
+
+  // initial scroll and on new messages
+  useEffect(() => {
     if (!initialScrolledRef.current && listRef.current) {
       if (listRef.current.scrollHeight > listRef.current.clientHeight) {
         scrollToBottom('auto');
@@ -190,7 +264,56 @@ const TicketChat: React.FC<TicketChatProps> = ({ ticket }) => {
     }
   }, [messages, user?.username]);
 
-  // handlers
+  // REST actions — rely on WS echo for reconciliation
+  const send = useCallback(
+    async (content: string) => {
+      if (!module?.id || !assignment?.id) return;
+      const res = await createTicketMessage(module.id, assignment.id, ticket.id, content);
+      if (!res.success) {
+        toast.error(res.message || 'Failed to send message');
+        return;
+      }
+      // optimistic insert (adapt the REST response)
+      const row = fromRestTicketMessage(res.data!);
+      setMessages((prev) =>
+        prev.some((m) => m.id === row.id) ? prev : [...prev, row].sort((a, b) => a.id - b.id),
+      );
+    },
+    [module?.id, assignment?.id, ticket.id],
+  );
+
+  const update = useCallback(
+    async (id: number, content: string) => {
+      if (!module?.id || !assignment?.id) return;
+      const res = await editTicketMessage(module.id, assignment.id, ticket.id, id, content);
+      if (!res.success) {
+        toast.error(res.message || 'Failed to update message');
+        return;
+      }
+      const row = fromRestTicketMessage(res.data!);
+      setMessages((prev) => prev.map((m) => (m.id === id ? row : m)));
+    },
+    [module?.id, assignment?.id, ticket.id],
+  );
+
+  const remove = useCallback(
+    async (id: number) => {
+      if (!module?.id || !assignment?.id) return;
+      const res = await deleteTicketMessage(module.id, assignment.id, ticket.id, id);
+      if (!res.success) {
+        toast.error(res.message || 'Failed to delete message');
+        return;
+      }
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    },
+    [module?.id, assignment?.id, ticket.id],
+  );
+
+  // typing: not implemented in WS schema; keep no-op + hidden label
+  const emitTyping = useCallback(() => {}, []);
+  const typingText: string | null = null;
+
+  // edit handlers
   const handleEditChange = useCallback((v: string) => setEditedContent(v), []);
   const handleCancel = useCallback(() => setEditingMessageId(null), []);
   const handleStartEdit = useCallback((id: number, content: string) => {

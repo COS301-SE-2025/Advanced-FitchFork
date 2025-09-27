@@ -408,7 +408,7 @@ mod tests {
         let _: DateTime<Utc> = ga_str.parse().expect("generated_at not RFC3339");
 
         // total_value
-        assert_eq!(data.get("total_value").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(data.get("total_value").and_then(|v| v.as_f64()), Some(1.0));
 
         // tasks
         let tasks = data
@@ -418,9 +418,9 @@ mod tests {
         assert_eq!(tasks.len(), 1);
 
         let t0 = &tasks[0];
-        assert_eq!(t0.get("task_number").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(t0.get("task_number").and_then(|v| v.as_f64()), Some(1.0));
         assert_eq!(t0.get("name").and_then(|v| v.as_str()), Some("Task 1"));
-        assert_eq!(t0.get("value").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(t0.get("value").and_then(|v| v.as_f64()), Some(1.0));
 
         // code_coverage is optional; if present, allow null or bool.
         if let Some(cc) = t0.get("code_coverage") {
@@ -439,7 +439,7 @@ mod tests {
 
         let s0 = &subs[0];
         assert_eq!(s0.get("name").and_then(|v| v.as_str()), Some("Correctness"));
-        assert_eq!(s0.get("value").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(s0.get("value").and_then(|v| v.as_f64()), Some(1.0));
 
         // regex/feedback are optional; if present, allow null or correct types
         if let Some(r) = s0.get("regex") {

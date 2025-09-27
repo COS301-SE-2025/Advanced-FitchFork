@@ -8,9 +8,14 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use db::models::{
+    module::{Column as ModuleColumn, Entity as ModuleEntity},
+    user_module_role::{Model as UserModuleRoleModel, Role as ModuleRole},
+};
+use db::models::{
     password_reset_token::{self, Model as PasswordResetTokenModel},
     user::{self, Model as UserModel},
 };
+use sea_orm::QueryOrder;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, PaginatorTrait,
     QueryFilter,
@@ -157,6 +162,27 @@ pub async fn register(
                 );
             }
         };
+
+    // -----------------------------------------------------------------------------
+    // TODO(BI-REMOVE-LATER): Temporary auto-enrolment of all new users into UTM001.
+    // If multiple UTM001 modules exist, prefer the most recent year.
+    // Any error here is logged but does NOT fail registration.
+    // -----------------------------------------------------------------------------
+    if let Ok(Some(default_mod)) = ModuleEntity::find()
+        .filter(ModuleColumn::Code.eq("UTM001"))
+        .order_by_desc(ModuleColumn::Year)
+        .one(db)
+        .await
+    {
+        // Ignore duplicate / FK errors silently; this is best-effort.
+        let _ = UserModuleRoleModel::assign_user_to_module(
+            db,
+            inserted_user.id,
+            default_mod.id,
+            ModuleRole::Student,
+        )
+        .await;
+    }
 
     let (token, expiry) = generate_jwt(inserted_user.id, inserted_user.admin);
     let user_response = UserResponse {

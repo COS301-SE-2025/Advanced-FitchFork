@@ -1,10 +1,10 @@
 javac … && java Main task2
-&-=-&Sub1
+###Sub1
 Student line D1
 Student line D2
-&-=-&Sub2
+###Sub2
 Student line E1
 Student line E2
-&-=-&Sub3
+###Sub3
 Student line F1
 Student line F2

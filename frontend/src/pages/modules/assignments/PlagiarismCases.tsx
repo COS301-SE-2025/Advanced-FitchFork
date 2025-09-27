@@ -17,7 +17,6 @@ import {
 import { listMossReports } from '@/services/modules/assignments/plagiarism/get';
 import { getSubmissions } from '@/services/modules/assignments/submissions';
 import type { Submission } from '@/types/modules/assignments/submissions';
-
 import {
   DeleteOutlined,
   DeploymentUnitOutlined,
@@ -26,16 +25,12 @@ import {
   CheckCircleOutlined,
   FlagOutlined,
 } from '@ant-design/icons';
-
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
-import CreateModal from '@/components/common/CreateModal';
-import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import { Typography, type TreeSelectProps } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignment } from '@/context/AssignmentContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
-
 import {
   PlagiarismCaseCard,
   PlagiarismCaseListItem,
@@ -48,7 +43,90 @@ import {
 import PlagiarismStatusTag from '@/components/plagiarism/PlagiarismStatusTag';
 import { formatModuleCode } from '@/utils/modules';
 import { DateTime, IdTag, PercentageTag } from '@/components/common';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 import ConfirmModal from '@/components/utils/ConfirmModal';
+
+// Create-case fields (select two submissions, then metadata)
+const createCaseFields: FormModalField[] = [
+  {
+    name: 'submission_id_1',
+    label: 'Submission #1',
+    type: 'tree-select',
+    constraints: { required: true },
+    ui: {
+      props: {
+        showSearch: true,
+        filterTreeNode: false,
+        placeholder: 'Search by username…',
+        treeNodeLabelProp: 'title',
+        dropdownMatchSelectWidth: 440,
+        // dynamic bits set where you render the modal (see below)
+      } as TreeSelectProps,
+    },
+  },
+  {
+    name: 'submission_id_2',
+    label: 'Submission #2',
+    type: 'tree-select',
+    constraints: { required: true },
+    ui: {
+      props: {
+        showSearch: true,
+        filterTreeNode: false,
+        placeholder: 'Search by username…',
+        treeNodeLabelProp: 'title',
+        dropdownMatchSelectWidth: 440,
+      } as TreeSelectProps,
+    },
+  },
+  {
+    name: 'description',
+    label: 'Description',
+    type: 'textarea',
+    constraints: { required: true, length: { min: 3, max: 4000 } },
+    ui: { props: { rows: 4, showCount: true, maxLength: 4000 } },
+  },
+  {
+    name: 'similarity',
+    label: 'Similarity (%)',
+    type: 'number',
+    constraints: { number: { min: 0, max: 100, step: 0.1, precision: 1 } },
+  },
+  {
+    name: 'lines_matched',
+    label: 'Lines Matched',
+    type: 'number',
+    constraints: { number: { min: 0, integer: true, step: 1, precision: 0 } },
+  },
+];
+
+// Edit-case fields (no submission changes here)
+const editCaseFields: FormModalField[] = [
+  {
+    name: 'description',
+    label: 'Description',
+    type: 'textarea',
+    constraints: { length: { max: 4000 } },
+    ui: { props: { rows: 4, showCount: true, maxLength: 4000 } },
+  },
+  {
+    name: 'similarity',
+    label: 'Similarity (%)',
+    type: 'number',
+    constraints: { number: { min: 0, max: 100, step: 0.1, precision: 1 } },
+  },
+  {
+    name: 'status',
+    label: 'Status',
+    type: 'select',
+    constraints: { required: true },
+    options: [
+      { label: 'Review', value: 'review' },
+      { label: 'Flagged', value: 'flagged' },
+      { label: 'Reviewed', value: 'reviewed' },
+    ],
+  },
+];
 
 /** Build TreeSelect nodes grouped by user */
 function buildSubmissionTree(subs: Submission[]) {
@@ -198,6 +276,7 @@ const PlagiarismCases = () => {
       submission_id_2: Number(values.submission_id_2),
       description: String(values.description ?? ''),
       similarity: Number(values.similarity ?? 0),
+      lines_matched: Number(values.lines_matched ?? 0),
     });
     if (res.success) {
       message.success(res.message || 'Plagiarism case created');
@@ -587,6 +666,7 @@ const PlagiarismCases = () => {
                 onHashScan={() => setHashOpen(true)}
               />
             }
+            filtersStorageKey={`modules:${moduleId}:assignments:${assignmentId}:plagiarism:filters:v1`}
           />
         </div>
 
@@ -606,83 +686,54 @@ const PlagiarismCases = () => {
       </div>
 
       {/* Create */}
-      <CreateModal
+      <FormModal
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
-        onCreate={handleCreate}
+        onSubmit={handleCreate}
         title="Add Plagiarism Case"
+        submitText="Create"
         initialValues={{
           submission_id_1: undefined,
           submission_id_2: undefined,
           description: '',
           similarity: 0,
+          lines_matched: 0,
         }}
-        fields={[
-          {
-            name: 'submission_id_1',
-            label: 'Submission #1',
-            type: 'tree-select',
-            required: true,
-            treeData: subTree.treeData,
-            treeSelectProps: {
-              showSearch: true,
-              filterTreeNode: false,
-              onSearch: (v) => searchSubmissions(v),
-              placeholder: 'Search by username…',
-              notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
-              treeNodeLabelProp: 'title',
-              dropdownMatchSelectWidth: 440,
-            } as TreeSelectProps,
-          },
-          {
-            name: 'submission_id_2',
-            label: 'Submission #2',
-            type: 'tree-select',
-            required: true,
-            treeData: subTree.treeData,
-            treeSelectProps: {
-              showSearch: true,
-              filterTreeNode: false,
-              onSearch: (v) => searchSubmissions(v),
-              placeholder: 'Search by username…',
-              notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
-              treeNodeLabelProp: 'title',
-              dropdownMatchSelectWidth: 440,
-            } as TreeSelectProps,
-          },
-          { name: 'description', label: 'Description', type: 'textarea', required: true },
-          { name: 'similarity', label: 'Similarity', type: 'number' },
-        ]}
+        // inject dynamic tree data + search handlers for both TreeSelects
+        fields={createCaseFields.map((f) =>
+          f.name === 'submission_id_1' || f.name === 'submission_id_2'
+            ? {
+                ...f,
+                ui: {
+                  ...f.ui,
+                  props: {
+                    ...(f.ui?.props || {}),
+                    treeData: subTree.treeData,
+                    notFoundContent: subTree.loading ? 'Searching…' : 'No submissions',
+                    onSearch: (v: string) => searchSubmissions(v),
+                  } as TreeSelectProps,
+                },
+              }
+            : f,
+        )}
       />
 
       {/* Edit */}
-      <EditModal
+      <FormModal
         open={editOpen}
         onCancel={() => {
           setEditOpen(false);
           setEditingItem(null);
         }}
-        onEdit={handleEdit}
+        onSubmit={handleEdit}
         title="Edit Plagiarism Case"
+        submitText="Save"
         initialValues={{
           description: editingItem?.description ?? '',
           status: editingItem?.status ?? 'review',
           similarity: editingItem?.similarity ?? 0,
         }}
-        fields={[
-          { name: 'description', label: 'Description', type: 'textarea' },
-          { name: 'similarity', label: 'Similarity', type: 'number' },
-          {
-            name: 'status',
-            label: 'Status',
-            type: 'select',
-            options: [
-              { label: 'Review', value: 'review' },
-              { label: 'Flagged', value: 'flagged' },
-              { label: 'Reviewed', value: 'reviewed' },
-            ],
-          },
-        ]}
+        fields={editCaseFields}
       />
 
       {/* bulk delete */}

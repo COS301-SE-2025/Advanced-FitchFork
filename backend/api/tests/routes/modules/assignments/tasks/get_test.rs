@@ -9,7 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::{AssignmentType, Model as AssignmentModel},
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -80,8 +80,7 @@ mod tests {
             1,
             "echo 'Task 1'",
             "Task 1 Name",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task 1");
@@ -92,32 +91,31 @@ mod tests {
             2,
             "echo 'Task 2'",
             "Task 2 Name",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task 2");
 
         let allocator = MarkAllocator {
             generated_at: Utc::now(),
-            total_value: 55,
+            total_value: 55.0,
             tasks: vec![
                 Task {
                     task_number: 1,
                     name: "Task 1 Name".to_string(),
-                    value: 25,
+                    value: 25.0,
                     code_coverage: Some(false),
                     valgrind: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Subsection A".to_string(),
-                            value: 10,
+                            value: 10.0,
                             regex: None,
                             feedback: None,
                         },
                         Subsection {
                             name: "Subsection B".to_string(),
-                            value: 15,
+                            value: 15.0,
                             regex: None,
                             feedback: None,
                         },
@@ -126,19 +124,19 @@ mod tests {
                 Task {
                     task_number: 2,
                     name: "Task 2 Name".to_string(),
-                    value: 30,
+                    value: 30.0,
                     code_coverage: Some(false),
                     valgrind: Some(false),
                     subsections: vec![
                         Subsection {
                             name: "Part 1".to_string(),
-                            value: 20,
+                            value: 20.0,
                             regex: None,
                             feedback: None,
                         },
                         Subsection {
                             name: "Part 2".to_string(),
-                            value: 10,
+                            value: 10.0,
                             regex: None,
                             feedback: None,
                         },
@@ -156,7 +154,7 @@ mod tests {
 
         let memo_file_path = memo_dir.join("task_1.txt");
         let memo_content =
-            "Overall Feedback\n&-=-&\nFeedback for Subsection A\n&-=-&\nFeedback for Subsection B";
+            "Overall Feedback\n###\nFeedback for Subsection A\n###\nFeedback for Subsection B";
         fs::write(&memo_file_path, memo_content).expect("Failed to write task memo file");
 
         TestData {
@@ -368,12 +366,12 @@ mod tests {
 
         let subsec1 = &subsections_array[0];
         assert_eq!(subsec1["name"], "Subsection A");
-        assert_eq!(subsec1["value"], 10);
+        assert_eq!(subsec1["value"], 10.0);
         assert_eq!(subsec1["memo_output"], "Feedback for Subsection A");
 
         let subsec2 = &subsections_array[1];
         assert_eq!(subsec2["name"], "Subsection B");
-        assert_eq!(subsec2["value"], 15);
+        assert_eq!(subsec2["value"], 15.0);
         assert_eq!(subsec2["memo_output"], "Feedback for Subsection B");
     }
 
@@ -454,8 +452,7 @@ mod tests {
             1,
             "echo 'Other'",
             "Task in Ass 2",
-            false,
-            false,
+            TaskType::Normal,
         )
         .await
         .expect("Failed to create task in second assignment");

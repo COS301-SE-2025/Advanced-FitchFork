@@ -9,6 +9,7 @@ mod tests {
         response::Response,
     };
     use chrono::{Datelike, Duration, Utc};
+    use db::models::assignment_task::TaskType;
     use db::models::{
         assignment::{
             ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity,
@@ -95,9 +96,16 @@ mod tests {
         active_assignment.updated_at = Set(now);
         let assignment = active_assignment.update(db).await.unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(
+            db,
+            assignment.id,
+            1,
+            "Task 1",
+            "make task1",
+            TaskType::Normal,
+        )
+        .await
+        .unwrap();
 
         create_assignment_structure(module.id, assignment.id);
         create_mark_allocator(module.id, assignment.id);
@@ -152,7 +160,7 @@ mod tests {
     fn create_memo_outputs(module_id: i64, assignment_id: i64) {
         let dir = memo_output_dir(module_id, assignment_id);
         fs::create_dir_all(&dir).unwrap();
-        let memo_content = "make task1\n&-=-&Subtask 1 Output\nOutput A";
+        let memo_content = "make task1\n###Subtask 1 Output\nOutput A";
         fs::write(dir.join("task1.txt"), memo_content).unwrap();
     }
 
@@ -161,7 +169,7 @@ mod tests {
         // Only override what the tests require:
         cfg.project.language = Language::Java; // because we ship .java files
         cfg.project.submission_mode = SubmissionMode::Manual;
-        cfg.marking.deliminator = "&-=-&".to_string(); // your parser expects this exact token
+        cfg.marking.deliminator = "###".to_string(); // your parser expects this exact token
         // (Other defaults: pass_mark=50, grading_policy=Last, etc.)
 
         cfg.save(module_id, assignment_id)
@@ -304,7 +312,7 @@ mod tests {
     }
 
     fn create_main_content() -> Vec<u8> {
-        br#"
+        br#####"
         public class Main {
             public static void main(String[] args) {
                 String task = args.length > 0 ? args[0] : "task1";
@@ -315,15 +323,15 @@ mod tests {
                 }
             }
             static void runTask1() {
-                System.out.println("&-=-&Task1Subtask1");
+                System.out.println("###Task1Subtask1");
                 System.out.println(HelperOne.subtaskA());
             }
             static void runTask2() {
-                System.out.println("&-=-&Task2Subtask1");
+                System.out.println("###Task2Subtask1");
                 System.out.println(HelperTwo.subtaskX());
             }
-        }"#
-        .to_vec()
+        }"#####
+            .to_vec()
     }
 
     fn create_helper_one_content() -> Vec<u8> {
@@ -396,7 +404,7 @@ mod tests {
         cfg.marking.allow_practice_submissions = allow_practice;
         cfg.marking.pass_mark = 50;
         cfg.marking.grading_policy = GradingPolicy::Last; // same as your previous JSON
-        cfg.marking.deliminator = "&-=-&".to_string();
+        cfg.marking.deliminator = "###".to_string();
 
         cfg.save(module_id, assignment_id)
             .expect("write config.json");
@@ -416,8 +424,8 @@ mod tests {
             assignment_id: Set(assignment_id),
             user_id: Set(user_id),
             attempt: Set(attempt),
-            earned: Set(0),
-            total: Set(0),
+            earned: Set(0.0),
+            total: Set(0.0),
             filename: Set("seed.zip".into()),
             file_hash: Set("seedhash".into()),
             path: Set("seed/path.zip".into()),
@@ -1465,12 +1473,22 @@ mod tests {
             assignment_id,
             user_id,
             attempt,
-            10,
-            10,
+            10.0,
+            10.0,
             false,
             &filename,
             "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
-            b"dummy",
+            &{
+                let mut buf = Vec::new();
+                let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+                let options = SimpleFileOptions::default();
+
+                zip.start_file("test.txt", options).unwrap();
+                zip.write_all(b"test content").unwrap();
+
+                zip.finish().unwrap();
+                buf
+            },
         )
         .await
         .unwrap();
@@ -1505,11 +1523,7 @@ mod tests {
             attempt,
             &format!("{}.txt", output.id),
         );
-        std::fs::write(
-            &out_file_path,
-            "make task1\n&-=-&Subtask 1 Output\nOutput A",
-        )
-        .unwrap();
+        std::fs::write(&out_file_path, "make task1\n###Subtask 1 Output\nOutput A").unwrap();
 
         let root = storage_root();
         let rel_path = out_file_path
@@ -2098,8 +2112,8 @@ mod tests {
             assignment_id,
             user_id,
             attempt,
-            /* earned */ 10,
-            /* total  */ 10,
+            /* earned */ 10.0,
+            /* total  */ 10.0,
             /* is_practice */ false,
             "test_submission.zip", // original filename (what users see)
             "d41d8cd98f00b204e9800998ecf8427e", // dummy hash
@@ -2107,6 +2121,14 @@ mod tests {
         )
         .await
         .unwrap();
+
+        // Mark it as a final state so resubmit won't skip it
+        use sea_orm::{ActiveModelTrait, Set};
+        let mut am: db::models::assignment_submission::ActiveModel = submission.clone().into();
+        am.status = Set(db::models::assignment_submission::SubmissionStatus::Graded);
+        am.earned = Set(10.0);
+        am.total = Set(10.0);
+        let submission = am.update(db).await.unwrap();
 
         // Seed an output row (empty path is fine for resubmit tests)
         let task = assignment_task::Entity::find()
@@ -2175,7 +2197,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 
@@ -2222,7 +2244,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body_to_json(response).await;
         assert_eq!(body["success"], true);
-        assert_eq!(body["data"]["resubmitted"], 2);
+        assert_eq!(body["data"]["started"], 2);
         assert!(body["data"]["failed"].as_array().unwrap().is_empty());
     }
 
@@ -2814,8 +2836,8 @@ mod tests {
             data.assignment.id,
             data.student_user.id,
             1,
-            0,
-            10,
+            0.0,
+            10.0,
             false,
             "test.zip",
             "test_hash",
@@ -2960,12 +2982,12 @@ mod tests {
 
         // Make sure your runner path is Manual and your delimiter matches memo files
         cfg.project.submission_mode = SubmissionMode::Manual;
-        cfg.marking.deliminator = "&-=-&".to_string();
+        cfg.marking.deliminator = "###".to_string();
 
         // Allow late submissions and make the window permissive for the tests
         cfg.marking.late.allow_late_submissions = true;
         cfg.marking.late.late_window_minutes = 24 * 60; // 24h is generous for tests
-        cfg.marking.late.late_max_percent = 100; // do not cap for these tests
+        cfg.marking.late.late_max_percent = 100.0; // do not cap for these tests
 
         // Keep attempts behavior as per your suite defaults
         // (we don't touch limit_attempts/max_attempts here)
@@ -3319,7 +3341,7 @@ mod tests {
         .unwrap();
         cfg.marking.late.allow_late_submissions = true;
         cfg.marking.late.late_window_minutes = 60; // 1h window
-        cfg.marking.late.late_max_percent = 100;
+        cfg.marking.late.late_max_percent = 100.0;
         cfg.save(data.module.id, data.assignment.id).unwrap();
 
         // Due 30 minutes ago => inside late window

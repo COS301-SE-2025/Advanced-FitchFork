@@ -79,7 +79,7 @@ pub struct LatePolicy {
     /// Cap on the final score for late submissions, as a percent of total (0–100).
     /// e.g. 60 => max 60% of total marks.
     #[serde(default = "default_late_max_percent")]
-    pub late_max_percent: u32,
+    pub late_max_percent: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -467,7 +467,7 @@ fn default_feedback_scheme() -> FeedbackScheme {
 }
 
 fn default_deliminator() -> String {
-    "&-=-&".to_string()
+    "###".to_string()
 }
 
 fn default_grading_policy() -> GradingPolicy {
@@ -475,7 +475,7 @@ fn default_grading_policy() -> GradingPolicy {
 }
 
 fn default_limit_attempts() -> bool {
-    false
+    true
 }
 
 fn default_max_attempts() -> u32 {
@@ -494,8 +494,8 @@ fn default_late_window_minutes() -> u32 {
     0
 }
 
-fn default_late_max_percent() -> u32 {
-    100
+fn default_late_max_percent() -> f64 {
+    100.0
 }
 
 fn default_allow_practice_submissions() -> bool {

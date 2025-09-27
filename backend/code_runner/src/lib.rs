@@ -14,12 +14,13 @@ use crate::validate_files::validate_memo_files;
 // Models
 use db::models::assignment::Entity as Assignment;
 use db::models::assignment_memo_output::{Column as MemoOutputColumn, Entity as MemoOutputEntity};
-use db::models::assignment_task::Model as AssignmentTask;
+use db::models::assignment_task::{Model as AssignmentTask, TaskType};
 use reqwest::Client;
 use serde_json::json;
 use util::code_coverage_report::CoverageProcessor;
 use util::config;
 use util::execution_config::ExecutionConfig;
+use util::valgrind_report::ValgrindProcessor;
 pub mod validate_files;
 
 /// Returns the first archive file (".zip", ".tar", ".tgz", ".gz") found in the given directory.
@@ -139,7 +140,7 @@ pub async fn create_memo_outputs_for_all_tasks(
     let mut join_set = JoinSet::new();
 
     for task in tasks.into_iter() {
-        if task.code_coverage {
+        if task.task_type == TaskType::Coverage {
             continue;
         }
 
@@ -154,7 +155,7 @@ pub async fn create_memo_outputs_for_all_tasks(
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Apply overwrites for this task
-            let mut files = task_files_base;
+            let mut files = task_files_base.clone();
             let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
             if overwrite_dir.exists() {
                 if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
@@ -174,6 +175,15 @@ pub async fn create_memo_outputs_for_all_tasks(
                         }
                     }
                 }
+            }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
             }
 
             let request_body = serde_json::json!({
@@ -380,10 +390,9 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
     let mut join_set = JoinSet::new();
 
     for task in tasks.into_iter() {
-        if task.code_coverage {
+        if task.task_type == TaskType::Coverage {
             continue;
         }
-
         let filename = format!("task_{}_output.txt", task.task_number);
         let task_files_base = base_files.clone();
         let client_cloned = client.clone();
@@ -395,7 +404,7 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Apply overwrites for this task
-            let mut files = task_files_base;
+            let mut files = task_files_base.clone();
             let overwrite_dir = overwrite_task_dir(module_id, assignment_id, task.task_number);
             if overwrite_dir.exists() {
                 if let Ok(entries) = std::fs::read_dir(&overwrite_dir) {
@@ -415,6 +424,15 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
                         }
                     }
                 }
+            }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
             }
 
             let request_body = serde_json::json!({
@@ -622,7 +640,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     // Only build coverage files if at least one task needs it
     let mut code_coverage_files = Vec::new();
-    if tasks.iter().any(|t| t.code_coverage) {
+    if tasks.iter().any(|t| t.task_type == TaskType::Coverage) {
         let code_coverage_archive_paths = vec![
             first_archive_in(&submission_path)?,
             first_archive_in(makefile_dir(module_id, assignment_id))?,
@@ -654,10 +672,12 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     // Run tasks concurrently
     use std::sync::Arc;
-    use tokio::sync::Semaphore;
+    use tokio::sync::{Mutex, Semaphore};
     use tokio::task::JoinSet;
     use tokio::time::{Duration, sleep};
     let mut join_set = JoinSet::new();
+
+    let valgrind_outputs = Arc::new(Mutex::new(Vec::<(i64, String)>::new()));
 
     // Bounded concurrency to avoid DB write contention
     let max_concurrency = std::cmp::max(
@@ -676,7 +696,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         );
 
         // Choose appropriate file set based on whether this is a code coverage task
-        let task_files_base = if task.code_coverage {
+        let task_files_base = if task.task_type == TaskType::Coverage {
             code_coverage_files.clone()
         } else {
             files.clone()
@@ -691,12 +711,13 @@ pub async fn create_submission_outputs_for_all_tasks(
         let submission_path_cloned = submission_path.clone();
         let whitelist_cloned = config.code_coverage.whitelist.clone();
         let whitelist = whitelist_cloned.clone();
+        let valgrind_outputs_cloned = valgrind_outputs.clone();
 
         let sem = semaphore.clone();
         join_set.spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             // Prepare task-specific files (apply overwrites)
-            let mut task_files = task_files_base;
+            let mut task_files = task_files_base.clone();
             let overwrite_dir =
                 overwrite_task_dir(module_id_cloned, assignment_id_cloned, task.task_number);
             if overwrite_dir.exists() {
@@ -718,6 +739,16 @@ pub async fn create_submission_outputs_for_all_tasks(
                     }
                 }
             }
+
+            // Ensure makefile.zip is always included last
+            if let Some((_, makefile_content)) = task_files_base
+                .iter()
+                .find(|(name, _)| name == "makefile.zip")
+            {
+                task_files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
+                task_files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
+            }
+
 
             // Compose request
             let request_body = json!({
@@ -766,7 +797,7 @@ pub async fn create_submission_outputs_for_all_tasks(
 
                     let output_combined = output_vec.join("\n");
 
-                    if task.code_coverage {
+                    if task.task_type == TaskType::Coverage {
                         match CoverageProcessor::process_report(config.project.language, &output_combined, &whitelist) {
                             Ok(coverage_json) => {
                                 let coverage_report_path = submission_path_cloned.join("coverage_report.json");
@@ -784,7 +815,7 @@ pub async fn create_submission_outputs_for_all_tasks(
                             }
                         }
                     } else {
-                        // Save with retry to mitigate transient DB locks
+                        let mut task_saved = false;
                         for attempt in 0..5 {
                             match SubmissionOutputModel::save_file(
                                 &db_cloned,
@@ -796,7 +827,8 @@ pub async fn create_submission_outputs_for_all_tasks(
                             .await
                             {
                                 Ok(_) => {
-                                    return true;
+                                    task_saved = true;
+                                    break;
                                 }
                                 Err(e) => {
                                     let backoff_ms = 20u64 * (1 << attempt);
@@ -811,10 +843,24 @@ pub async fn create_submission_outputs_for_all_tasks(
                                 }
                             }
                         }
-                        println!(
-                            "Failed to save submission output for task {} after retries",
-                            task.task_number
-                        );
+
+                        if !task_saved {
+                            println!(
+                                "Failed to save submission output for task {} after retries",
+                                task.task_number
+                            );
+                            return false;
+                        }
+
+                        if task.task_type == TaskType::Valgrind {
+                            let task_number = task.task_number;
+                            let output_for_valgrind = output_combined.clone();
+                            let mut outputs = valgrind_outputs_cloned.lock().await;
+                            outputs.push((task_number, output_for_valgrind));
+                            drop(outputs);
+                        }
+
+                        return true;
                     }
                     false
                 }
@@ -834,6 +880,24 @@ pub async fn create_submission_outputs_for_all_tasks(
 
     if saved_any == 0 {
         return Err("No submission outputs were generated".to_string());
+    }
+
+    let collected_outputs = valgrind_outputs.lock().await;
+    if !collected_outputs.is_empty() {
+        match ValgrindProcessor::process_report(&collected_outputs) {
+            Ok(valgrind_json) => {
+                let valgrind_report_path = submission_path.join("valgrind_report.json");
+                match std::fs::write(&valgrind_report_path, &valgrind_json) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Failed to save combined valgrind report: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to process combined valgrind report: {}", e);
+            }
+        }
     }
 
     Ok(())

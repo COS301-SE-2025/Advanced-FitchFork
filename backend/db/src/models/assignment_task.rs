@@ -1,10 +1,29 @@
 use chrono::{DateTime, Utc};
-use sea_orm::ActiveValue;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, IntoActiveModel, QueryFilter, Set,
 };
+use serde::{Deserialize, Serialize};
 use strum::EnumIter;
+
+#[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "task_type_enum")]
+#[serde(rename_all = "lowercase")]
+pub enum TaskType {
+    #[sea_orm(string_value = "normal")]
+    Normal,
+    #[sea_orm(string_value = "coverage")]
+    Coverage,
+    #[sea_orm(string_value = "valgrind")]
+    Valgrind,
+}
+
+// Add this:
+impl Default for TaskType {
+    fn default() -> Self {
+        TaskType::Normal
+    }
+}
 
 /// Assignment task model representing the `assignment_tasks` table.
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -16,8 +35,7 @@ pub struct Model {
     pub task_number: i64,
     pub name: String,
     pub command: String,
-    pub code_coverage: bool,
-    pub valgrind: bool,
+    pub task_type: TaskType,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -35,14 +53,6 @@ pub enum Relation {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    fn enforce_exclusive_flags(code_coverage: bool, valgrind: bool) -> bool {
-        if code_coverage && valgrind {
-            false
-        } else {
-            valgrind
-        }
-    }
-
     /// Create a new task in the database.
     pub async fn create(
         db: &DatabaseConnection,
@@ -50,17 +60,14 @@ impl Model {
         task_number: i64,
         name: &str,
         command: &str,
-        code_coverage: bool,
-        valgrind: bool,
+        task_type: TaskType,
     ) -> Result<Self, DbErr> {
-        let valgrind = Self::enforce_exclusive_flags(code_coverage, valgrind);
         let active = ActiveModel {
             assignment_id: Set(assignment_id),
             task_number: Set(task_number),
             name: Set(name.to_string()),
             command: Set(command.to_string()),
-            code_coverage: Set(code_coverage),
-            valgrind: Set(valgrind),
+            task_type: Set(task_type),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
@@ -89,8 +96,7 @@ impl Model {
         id: i64,
         name: Option<&str>,
         command: Option<&str>,
-        code_coverage: Option<bool>,
-        valgrind: Option<bool>,
+        task_type: Option<TaskType>,
     ) -> Result<Self, DbErr> {
         let Some(task) = Self::get_by_id(db, id).await? else {
             return Err(DbErr::RecordNotFound("Task not found".into()));
@@ -103,15 +109,8 @@ impl Model {
         if let Some(c) = command {
             active.command = Set(c.to_string());
         }
-        if let Some(cc) = code_coverage {
-            active.code_coverage = Set(cc);
-        }
-        if let Some(vg) = valgrind {
-            let cc = match active.code_coverage {
-                ActiveValue::Set(val) | ActiveValue::Unchanged(val) => val,
-                ActiveValue::NotSet => false,
-            };
-            active.valgrind = Set(Self::enforce_exclusive_flags(cc, vg));
+        if let Some(tt) = task_type {
+            active.task_type = Set(tt);
         }
         active.updated_at = Set(Utc::now());
         active.update(db).await
@@ -124,7 +123,7 @@ impl Model {
         new_name: &str,
         new_command: &str,
     ) -> Result<Self, DbErr> {
-        Self::edit(db, id, Some(new_name), Some(new_command), None, None).await
+        Self::edit(db, id, Some(new_name), Some(new_command), None).await
     }
 
     /// Delete a task by ID.

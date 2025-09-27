@@ -1,5 +1,8 @@
 use crate::seed::Seeder;
-use db::models::{assignment, assignment_task::Model as AssignmentTaskModel};
+use db::models::{
+    assignment,
+    assignment_task::{Model as AssignmentTaskModel, TaskType},
+};
 use rand::seq::SliceRandom;
 use sea_orm::{DatabaseConnection, EntityTrait};
 
@@ -51,8 +54,7 @@ impl Seeder for AssignmentTaskSeeder {
                     task_number,
                     "Untitled Task",
                     &command,
-                    false,
-                    false,
+                    TaskType::Normal,
                 )
                 .await
                 {
@@ -71,21 +73,20 @@ impl Seeder for AssignmentTaskSeeder {
         let special_assignment_id: i64 = 9999;
 
         let special_tasks = vec![
-            (1, "make task1", false),
-            (2, "make task2", false),
-            (3, "make task3", false),
-            (4, "make task4", true),
+            (1, "make task1", TaskType::Normal),
+            (2, "make task2", TaskType::Normal),
+            (3, "make task3", TaskType::Normal),
+            (4, "make task4", TaskType::Coverage),
         ];
 
-        for (task_number, command, code_coverage) in special_tasks {
+        for (task_number, command, task_type) in special_tasks {
             match db::models::assignment_task::Model::create(
                 db,
                 special_assignment_id,
                 task_number,
                 "Untitled Task",
                 command,
-                code_coverage,
-                false,
+                task_type,
             )
             .await
             {
@@ -100,21 +101,20 @@ impl Seeder for AssignmentTaskSeeder {
         let special_assignment_id2: i64 = 9998;
 
         let special_tasks2 = vec![
-            (1, "make task1", false, false),
-            (2, "make task2", false, true),
-            (3, "make task3", false, true),
-            (4, "make task4", true, false),
+            (1, "make task1", TaskType::Normal),
+            (2, "make task2", TaskType::Valgrind),
+            (3, "make task3", TaskType::Valgrind),
+            (4, "make task4", TaskType::Coverage),
         ];
 
-        for (task_number, command, code_coverage, valgrind) in special_tasks2 {
+        for (task_number, command, task_type) in special_tasks2 {
             match db::models::assignment_task::Model::create(
                 db,
                 special_assignment_id2,
                 task_number,
                 "Untitled Task",
                 command,
-                code_coverage,
-                valgrind,
+                task_type,
             )
             .await
             {
@@ -137,8 +137,7 @@ impl Seeder for AssignmentTaskSeeder {
                 task_number,
                 "Task to run code",
                 command,
-                false,
-                false,
+                TaskType::Normal,
             )
             .await
             {
@@ -158,8 +157,7 @@ impl Seeder for AssignmentTaskSeeder {
                     task_number,
                     "Task to run code",
                     command,
-                    false,
-                    false,
+                    TaskType::Normal,
                 )
                 .await
                 {

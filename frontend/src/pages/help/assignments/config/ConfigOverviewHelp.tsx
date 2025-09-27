@@ -179,7 +179,7 @@ export default function ConfigOverviewHelp() {
           Use <b>Security</b> (PIN, cookie binding, IP allowlist) for labs or invigilated sessions.
         </Descriptions.Item>
         <Descriptions.Item label="Search for edge cases">
-          Configure <b>GATLAM</b> and use labeled subsections (<Text code>&-=-&</Text>) in Main for
+          Configure <b>GATLAM</b> and use labeled subsections (<Text code>###</Text>) in Main for
           precise comparisons.
         </Descriptions.Item>
       </Descriptions>

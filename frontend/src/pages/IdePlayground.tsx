@@ -6,11 +6,9 @@ import {
   FileTextOutlined,
   PlusOutlined,
   SaveOutlined,
-  DownloadOutlined,
   MenuOutlined,
 } from '@ant-design/icons';
 import Editor, { type BeforeMount, type OnMount } from '@monaco-editor/react';
-import JSZip from 'jszip';
 import clsx from 'clsx';
 import { useTheme } from '@/context/ThemeContext';
 import { useUI } from '@/context/UIContext';
@@ -129,18 +127,6 @@ export default function IdePlayground({
     /* no-op */
   };
 
-  const downloadZip = async () => {
-    const zip = new JSZip();
-    for (const f of files) zip.file(pathToKey(f.path, f.name), f.value);
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'playground.zip';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // Monaco themes
   const beforeMount: BeforeMount = (monaco) => {
     monaco.editor.defineTheme('ff-light', {
@@ -179,7 +165,7 @@ export default function IdePlayground({
     }
   }, [isDarkMode]);
 
-  // Toolbar menu
+  // Toolbar menu (no export)
   const items: MenuProps['items'] = [
     { key: 'new', icon: <PlusOutlined />, label: 'New file', onClick: createFile },
     {
@@ -189,7 +175,6 @@ export default function IdePlayground({
       onClick: saveAll,
       disabled: !openIds.length,
     },
-    { key: 'zip', icon: <DownloadOutlined />, label: 'Export zip', onClick: downloadZip },
   ];
 
   // File tree renderer; header only on desktop sider
@@ -234,9 +219,6 @@ export default function IdePlayground({
               </Button>
             </Tooltip>
           )}
-          <Button icon={<DownloadOutlined />} onClick={downloadZip}>
-            Export
-          </Button>
         </Space>
       </Layout.Header>
 
@@ -381,11 +363,6 @@ export default function IdePlayground({
                   {!readOnly && (
                     <Button type="primary" icon={<PlusOutlined />} onClick={createFile}>
                       Create file
-                    </Button>
-                  )}
-                  {files.length > 0 && (
-                    <Button icon={<DownloadOutlined />} onClick={downloadZip}>
-                      Export project
                     </Button>
                   )}
                 </div>

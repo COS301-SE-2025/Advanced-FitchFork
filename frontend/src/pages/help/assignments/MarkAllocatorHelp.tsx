@@ -203,7 +203,7 @@ export default function MarkAllocatorHelp() {
         description={
           <>
             Subsections come from the labels you print in <b>Main</b> using the delimiter (
-            <Text code>&-=-&</Text>). If you rename a label, it appears as a new subsection here.
+            <Text code>###</Text>). If you rename a label, it appears as a new subsection here.
             Keep labels stable unless you intend to reallocate.
           </>
         }
@@ -212,7 +212,7 @@ export default function MarkAllocatorHelp() {
       <section id="labels" className="scroll-mt-24" />
       <Title level={3}>Labels & subsections</Title>
       <Paragraph className="mb-0">
-        In your program’s <b>Main</b>, print <Text code>&-=-&</Text> followed by the subsection name
+        In your program’s <b>Main</b>, print <Text code>###</Text> followed by the subsection name
         to start a labeled block. Those names are what you see under each Task when assigning{' '}
         <b>marks</b>. See <a href="/help/assignments/memo-output">Memo Output</a> for examples.
       </Paragraph>
@@ -244,7 +244,7 @@ export default function MarkAllocatorHelp() {
             children: (
               <ul className="list-disc pl-5">
                 <li>
-                  Make sure your <b>Main</b> prints labels using <Text code>&-=-&</Text> before the
+                  Make sure your <b>Main</b> prints labels using <Text code>###</Text> before the
                   lines in that section.
                 </li>
                 <li>

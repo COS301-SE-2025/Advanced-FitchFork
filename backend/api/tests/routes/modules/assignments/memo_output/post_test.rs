@@ -9,7 +9,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use db::models::{
         assignment::Model as AssignmentModel,
-        assignment_task::Model as AssignmentTaskModel,
+        assignment_task::{Model as AssignmentTaskModel, TaskType},
         module::Model as ModuleModel,
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
@@ -49,7 +49,7 @@ mod tests {
         let mut cfg = ExecutionConfig::default_config();
         cfg.project.language = Language::Java; // we’re providing Main.java
         cfg.project.submission_mode = SubmissionMode::Manual; // matches your route expectations
-        cfg.marking.deliminator = "&-=-&".to_string(); // keep existing spelling
+        cfg.marking.deliminator = "###".to_string(); // keep existing spelling
 
         cfg.save(module_id, assignment_id)
             .expect("write config.json");
@@ -113,9 +113,16 @@ mod tests {
         .await
         .unwrap();
 
-        AssignmentTaskModel::create(db, assignment.id, 1, "Task 1", "make task1", false, false)
-            .await
-            .unwrap();
+        AssignmentTaskModel::create(
+            db,
+            assignment.id,
+            1,
+            "Task 1",
+            "make task1",
+            TaskType::Normal,
+        )
+        .await
+        .unwrap();
 
         TestData {
             admin_user,

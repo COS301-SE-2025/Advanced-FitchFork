@@ -1,9 +1,7 @@
-use super::common::{MarkSummary, SubmissionDetailResponse};
+use super::common::{MarkSummary, PlagiarismInfo, SubmissionDetailResponse};
 use crate::services::email::EmailService;
-use crate::{
-    auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late,
-    ws::modules::assignments::submissions::topics::submission_topic,
-};
+use crate::ws::submissions::{emit as sub_emit, payload as sub_payload};
+use crate::{auth::AuthUser, response::ApiResponse, routes::modules::assignments::get::is_late};
 use axum::{
     Json,
     extract::{Extension, Multipart, Path, Query, State},
@@ -13,11 +11,12 @@ use axum::{
 use chrono::Utc;
 use code_runner;
 use db::models::assignment_submission_output;
-use db::models::assignment_task;
+use db::models::assignment_task::{self, TaskType};
 use db::models::user::Entity as UserEntity;
 use db::models::{
     assignment::{Column as AssignmentColumn, Entity as AssignmentEntity},
     assignment_submission::{self, Model as AssignmentSubmissionModel},
+    user,
 };
 use db::models::{assignment_memo_output, assignment_submission::SubmissionStatus};
 use marker::MarkingJob;
@@ -78,8 +77,12 @@ pub struct RemarkResponse {
 
 #[derive(Debug, Serialize)]
 pub struct ResubmitResponse {
-    resubmitted: usize,
-    failed: Vec<FailedOperation>,
+    /// Number actually (re)started
+    pub started: usize,
+    /// Submissions we skipped because they were not in a final state (queued/running/grading)
+    pub skipped_in_progress: usize,
+    /// Per-submission failures (not found, DB errors, etc.)
+    pub failed: Vec<FailedOperation>,
 }
 
 #[derive(Debug, Serialize)]
@@ -94,16 +97,39 @@ const ERR_LATE_NOT_ALLOWED: &str = "Late submissions are not allowed";
 // Helper Functions
 // ============================================================================
 
-fn status_is_failed(status: &SubmissionStatus) -> bool {
-    matches!(
-        status,
-        SubmissionStatus::FailedUpload
-            | SubmissionStatus::FailedCompile
-            | SubmissionStatus::FailedExecution
-            | SubmissionStatus::FailedGrading
-            | SubmissionStatus::FailedInternal
-            | SubmissionStatus::FailedDisallowedCode
-    )
+#[inline]
+async fn emit_status_minimal(
+    app: &AppState,
+    module_id: i64,
+    assignment_id: i64,
+    user_id: i64,
+    submission_id: i64,
+    attempt: i64,
+    status: SubmissionStatus,
+    mark: Option<(f64, f64)>, // (earned, total)
+    message: Option<String>,
+) {
+    let username_opt = user::Entity::find_by_id(user_id)
+        .one(app.db())
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.username);
+
+    let mark_payload = mark.map(|(earned, total)| sub_payload::MarkSummary { earned, total });
+
+    let payload = sub_payload::SubmissionStatusPayload {
+        module_id,
+        assignment_id,
+        submission_id,
+        username: username_opt,
+        attempt,
+        status: status.to_string(),
+        mark: mark_payload,
+        message,
+    };
+
+    sub_emit::status(app.ws(), assignment_id, user_id, payload).await;
 }
 
 fn within_late_window(
@@ -119,58 +145,13 @@ fn within_late_window(
 }
 
 /// Returns (adjusted_earned, capped_to_opt)
-fn cap_late_earned(earned: i64, total: i64, max_percent: u32) -> (i64, Option<i64>) {
-    let cap = ((max_percent as i128) * (total as i128) / 100) as i64;
+fn cap_late_earned(earned: f64, total: f64, max_percent: f64) -> (f64, Option<f64>) {
+    let cap = max_percent * total / 100.0;
     if earned > cap {
         (cap, Some(cap))
     } else {
         (earned, None)
     }
-}
-
-#[derive(Serialize)]
-struct WsMark {
-    earned: i64,
-    total: i64,
-}
-
-async fn emit_submission_status(
-    app: &AppState,
-    module_id: i64,
-    assignment_id: i64,
-    user_id: i64,
-    submission_id: i64,
-    status: SubmissionStatus,
-    message: Option<String>,
-    mark: Option<WsMark>,
-) {
-    let topic = submission_topic(module_id, assignment_id, user_id);
-
-    let mut payload = serde_json::json!({
-        "event": "submission_status",
-        "submission_id": submission_id,
-        "status": status.to_string(),
-        "ts": chrono::Utc::now().to_rfc3339(),
-    });
-
-    if status_is_failed(&status) {
-        if let Some(msg) = message {
-            if let Some(obj) = payload.as_object_mut() {
-                obj.insert("message".into(), serde_json::Value::String(msg));
-            }
-        }
-    }
-
-    if let Some(m) = mark {
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert(
-                "mark".into(),
-                serde_json::json!({ "earned": m.earned, "total": m.total }),
-            );
-        }
-    }
-
-    app.ws().broadcast(&topic, payload.to_string()).await;
 }
 
 /// Applies the appropriate comparator to a marking job based on the scheme
@@ -202,10 +183,180 @@ pub enum DisallowedCodeCheckResult {
     CheckFailed(String),
 }
 
-/// Centralized disallowed code checker that endpoints can easily use
+/// Builds a SubmissionDetailResponse for disallowed code submissions
+fn build_disallowed_submission_response(
+    submission: &AssignmentSubmissionModel,
+    total_marks: f64,
+    assignment: &db::models::assignment::Model,
+) -> SubmissionDetailResponse {
+    let now = Utc::now();
+    SubmissionDetailResponse {
+        id: submission.id,
+        attempt: submission.attempt,
+        filename: submission.filename.clone(),
+        hash: submission.file_hash.clone(),
+        created_at: now.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
+        mark: MarkSummary {
+            earned: 0.0,
+            total: total_marks,
+        },
+        is_practice: submission.is_practice,
+        is_late: is_late(submission.created_at, assignment.due_date),
+        ignored: submission.ignored,
+        status: SubmissionStatus::FailedDisallowedCode.to_string(),
+        tasks: vec![],
+        code_coverage: None,
+        user: None,
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
+    }
+}
+
+/// Saves the submission report to disk
+fn save_submission_report(
+    response: &SubmissionDetailResponse,
+    module_id: i64,
+    assignment_id: i64,
+    user_id: i64,
+    attempt: i64,
+) -> Result<(), String> {
+    let report_path = submission_report_path(module_id, assignment_id, user_id, attempt);
+    if let Some(parent) = report_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(response) {
+        let _ = fs::write(&report_path, json);
+    }
+    Ok(())
+}
+
+/// Checks disallowed code for an existing submission by ID
 ///
-/// This function handles the temp file creation and scanning logic,
-/// returning a result that can be easily matched against.
+/// This function loads an existing submission and checks if it contains disallowed code.
+/// If disallowed code is found, it updates the submission status and returns the response.
+///
+/// # Arguments
+/// * `submission_id` - ID of the existing submission to check
+/// * `file_bytes` - The file bytes to scan for disallowed code
+/// * `config` - The execution configuration containing disallowed patterns
+/// * `db` - Database connection
+/// * `assignment` - Assignment model for metadata
+///
+/// # Returns
+/// * `DisallowedCodeCheckResult` indicating the scan result
+pub async fn check_disallowed_code_existing(
+    submission_id: i64,
+    file_bytes: &[u8],
+    config: &ExecutionConfig,
+    db: &sea_orm::DatabaseConnection,
+    assignment: &db::models::assignment::Model,
+) -> DisallowedCodeCheckResult {
+    let submission = match assignment_submission::Entity::find_by_id(submission_id)
+        .one(db)
+        .await
+    {
+        Ok(Some(sub)) => sub,
+        Ok(None) => {
+            return DisallowedCodeCheckResult::CheckFailed(format!(
+                "Submission {} not found",
+                submission_id
+            ));
+        }
+        Err(e) => {
+            return DisallowedCodeCheckResult::CheckFailed(format!(
+                "Database error loading submission: {}",
+                e
+            ));
+        }
+    };
+
+    // Check if the file contains disallowed code
+    match scan_code_content::contains_dissalowed_code(file_bytes, config) {
+        Ok(true) => {
+            // Load allocator for total marks
+            let allocator =
+                match mark_allocator::load_allocator(assignment.module_id, assignment.id) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        eprintln!("Failed to load allocator: {}", e);
+                        return DisallowedCodeCheckResult::CheckFailed(format!(
+                            "Failed to load mark allocator: {}",
+                            e
+                        ));
+                    }
+                };
+
+            // Update submission status to ignored and failed_disallowed_code
+            let updated =
+                match AssignmentSubmissionModel::set_ignored(db, submission.id, true).await {
+                    Ok(u) => u,
+                    Err(e) => {
+                        eprintln!("Failed to set ignored flag: {:?}", e);
+                        submission.clone()
+                    }
+                };
+
+            let updated = match AssignmentSubmissionModel::update_status(
+                db,
+                updated.id,
+                assignment_submission::SubmissionStatus::FailedDisallowedCode,
+            )
+            .await
+            {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set failed_disallowed_code: {:?}", e);
+                    updated
+                }
+            };
+
+            // Build response using shared helper
+            let response =
+                build_disallowed_submission_response(&updated, allocator.total_value, assignment);
+
+            // Save report using shared helper
+            if let Err(e) = save_submission_report(
+                &response,
+                assignment.module_id,
+                assignment.id,
+                updated.user_id,
+                updated.attempt,
+            ) {
+                eprintln!("Failed to save submission report: {}", e);
+            }
+
+            DisallowedCodeCheckResult::DisallowedFound(response)
+        }
+        Ok(false) => {
+            if submission.ignored {
+                if let Err(e) =
+                    AssignmentSubmissionModel::set_ignored(db, submission.id, false).await
+                {
+                    eprintln!("Failed to unignore submission: {:?}", e);
+                    return DisallowedCodeCheckResult::CheckFailed(format!(
+                        "Failed to unignore submission: {}",
+                        e
+                    ));
+                }
+            }
+            DisallowedCodeCheckResult::Clean
+        }
+        Err(e) => {
+            eprintln!("Disallowed scan error: {}", e);
+            DisallowedCodeCheckResult::CheckFailed(format!("Scan error: {}", e))
+        }
+    }
+}
+
+/// Checks disallowed code for a new submission and creates it if disallowed code is found
+///
+/// This function scans the file bytes for disallowed code. If found, it creates a new submission
+/// with zero marks and FailedDisallowedCode status.
 ///
 /// # Arguments
 /// * `file_bytes` - The uploaded file bytes to scan
@@ -221,24 +372,7 @@ pub enum DisallowedCodeCheckResult {
 ///
 /// # Returns
 /// * `DisallowedCodeCheckResult` indicating the scan result, with complete response if disallowed
-///
-/// # Example
-/// ```rust
-/// match check_disallowed_code(&file_bytes, &config, db, assignment_id, user_id, attempt, is_practice, &file_name, &file_hash, &assignment).await {
-///     DisallowedCodeCheckResult::Clean => {
-///         // Continue with normal processing
-///     }
-///     DisallowedCodeCheckResult::DisallowedFound(response) => {
-///         // Return the pre-built response
-///         return (StatusCode::FORBIDDEN, Json(ApiResponse::success(response, message)));
-///     }
-///     DisallowedCodeCheckResult::CheckFailed(e) => {
-///         // Log error but continue (best-effort policy)
-///         eprintln!("Disallowed code check failed: {}", e);
-///     }
-/// }
-/// ```
-pub async fn check_disallowed_code(
+pub async fn check_disallowed_code_new(
     file_bytes: &[u8],
     config: &ExecutionConfig,
     db: &sea_orm::DatabaseConnection,
@@ -264,13 +398,13 @@ pub async fn check_disallowed_code(
                     }
                 };
 
-            // Save the submission with zero mark total preset from allocator
+            // Save the submission with zero mark and total from allocator
             let saved = match AssignmentSubmissionModel::save_file(
                 db,
                 assignment_id,
                 user_id,
                 attempt,
-                0,
+                0.0,
                 allocator.total_value,
                 is_practice,
                 file_name,
@@ -289,10 +423,18 @@ pub async fn check_disallowed_code(
                 }
             };
 
-            // Immediately mark as failed_disallowed_code and use the UPDATED model for accurate status
-            let updated = match AssignmentSubmissionModel::set_failed(
+            // Update submission status to ignored and failed_disallowed_code
+            let updated = match AssignmentSubmissionModel::set_ignored(db, saved.id, true).await {
+                Ok(u) => u,
+                Err(e) => {
+                    eprintln!("Failed to set ignored flag: {:?}", e);
+                    saved
+                }
+            };
+
+            let updated = match AssignmentSubmissionModel::update_status(
                 db,
-                saved.id,
+                updated.id,
                 assignment_submission::SubmissionStatus::FailedDisallowedCode,
             )
             .await
@@ -300,47 +442,27 @@ pub async fn check_disallowed_code(
                 Ok(u) => u,
                 Err(e) => {
                     eprintln!("Failed to set failed_disallowed_code: {:?}", e);
-                    saved
+                    updated
                 }
             };
 
-            let now = Utc::now();
-            let response = SubmissionDetailResponse {
-                id: updated.id,
-                attempt: updated.attempt,
-                filename: updated.filename.clone(),
-                hash: updated.file_hash.clone(),
-                created_at: now.to_rfc3339(),
-                updated_at: now.to_rfc3339(),
-                mark: MarkSummary {
-                    earned: 0,
-                    total: allocator.total_value,
-                },
-                is_practice: updated.is_practice,
-                is_late: is_late(updated.created_at, assignment.due_date),
-                ignored: updated.ignored,
-                status: SubmissionStatus::FailedDisallowedCode.to_string(),
-                tasks: vec![],
-                code_coverage: None,
-                user: None,
-            };
+            // Build response using shared helper
+            let response =
+                build_disallowed_submission_response(&updated, allocator.total_value, assignment);
 
-            let report_path = submission_report_path(
+            // Save report using shared helper
+            if let Err(e) = save_submission_report(
+                &response,
                 assignment.module_id,
                 assignment.id,
                 updated.user_id,
                 updated.attempt,
-            );
-            if let Some(parent) = report_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&response) {
-                let _ = fs::write(&report_path, json);
+            ) {
+                eprintln!("Failed to save submission report: {}", e);
             }
 
             DisallowedCodeCheckResult::DisallowedFound(response)
         }
-
         Ok(false) => DisallowedCodeCheckResult::Clean,
         Err(e) => {
             eprintln!("Disallowed scan error: {}", e);
@@ -523,7 +645,7 @@ async fn grade_submission(
     let mut ordered_student_paths: Vec<std::path::PathBuf> = Vec::new();
     let mut db_pairing_ok = true;
 
-    for task in tasks.iter().filter(|t| !t.code_coverage) {
+    for task in tasks.iter().filter(|t| t.task_type != TaskType::Coverage) {
         // Memo output for this task
         match assignment_memo_output::Entity::find()
             .filter(assignment_memo_output::Column::AssignmentId.eq(assignment.id))
@@ -612,7 +734,7 @@ async fn grade_submission(
                                                 .one(db)
                                                 .await
                                         {
-                                            if !task.code_coverage {
+                                            if task.task_type != TaskType::Coverage {
                                                 // Map task_number to memo file index (task_number is 1-based)
                                                 if let Some(mp) = memo_files_disk
                                                     .get((task.task_number.max(1) as usize) - 1)
@@ -684,6 +806,17 @@ async fn grade_submission(
         marking_job = marking_job.with_coverage(coverage_path);
     }
 
+    let valgrind_path = attempt_dir(
+        assignment.module_id,
+        assignment.id,
+        submission.user_id,
+        submission.attempt,
+    )
+    .join("valgrind_report.json");
+    if valgrind_path.exists() {
+        marking_job = marking_job.with_valgrind(valgrind_path);
+    }
+
     let mark_report = match marking_job.mark().await {
         Ok(report) => report,
         Err(e) => {
@@ -707,8 +840,6 @@ async fn grade_submission(
                 | MarkerError::MissingField(msg)
                 | MarkerError::IoError(msg)
                 | MarkerError::MissingTaskId(msg)
-                | MarkerError::ParseCoverageError(msg)
-                | MarkerError::ParseAllocatorError(msg)
                 | MarkerError::ParseOutputError(msg) => msg,
             };
             return Err(error_msg);
@@ -722,7 +853,7 @@ async fn grade_submission(
 
     // Apply late cap if applicable
     let is_late_now = submission.created_at > assignment.due_date;
-    let mut _late_capped_to: Option<i64> = None;
+    let mut _late_capped_to: Option<f64> = None;
     if is_late_now && config.marking.late.allow_late_submissions {
         if within_late_window(
             submission.created_at,
@@ -749,10 +880,16 @@ async fn grade_submission(
         .code_coverage
         .as_ref()
         .map(|cov| {
-            let summary = cov.summary.as_ref().map(|s| MarkSummary {
-                earned: s.earned,
-                total: s.total,
-            });
+            let summary = cov
+                .summary
+                .as_ref()
+                .map(|s| super::common::CodeCoverageSummary {
+                    earned: s.earned,
+                    total: s.total,
+                    total_lines: s.total_lines as u32,
+                    covered_lines: s.covered_lines as u32,
+                    coverage_percent: s.coverage_percent,
+                });
             let files: Vec<serde_json::Value> = cov
                 .files
                 .iter()
@@ -797,6 +934,12 @@ async fn grade_submission(
         tasks,
         code_coverage,
         user: None, // just ignore this lol
+        plagiarism: PlagiarismInfo {
+            flagged: false,
+            similarity: 0.0,
+            lines_matched: 0,
+            description: "".to_string(),
+        },
     };
 
     let report_path = submission_report_path(
@@ -1024,6 +1167,13 @@ fn parse_bool_flag(v: Option<&str>) -> bool {
 ///     "status": "graded",
 ///     "tasks": [ ... ],
 ///     "code_coverage": [ ... ],
+///     "user": null,
+///     "plagiarism": {
+///         "flagged": false,
+///         "similarity": 0.0,
+///         "lines_matched": 0,
+///         "description": ""
+///     },
 ///   }
 /// }
 /// ```
@@ -1231,7 +1381,7 @@ pub async fn submit_assignment(
     };
 
     // disallowed code scan
-    match check_disallowed_code(
+    match check_disallowed_code_new(
         &file_bytes,
         &config,
         db,
@@ -1247,21 +1397,41 @@ pub async fn submit_assignment(
     {
         DisallowedCodeCheckResult::Clean => {}
         DisallowedCodeCheckResult::DisallowedFound(response) => {
-            // WS: failed_upload + zero mark
-            emit_submission_status(
-                &app_state,
+            let username_opt = user::Entity::find_by_id(claims.sub)
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|u| u.username);
+
+            // staff sees a "new submission" (even though it immediately failed policy)
+            // (do NOT emit a status for staff here)
+            let new_payload = sub_payload::SubmissionNewPayload {
                 module_id,
                 assignment_id,
-                claims.sub,
-                response.id,
-                SubmissionStatus::FailedUpload,
-                Some("Disallowed code patterns detected".into()),
-                Some(WsMark {
-                    earned: 0,
+                submission_id: response.id,
+                username: username_opt.clone(),
+                attempt: response.attempt,
+                is_practice: response.is_practice,
+                created_at: response.created_at.clone(),
+            };
+            sub_emit::new_submission_staff(app_state.ws(), assignment_id, new_payload).await;
+
+            // owner gets the immediate FailedUpload status
+            let status_payload = sub_payload::SubmissionStatusPayload {
+                module_id,
+                assignment_id,
+                submission_id: response.id,
+                username: username_opt,
+                attempt: response.attempt,
+                status: SubmissionStatus::FailedUpload.to_string(),
+                mark: Some(sub_payload::MarkSummary {
+                    earned: 0.0,
                     total: response.mark.total,
                 }),
-            )
-            .await;
+                message: Some("Disallowed code patterns detected".into()),
+            };
+            sub_emit::status_owner(app_state.ws(), assignment_id, claims.sub, status_payload).await;
 
             let body = json!({
                 "id": response.id,
@@ -1296,8 +1466,8 @@ pub async fn submit_assignment(
         assignment_id,
         claims.sub,
         attempt,
-        0,
-        0,
+        0.0,
+        0.0,
         is_practice,
         &file_name,
         &file_hash,
@@ -1316,18 +1486,37 @@ pub async fn submit_assignment(
         }
     };
 
-    // emit QUEUED immediately for both modes
-    emit_submission_status(
-        &app_state,
+    let username_opt = user::Entity::find_by_id(claims.sub)
+        .one(db)
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.username);
+
+    // staff sees a "new submission" event (no status at creation)
+    let new_payload = sub_payload::SubmissionNewPayload {
         module_id,
         assignment_id,
-        claims.sub,
-        submission.id,
-        SubmissionStatus::Queued,
-        None,
-        None,
-    )
-    .await;
+        submission_id: submission.id,
+        username: username_opt.clone(),
+        attempt: submission.attempt,
+        is_practice,
+        created_at: submission.created_at.to_rfc3339(),
+    };
+    sub_emit::new_submission_staff(app_state.ws(), assignment_id, new_payload).await;
+
+    // owner gets the initial Queued status
+    let status_payload = sub_payload::SubmissionStatusPayload {
+        module_id,
+        assignment_id,
+        submission_id: submission.id,
+        username: username_opt,
+        attempt: submission.attempt,
+        status: SubmissionStatus::Queued.to_string(),
+        mark: None,
+        message: None,
+    };
+    sub_emit::status_owner(app_state.ws(), assignment_id, claims.sub, status_payload).await;
 
     // ====== BRANCH: async vs blocking ======
     if async_mode {
@@ -1431,15 +1620,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedUpload,
-                Some("Late submissions are not allowed for this assignment".into()),
                 None,
+                Some("Late submissions are not allowed for this assignment".into()),
             )
             .await;
 
@@ -1453,12 +1643,13 @@ async fn run_submission_pipeline(
         .await
         .is_ok()
     {
-        emit_submission_status(
+        emit_status_minimal(
             app,
             module_id,
             assignment_id,
             user_id,
             submission.id,
+            submission.attempt,
             SubmissionStatus::Running,
             None,
             None,
@@ -1467,7 +1658,7 @@ async fn run_submission_pipeline(
     }
 
     // execute
-    if let Err(exec_err) =
+    if let Err(_) =
         process_submission_code(db, submission.id, config.clone(), module_id, assignment_id).await
     {
         let _ = AssignmentSubmissionModel::set_failed(
@@ -1477,29 +1668,30 @@ async fn run_submission_pipeline(
         )
         .await;
 
-        emit_submission_status(
+        emit_status_minimal(
             app,
             module_id,
             assignment_id,
             user_id,
             submission.id,
+            submission.attempt,
             SubmissionStatus::FailedExecution,
-            Some(exec_err.to_string()),
             None,
+            Some("Failed to run code for submission".into()),
         )
         .await;
 
-        // return Err("Failed to run code for submission".to_string());
-        return Err(format!("Failed to run code for submission: {}", exec_err));
+        return Err("Failed to run code for submission".to_string());
     }
 
     // grading start
-    emit_submission_status(
+    emit_status_minimal(
         app,
         module_id,
         assignment_id,
         user_id,
         submission.id,
+        submission.attempt,
         SubmissionStatus::Grading,
         None,
         None,
@@ -1509,7 +1701,7 @@ async fn run_submission_pipeline(
     // paths
     let (_, _, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
         Ok(paths) => paths,
-        Err(e) => {
+        Err(_) => {
             let _ = AssignmentSubmissionModel::set_failed(
                 db,
                 submission.id,
@@ -1517,15 +1709,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedInternal,
-                Some(e.clone()),
                 None,
+                Some("Failed to load mark allocator".into()),
             )
             .await;
 
@@ -1545,24 +1738,21 @@ async fn run_submission_pipeline(
     .await
     {
         Ok(resp) => {
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::Graded,
+                Some((resp.mark.earned, resp.mark.total)),
                 None,
-                Some(WsMark {
-                    earned: resp.mark.earned,
-                    total: resp.mark.total,
-                }),
             )
             .await;
-
             Ok(resp)
         }
-        Err(e) => {
+        Err(_) => {
             let _ = AssignmentSubmissionModel::set_failed(
                 db,
                 submission.id,
@@ -1570,15 +1760,16 @@ async fn run_submission_pipeline(
             )
             .await;
 
-            emit_submission_status(
+            emit_status_minimal(
                 app,
                 module_id,
                 assignment_id,
                 user_id,
                 submission.id,
+                submission.attempt,
                 SubmissionStatus::FailedGrading,
-                Some(e.clone()),
                 None,
+                Some("Failed to mark submission".into()),
             )
             .await;
 
@@ -1705,38 +1896,47 @@ pub async fn remark_submissions(
             let memo_outputs = memo_outputs.clone();
             let config = config.clone();
             async move {
+                // Extract extension from submission filename
+                let ext = std::path::PathBuf::from(&submission.filename)
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string());
+
                 if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
                     assignment.module_id,
                     assignment.id,
                     submission.user_id,
                     submission.attempt,
                     submission.id,
-                    None,
+                    ext.as_deref(),
                 )) {
-                    match check_disallowed_code(&file_bytes, &config, db, assignment_id, submission.user_id, submission.attempt, submission.is_practice, &submission.filename, &submission.file_hash, &assignment).await {
+                    match check_disallowed_code_existing(
+                        submission.id,
+                        &file_bytes,
+                        &config,
+                        db,
+                        &assignment,
+                    )
+                    .await
+                    {
                         DisallowedCodeCheckResult::Clean => {
                             // Continue with normal processing
                         }
                         DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                            return Err("Submission rejected: disallowed code patterns detected (marked as 0)".to_string());
+                            return Ok(());
                         }
                         DisallowedCodeCheckResult::CheckFailed(e) => {
                             eprintln!("Disallowed code check failed: {}", e);
-                            return Err("Failed to scan submission for disallowed code patterns".to_string());
+                            return Err("Failed to scan submission for disallowed code patterns"
+                                .to_string());
                         }
                     }
+                } else {
+                    return Err("Failed to read submission file from disk".to_string());
                 }
 
-                grade_submission(
-                    submission,
-                    &assignment,
-                    &memo_outputs,
-                    &config,
-                    db,
-                    true,
-                )
-                .await
-                .map(|_| ())
+                grade_submission(submission, &assignment, &memo_outputs, &config, db, true)
+                    .await
+                    .map(|_| ())
             }
         })
         .await;
@@ -1864,16 +2064,7 @@ pub async fn resubmit_submissions(
             }
         };
 
-    let (_, _, memo_outputs) = match get_assignment_paths(assignment.module_id, assignment.id) {
-        Ok(paths) => paths,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ResubmitResponse>::error(e)),
-            );
-        }
-    };
-
+    // load config once (used by background tasks)
     let config = match get_execution_config(module_id, assignment_id) {
         Ok(config) => config,
         Err(e) => {
@@ -1884,130 +2075,167 @@ pub async fn resubmit_submissions(
         }
     };
 
-    // Run resubmissions concurrently per submission, with bounded concurrency
-    use std::sync::Arc;
-    use tokio::sync::Semaphore;
-    use tokio::task::JoinSet;
-
-    let max_concurrency = std::cmp::max(
-        1,
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            / 2,
-    );
-    let semaphore = Arc::new(Semaphore::new(max_concurrency));
-    let mut join_set = JoinSet::new();
-
-    for sid in submission_ids.clone() {
-        let db = db.clone();
-        let assignment = assignment.clone();
-        let memo_outputs = memo_outputs.clone();
-        let config = config.clone();
-        let sem = semaphore.clone();
-
-        join_set.spawn(async move {
-            let _permit = sem.acquire_owned().await.ok();
-
-            // Fetch submission and validate
-            let submission = match assignment_submission::Entity::find_by_id(sid)
-                .one(&db)
-                .await
-            {
-                Ok(Some(s)) => s,
-                Ok(None) => return (sid, Err("Submission not found".to_string())),
-                Err(e) => return (sid, Err(format!("Database error: {}", e))),
-            };
-            if submission.assignment_id != assignment.id {
-                return (
-                    sid,
-                    Err("Submission does not belong to this assignment".to_string()),
-                );
-            }
-
-            if let Ok(file_bytes) = std::fs::read(util::paths::submission_file_path(
-                assignment.module_id,
-                assignment.id,
-                submission.user_id,
-                submission.attempt,
-                submission.id,
-                None,
-            )) {
-                match check_disallowed_code(&file_bytes, &config, &db, assignment.id, submission.user_id, submission.attempt, submission.is_practice, &submission.filename, &submission.file_hash, &assignment).await {
-                    DisallowedCodeCheckResult::Clean => {
-                        // Continue with normal processing
-                    }
-                    DisallowedCodeCheckResult::DisallowedFound(_response) => {
-                        return (sid, Err("Submission rejected: disallowed code patterns detected (marked as 0)".to_string()));
-                    }
-                    DisallowedCodeCheckResult::CheckFailed(e) => {
-                        eprintln!("Disallowed code check failed: {}", e);
-                        return (sid, Err("Failed to scan submission for disallowed code patterns".to_string()));
-                    }
-                }
-            }
-
-            if let Err(e) =
-                clear_submission_output(&submission, assignment.module_id, assignment.id)
-            {
-                return (sid, Err(e));
-            }
-
-            if let Err(e) = process_submission_code(
-                &db,
-                submission.id,
-                config.clone(),
-                module_id,
-                assignment_id,
-            )
-            .await
-            {
-                return (
-                    sid,
-                    Err(format!("Failed to run code for submission: {}", e)),
-                );
-            }
-
-            match grade_submission(
-                submission,
-                &assignment,
-                &memo_outputs,
-                &config,
-                &db,
-                true,
-            )
-            .await
-            {
-                Ok(_) => (sid, Ok(())),
-                Err(e) => (sid, Err(e)),
-            }
-        });
-    }
-
-    let mut resubmitted = 0usize;
+    // tallies we return immediately
+    let mut started: usize = 0;
+    let mut skipped_in_progress: usize = 0;
     let mut failed: Vec<FailedOperation> = Vec::new();
-    while let Some(res) = join_set.join_next().await {
-        match res {
-            Ok((_sid, Ok(()))) => resubmitted += 1,
-            Ok((sid, Err(e))) => failed.push(FailedOperation {
+
+    for sid in submission_ids {
+        // fetch submission
+        let submission = match assignment_submission::Entity::find_by_id(sid).one(db).await {
+            Ok(Some(s)) => s,
+            Ok(None) => {
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: "Submission not found".into(),
+                });
+                continue;
+            }
+            Err(e) => {
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: format!("Database error: {e}"),
+                });
+                continue;
+            }
+        };
+
+        // sanity: same assignment
+        if submission.assignment_id != assignment.id {
+            failed.push(FailedOperation {
+                id: Some(sid),
+                error: "Submission does not belong to this assignment".into(),
+            });
+            continue;
+        }
+
+        // skip if still in progress (queued | running | grading)
+        if !submission.is_complete() {
+            skipped_in_progress += 1;
+            continue;
+        }
+
+        // --- Disallowed code check (read existing file from disk) ---
+        let ext = std::path::Path::new(&submission.filename)
+            .extension()
+            .map(|e| e.to_string_lossy().to_string());
+
+        let file_path = util::paths::submission_file_path(
+            assignment.module_id,
+            assignment.id,
+            submission.user_id,
+            submission.attempt,
+            submission.id,
+            ext.as_deref(),
+        );
+
+        let file_bytes = match std::fs::read(&file_path) {
+            Ok(b) => b,
+            Err(_) => {
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: "Failed to read submission file from disk".into(),
+                });
+                continue;
+            }
+        };
+
+        match check_disallowed_code_existing(submission.id, &file_bytes, &config, db, &assignment)
+            .await
+        {
+            DisallowedCodeCheckResult::Clean => {
+                // proceed
+            }
+            DisallowedCodeCheckResult::DisallowedFound(_response) => {
+                // Emit “FailedUpload” to owner and record as failed; don't start pipeline
+                emit_status_minimal(
+                    &app_state,
+                    module_id,
+                    assignment_id,
+                    submission.user_id,
+                    submission.id,
+                    submission.attempt,
+                    SubmissionStatus::FailedUpload,
+                    None,
+                    Some("Disallowed code patterns detected".into()),
+                )
+                .await;
+
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: "Submission rejected: disallowed code patterns detected (marked as 0)"
+                        .into(),
+                });
+                continue;
+            }
+            DisallowedCodeCheckResult::CheckFailed(e) => {
+                eprintln!("Disallowed code check failed: {e}");
+                failed.push(FailedOperation {
+                    id: Some(sid),
+                    error: "Failed to scan submission for disallowed code patterns".into(),
+                });
+                continue;
+            }
+        }
+
+        // clear old outputs before launching
+        if let Err(e) = clear_submission_output(&submission, assignment.module_id, assignment.id) {
+            failed.push(FailedOperation {
                 id: Some(sid),
                 error: e,
-            }),
-            Err(e) => failed.push(FailedOperation {
-                id: None,
-                error: format!("Join error: {}", e),
-            }),
+            });
+            continue;
         }
+
+        // set to queued and spawn the full background pipeline (do NOT await)
+        emit_status_minimal(
+            &app_state,
+            module_id,
+            assignment_id,
+            submission.user_id,
+            submission.id,
+            submission.attempt,
+            SubmissionStatus::Queued,
+            None,
+            None,
+        )
+        .await;
+
+        let db_bg = db.clone();
+        let app_bg = app_state.clone();
+        let assignment_bg = assignment.clone();
+        let config_bg = config.clone();
+        let submission_bg = submission.clone();
+
+        tokio::spawn(async move {
+            // Full pipeline (exec + grade + WS statuses). Handles its own emits.
+            let _ = run_submission_pipeline(
+                &db_bg,
+                &app_bg,
+                &assignment_bg,
+                &config_bg,
+                &submission_bg,
+                module_id,
+                assignment_id,
+                submission_bg.user_id,
+            )
+            .await;
+        });
+
+        started += 1;
     }
 
     let response = ResubmitResponse {
-        resubmitted,
+        started,
+        skipped_in_progress,
         failed,
     };
+
     let message = format!(
-        "Resubmitted {}/{} submissions",
-        resubmitted,
-        submission_ids.len()
+        "Started {} resubmission(s); {} skipped (in progress); {} failed.",
+        response.started,
+        response.skipped_in_progress,
+        response.failed.len()
     );
 
     (

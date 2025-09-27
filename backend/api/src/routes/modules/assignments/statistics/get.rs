@@ -16,6 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 use util::{
     execution_config::{ExecutionConfig, GradingPolicy},
+    mark_allocator::load_allocator,
     paths::submission_report_path,
     state::AppState,
 };
@@ -37,7 +38,7 @@ pub struct AssignmentStatsResponse {
     pub worst: i64, // %
 
     // extras
-    pub total_marks: i64, // sum of "total" across subs
+    pub total_marks: f64, // sum of "total" across subs
     pub num_students_submitted: usize,
     pub num_passed: usize,
     pub num_failed: usize,
@@ -52,9 +53,9 @@ pub struct AssignmentStatsResponse {
 // ---------- Helpers ----------
 
 #[inline]
-fn to_pct(earned: Option<i64>, total: Option<i64>) -> Option<i64> {
+fn to_pct(earned: Option<f64>, total: Option<f64>) -> Option<i64> {
     match (earned, total) {
-        (Some(e), Some(t)) if t > 0 => Some(((e as f64 / t as f64) * 100.0).round() as i64),
+        (Some(e), Some(t)) if t > 0.0 => Some(((e / t) * 100.0).round() as i64),
         _ => None,
     }
 }
@@ -109,6 +110,11 @@ fn stddev(xs: &[i64]) -> f64 {
         .sum::<f64>()
         / (xs.len() as f64 - 1.0);
     var.sqrt()
+}
+
+#[inline]
+fn r2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
 }
 
 #[inline]
@@ -246,7 +252,7 @@ pub async fn get_assignment_stats(
             stddev: 0.0,
             best: 0,
             worst: 0,
-            total_marks: 0,
+            total_marks: 0.0,
             num_students_submitted: 0,
             num_passed: 0,
             num_failed: 0,
@@ -331,11 +337,11 @@ pub async fn get_assignment_stats(
                 let earned = json
                     .get("mark")
                     .and_then(|m| m.get("earned"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 let total = json
                     .get("mark")
                     .and_then(|m| m.get("total"))
-                    .and_then(|v| v.as_i64());
+                    .and_then(|v| v.as_f64());
                 if let Some(p) = to_pct(earned, total) {
                     user_marks
                         .entry(s.user_id)
@@ -381,8 +387,12 @@ pub async fn get_assignment_stats(
         (num_passed as f64 / graded as f64) * 100.0
     };
 
-    // totals across counted rows only
-    let total_marks: i64 = rows.iter().map(|s| s.total).sum();
+    // Use allocator's total_value (assignment max marks), not a sum over submissions
+    let total_marks: f64 = match load_allocator(module_id, assignment_id) {
+        Ok(alloc) => alloc.total_value,
+        Err(_) => 0.0, // fallback if allocator is missing/invalid
+    };
+
     let num_students_submitted = rows.iter().map(|s| s.user_id).collect::<HashSet<_>>().len();
 
     // aggregates on effective marks
@@ -397,15 +407,15 @@ pub async fn get_assignment_stats(
         total,   // counted attempts only (non-practice, non-ignored)
         graded,  // students with an effective mark among counted rows
         pending, // counted attempts minus graded
-        pass_rate: (pass_rate * 10.0).round() / 10.0,
-        avg_mark: (avg_mark * 10.0).round() / 10.0,
-        median: (median_mark * 10.0).round() / 10.0,
-        p75: (p75_mark * 10.0).round() / 10.0,
-        stddev: (stddev_mark * 10.0).round() / 10.0,
+        pass_rate: r2(pass_rate),
+        avg_mark: r2(avg_mark),
+        median: r2(median_mark),
+        p75: r2(p75_mark),
+        stddev: r2(stddev_mark),
         best,
         worst,
-        total_marks,            // sum over counted rows
-        num_students_submitted, // students with at least one counted row
+        total_marks: r2(total_marks), // assignment max marks (from allocator)
+        num_students_submitted,       // students with at least one counted row
         num_passed,
         num_failed,
         num_full_marks,

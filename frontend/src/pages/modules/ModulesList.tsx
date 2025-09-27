@@ -8,8 +8,6 @@ import StatCard from '@/components/StatCard';
 import ModuleCard from '@/components/modules/ModuleCard';
 import ModuleCreditsTag from '@/components/modules/ModuleCreditsTag';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
-import CreateModal from '@/components/common/CreateModal';
-import EditModal from '@/components/common/EditModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
 import { useAuth } from '@/context/AuthContext';
@@ -17,8 +15,50 @@ import { useUI } from '@/context/UIContext';
 import ModuleListItem from '@/components/modules/ModuleListItem';
 import { formatModuleCode } from '@/utils/modules';
 import { ModulesEmptyState, ModuleYearTag } from '@/components/modules';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 
 const currentYear = new Date().getFullYear();
+
+// Shared field schema (one source of truth)
+const moduleFields: FormModalField[] = [
+  {
+    name: 'code',
+    label: 'Module Code',
+    type: 'text',
+    placeholder: 'e.g. COS212',
+    constraints: {
+      required: true,
+      length: { min: 3, max: 16 },
+      // If your codes aren't strictly ABC123, relax/remove the regex:
+      pattern: { regex: /^[A-Za-z]{3}\d{3}$/, message: 'Format e.g. COS212' },
+    },
+  },
+  {
+    name: 'year',
+    label: 'Year',
+    type: 'number',
+    constraints: {
+      required: true,
+      number: { min: 2000, max: currentYear + 1, integer: true, step: 1, precision: 0 },
+    },
+  },
+  {
+    name: 'description',
+    label: 'Description',
+    type: 'textarea',
+    placeholder: 'Short description',
+    constraints: { required: true, length: { min: 3, max: 200 } },
+  },
+  {
+    name: 'credits',
+    label: 'Credits',
+    type: 'number',
+    constraints: {
+      required: true,
+      number: { min: 0, max: 9999, integer: true, step: 1, precision: 0 },
+    },
+  },
+];
 
 const ModulesList = () => {
   const auth = useAuth();
@@ -118,10 +158,7 @@ const ModulesList = () => {
             label: 'Add Module',
             icon: <PlusOutlined />,
             isPrimary: true,
-            handler: ({ refresh }) => {
-              setCreateOpen(true);
-              refresh();
-            },
+            handler: () => setCreateOpen(true),
           },
         ],
         entity: (entity: Module) => [
@@ -129,10 +166,9 @@ const ModulesList = () => {
             key: 'edit',
             label: 'Edit',
             icon: <EditOutlined />,
-            handler: ({ refresh }) => {
+            handler: () => {
               setEditingItem(entity);
               setEditOpen(true);
-              refresh();
             },
           },
           {
@@ -222,12 +258,7 @@ const ModulesList = () => {
             columnToggleEnabled
             actions={actions}
             columns={[
-              {
-                title: 'ID',
-                dataIndex: 'id',
-                key: 'id',
-                defaultHidden: true,
-              },
+              { title: 'ID', dataIndex: 'id', key: 'id', defaultHidden: true },
               {
                 title: 'Code',
                 dataIndex: 'code',
@@ -279,48 +310,43 @@ const ModulesList = () => {
             emptyNoEntities={
               <ModulesEmptyState isAdmin={auth.isAdmin} onCreate={() => setCreateOpen(true)} />
             }
+            filtersStorageKey={'modules:list:filters:v1'}
           />
         </div>
 
-        <CreateModal
+        {/* Create */}
+        <FormModal
           open={createOpen}
           onCancel={() => setCreateOpen(false)}
-          onCreate={handleCreate}
+          onSubmit={handleCreate}
+          title="Add Module"
+          submitText="Create"
           initialValues={{
             code: '',
             year: currentYear,
             description: '',
             credits: 16,
           }}
-          fields={[
-            { name: 'code', label: 'Module Code', type: 'text', required: true },
-            { name: 'year', label: 'Year', type: 'number', required: true },
-            { name: 'description', label: 'Description', type: 'text', required: true },
-            { name: 'credits', label: 'Credits', type: 'number', required: true },
-          ]}
-          title="Add Module"
+          fields={moduleFields}
         />
 
-        <EditModal
+        {/* Edit */}
+        <FormModal
           open={editOpen}
           onCancel={() => {
             setEditOpen(false);
             setEditingItem(null);
           }}
-          onEdit={handleEdit}
+          onSubmit={handleEdit}
+          title="Edit Module"
+          submitText="Save"
           initialValues={{
             code: editingItem?.code ?? '',
             year: editingItem?.year ?? currentYear,
             description: editingItem?.description ?? '',
             credits: editingItem?.credits ?? 16,
           }}
-          fields={[
-            { name: 'code', label: 'Module Code', type: 'text', required: true },
-            { name: 'year', label: 'Year', type: 'number', required: true },
-            { name: 'description', label: 'Description', type: 'text', required: true },
-            { name: 'credits', label: 'Credits', type: 'number', required: true },
-          ]}
-          title="Edit Module"
+          fields={moduleFields}
         />
       </div>
     </div>

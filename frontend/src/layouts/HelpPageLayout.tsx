@@ -1,20 +1,20 @@
 // src/pages/help/HelpPageLayout.tsx
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Layout, Menu, Anchor, Button } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HelpProvider, useHelp } from '@/context/HelpContext';
 import { HELP_MENU_ITEMS, HELP_LEAF_ROUTES } from '@/pages/help/menuConfig';
 import { useUI } from '@/context/UIContext';
-import MobilePageHeader from '@/components/common/MobilePageHeader';
+import { useTheme } from '@/context/ThemeContext';
 
-const { Sider, Content } = Layout;
+const { Sider, Content, Header } = Layout;
 
 function RightOfContentAnchor() {
   const { items, activeHref, setActiveHref, getContainer, targetOffset, extra } = useHelp();
 
   return (
-    <div className="!p-4">
+    <div className="!pt-1.5 !pr-3 !pb-3 !pl-3">
       <Anchor
         items={items}
         affix={false}
@@ -46,7 +46,7 @@ function RightOfContentAnchor() {
   );
 }
 
-function LeftSider() {
+function LeftSider({ topOffset }: { topOffset: number }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -68,17 +68,11 @@ function LeftSider() {
       width={280}
       collapsedWidth={0}
       breakpoint="lg"
-      className="!bg-white dark:!bg-gray-950 border-r border-gray-200 dark:border-gray-800 !sticky !top-0 !h-screen !p-0"
+      className="!bg-white dark:!bg-gray-950 border-r border-gray-200 dark:border-gray-800 !sticky !p-0"
+      style={{ top: topOffset, height: `calc(100vh - ${topOffset}px)` }}
     >
-      {/* Make the whole sider a column; header stays, menu area flexes + scrolls */}
       <div className="h-full flex flex-col overflow-hidden">
-        {/* Header (fixed) */}
-        <div className="px-6 pt-5 pb-3">
-          <div className="font-semibold text-gray-800 dark:text-gray-100 text-lg">Help Center</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Docs &amp; Guides</div>
-        </div>
-
-        {/* Scroll area — no scrollbar, always fully scrollable, extra bottom padding so last item isn’t cut */}
+        {/* Removed the 'Browse topics' header */}
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar !pb-24">
           <Menu
             mode="inline"
@@ -90,7 +84,6 @@ function LeftSider() {
             className="!bg-transparent !p-0"
             style={{ border: 'none' }}
           />
-          {/* small spacer so the last item never kisses the bottom edge */}
           <div className="h-4" aria-hidden />
         </div>
       </div>
@@ -98,7 +91,6 @@ function LeftSider() {
   );
 }
 
-// Bottom bar rendered by the LAYOUT. Pages don't know about it.
 function PrevNextBar() {
   const { isMobile } = useUI();
   const location = useLocation();
@@ -119,7 +111,6 @@ function PrevNextBar() {
   if (!prev && !next) return null;
 
   if (isMobile) {
-    // MOBILE: vertical, full width
     return (
       <div className="mt-6 flex flex-col gap-3">
         {prev ? (
@@ -127,7 +118,6 @@ function PrevNextBar() {
             Previous: {prev.label}
           </Button>
         ) : null}
-
         {next ? (
           <Button
             block
@@ -142,7 +132,6 @@ function PrevNextBar() {
     );
   }
 
-  // DESKTOP: existing horizontal layout
   return (
     <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
       {prev ? (
@@ -152,7 +141,6 @@ function PrevNextBar() {
       ) : (
         <span />
       )}
-
       {next ? (
         <Button
           type="primary"
@@ -168,45 +156,106 @@ function PrevNextBar() {
 
 function Shell() {
   const { isMobile } = useUI();
+  const { isDarkMode } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // true only when you're on the mobile help index (MobileHelpPageMenu)
   const atMobileHelpIndex = isMobile && /^\/help\/?$/.test(location.pathname);
 
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerOffset, setHeaderOffset] = useState<number>(80);
+  useEffect(() => {
+    const update = () => {
+      if (headerRef.current) setHeaderOffset(headerRef.current.offsetHeight);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  const logoSrc = isDarkMode ? '/ff_logo_dark.svg' : '/ff_logo_light.svg';
+
+  const quickLinks = useMemo(
+    () => [
+      { key: 'dashboard', label: 'Dashboard', to: '/dashboard' },
+      { key: 'modules', label: 'Modules', to: '/modules' },
+      { key: 'assignments', label: 'Assignments Help', to: '/help/assignments/setup' },
+      { key: 'contact', label: 'Contact', to: '/help/support/contact' },
+    ],
+    [],
+  );
+
   return (
-    <Layout className="!bg-white dark:!bg-gray-950 !h-full !min-h-0">
-      {!isMobile && <LeftSider />}
+    <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
+      <Header
+        ref={headerRef as any}
+        className="flex items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-800 px-4 md:px-8 !py-2 sticky top-0 z-40 !bg-white dark:!bg-gray-950"
+        style={{ height: 'auto', lineHeight: 'normal' }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <img src={logoSrc} alt="FitchFork logo" className="h-9 w-9 shrink-0" />
+          <span className="truncate text-base sm:text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100">
+            Help Center
+          </span>
+        </div>
 
-      <Layout className="!bg-white dark:!bg-gray-950 flex-1 !min-h-0">
-        {isMobile && <MobilePageHeader />}
-        <Content className="!min-h-0">
-          <div
-            id="help-scroll-container"
-            className="h-full overflow-y-auto"
-            style={{
-              scrollBehavior: 'auto',
-              scrollPaddingTop: isMobile ? 56 : 12,
-              // optional: smaller bottom padding when the bar is hidden
-              scrollPaddingBottom: atMobileHelpIndex ? 16 : 120,
-            }}
-          >
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,960px)_240px]">
-              <div className="px-4 md:px-8 pt-4 pb-12">
-                <Outlet />
-                {/* show Prev/Next everywhere EXCEPT on the MobileHelpPageMenu */}
-                {!atMobileHelpIndex && <PrevNextBar />}
-              </div>
+        <div className="hidden sm:flex flex-wrap gap-2 justify-end">
+          {quickLinks.map((link) => (
+            <Button
+              key={link.key}
+              type={link.key === 'contact' ? 'primary' : 'default'}
+              onClick={() => navigate(link.to)}
+            >
+              {link.label}
+            </Button>
+          ))}
+        </div>
+      </Header>
 
-              <div className="hidden lg:block border-l border-gray-200 dark:border-gray-800">
-                <div className="!sticky !top-0">
-                  <RightOfContentAnchor />
+      <Layout className="flex-1 flex !bg-white dark:!bg-gray-950 !min-h-0 overflow-hidden">
+        {!isMobile && <LeftSider topOffset={headerOffset} />}
+
+        <Layout className="flex-1 !bg-white dark:!bg-gray-950 !min-h-0 overflow-hidden">
+          <Content className="flex-1 !min-h-0 overflow-hidden">
+            <div
+              id="help-scroll-container"
+              className="overflow-y-auto"
+              style={{
+                height: `calc(100vh - ${headerOffset}px)`,
+                scrollBehavior: 'auto',
+
+                scrollPaddingTop: headerOffset,
+                scrollPaddingBottom: atMobileHelpIndex ? 16 : 120,
+              }}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,960px)_240px]">
+                <div className="px-4 md:px-8 pt-4 pb-12">
+                  <Outlet />
+                  {!atMobileHelpIndex && <PrevNextBar />}
                 </div>
+
+                {/* RIGHT COLUMN: full-height vertical rule + sticky anchor */}
+                <div
+                  className="relative hidden lg:block"
+                  style={{ minHeight: `calc(100vh - ${headerOffset}px)` }}
+                >
+                  {/* Full-height border that aligns exactly under the header */}
+                  <div className="absolute inset-y-0 left-0 w-px bg-gray-200 dark:bg-gray-800" />
+
+                  {/* Only the contents are sticky; sits tight under the header */}
+                  <div className="sticky" style={{ top: Math.max(0, headerOffset - 45) }}>
+                    <div className="max-h-[calc(100vh- var(--hdr))]">
+                      <RightOfContentAnchor />
+                    </div>
+                  </div>
+                </div>
+                {/* NOTE: The absolute border above removes the gap you saw */}
               </div>
             </div>
-          </div>
-        </Content>
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
+    </div>
   );
 }
 
