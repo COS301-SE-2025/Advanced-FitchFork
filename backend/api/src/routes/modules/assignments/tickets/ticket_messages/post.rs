@@ -16,6 +16,7 @@ use db::models::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
+use db::models::tickets::TicketStatus;
 
 use crate::{
     auth::AuthUser,
@@ -106,6 +107,42 @@ pub async fn create_message(
         )
             .into_response();
     }
+
+        let ticket = match db::models::tickets::Entity::find_by_id(ticket_id).one(db).await {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Ticket not found")),
+            )
+                .into_response();
+        }
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Database error while loading ticket")),
+            )
+                .into_response();
+        }
+    };
+    if ticket.status == TicketStatus::Closed {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Ticket is closed")),
+        )
+            .into_response();
+    }
+
+    let _content = match req.get("content").and_then(|v| v.as_str()) {
+        Some(c) if !c.trim().is_empty() => c.trim().to_string(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error("Content is required")),
+            )
+                .into_response();
+        }
+    };
 
     let content = match req.get("content").and_then(|v| v.as_str()) {
         Some(c) if !c.trim().is_empty() => c.trim().to_string(),

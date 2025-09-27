@@ -1303,7 +1303,7 @@ mod tests {
 
     #[tokio::test]
     async fn unauthorized_without_token() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        let (_ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
         let req = build_request(&format!("/tickets/{}/ws", ticket.id), None);
         let res = app.oneshot(req).await.unwrap();
