@@ -11,6 +11,8 @@ pub struct RunRequest {
     pub config: HashMap<String, Value>,
     pub commands: Vec<String>,
     pub files: Vec<(String, Vec<u8>)>,
+    #[serde(default)]
+    pub interpreter: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -41,7 +43,13 @@ pub async fn run_code(Json(payload): Json<RunRequest>) -> impl IntoResponse {
     };
 
     match manager
-        .run(&execution_config, payload.commands, payload.files)
+        .run(
+            &execution_config,
+            payload.commands,
+            payload.files,
+            //defaults to false if it doesn't exist
+            payload.interpreter,
+        )
         .await
     {
         Ok(output) => (StatusCode::OK, axum::Json(RunResponse { output })).into_response(),

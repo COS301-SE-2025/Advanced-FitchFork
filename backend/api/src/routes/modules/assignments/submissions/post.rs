@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{fs, path::PathBuf};
 use tokio_util::bytes;
+use util::mark_allocator::{generate_allocator, save_allocator};
 use util::paths::{
     assignment_dir, attempt_dir, mark_allocator_path as allocator_path, memo_output_dir,
     submission_report_path,
@@ -965,7 +966,7 @@ async fn process_submission_code(
     module_id: i64,
     assignment_id: i64,
 ) -> Result<(), String> {
-    match config.project.submission_mode {
+    let res = match config.project.submission_mode {
         SubmissionMode::Manual => {
             code_runner::create_submission_outputs_for_all_tasks(db, submission_id)
                 .await
@@ -973,39 +974,9 @@ async fn process_submission_code(
         }
 
         SubmissionMode::GATLAM => {
-            let res = ai::run_ga_job(db, submission_id, config, module_id, assignment_id)
+            ai::run_ga_job(db, submission_id, config.clone(), module_id, assignment_id)
                 .await
-                .map_err(|e| format!("GATLAM failed: {}", e));
-
-            if res.is_ok() {
-                if let Some(sub) = assignment_submission::Entity::find_by_id(submission_id)
-                    .one(db)
-                    .await
-                    .map_err(|e| e.to_string())?
-                {
-                    if let Some(user) = UserEntity::find_by_id(sub.user_id)
-                        .one(db)
-                        .await
-                        .map_err(|e| e.to_string())?
-                    {
-                        let to_email = user.email.clone();
-                        let display_name = user.email.clone();
-
-                        if let Err(e) = EmailService::send_marking_done_email(
-                            &to_email,
-                            &display_name,
-                            submission_id,
-                            module_id,
-                            assignment_id,
-                        )
-                        .await
-                        {
-                            tracing::warn!("send_marking_done_email failed: {}", e);
-                        }
-                    }
-                }
-            }
-            res
+                .map_err(|e| format!("GATLAM failed: {}", e))
         }
 
         SubmissionMode::CodeCoverage => {
@@ -1017,7 +988,102 @@ async fn process_submission_code(
         SubmissionMode::RNG => ai::run_rng_job(db, submission_id, &config)
             .await
             .map_err(|e| format!("RNG run failed: {}", e)),
+    };
+
+    if res.is_ok() {
+        match config.project.submission_mode {
+            SubmissionMode::GATLAM | SubmissionMode::RNG | SubmissionMode::CodeCoverage => {
+                let tasks = assignment_task::Entity::find()
+                    .filter(assignment_task::Column::AssignmentId.eq(assignment_id))
+                    .all(db)
+                    .await
+                    .map_err(|e| format!("Failed to fetch assignment tasks: {}", e))?;
+
+                let memo_dir = memo_output_dir(module_id, assignment_id);
+                let mut task_file_pairs = Vec::with_capacity(tasks.len());
+
+                for t in &tasks {
+                    let (code_coverage, valgrind) = match t.task_type {
+                        TaskType::Coverage => (true, false),
+                        TaskType::Valgrind => (false, true),
+                        TaskType::Normal => (false, false),
+                    };
+
+                    let task_info = util::mark_allocator::TaskInfo {
+                        id: t.id,
+                        task_number: t.task_number,
+                        code_coverage,
+                        valgrind,
+                        name: if t.name.trim().is_empty() {
+                            format!("Task {}", t.task_number)
+                        } else {
+                            t.name.clone()
+                        },
+                    };
+
+                    let memo_path = match assignment_memo_output::Entity::find()
+                        .filter(assignment_memo_output::Column::AssignmentId.eq(assignment_id))
+                        .filter(assignment_memo_output::Column::TaskId.eq(t.id))
+                        .one(db)
+                        .await
+                    {
+                        Ok(Some(m)) => {
+                            let path = storage_root_path().join(&m.path);
+                            path
+                        }
+                        Ok(None) => {
+                            let path = memo_dir.join(format!("no_memo_for_task_{}", t.id));
+                            path
+                        }
+                        Err(e) => return Err(format!("Failed to fetch memo outputs: {}", e)),
+                    };
+
+                    task_file_pairs.push((task_info, memo_path));
+                }
+
+                let alloc = generate_allocator(module_id, assignment_id, &task_file_pairs)
+                    .await
+                    .map_err(|e| format!("Failed to generate mark allocator: {}", e))?;
+
+                if let Err(e) = save_allocator(module_id, assignment_id, &alloc) {
+                    return Err(format!("Failed to persist allocator: {}", e));
+                }
+
+                // Send marking-done email for GATLAM
+                if config.project.submission_mode == SubmissionMode::GATLAM {
+                    if let Some(sub) = assignment_submission::Entity::find_by_id(submission_id)
+                        .one(db)
+                        .await
+                        .map_err(|e| e.to_string())?
+                    {
+                        if let Some(user) = UserEntity::find_by_id(sub.user_id)
+                            .one(db)
+                            .await
+                            .map_err(|e| e.to_string())?
+                        {
+                            let to_email = user.email.clone();
+                            let display_name = user.email.clone();
+
+                            if let Err(e) = EmailService::send_marking_done_email(
+                                &to_email,
+                                &display_name,
+                                submission_id,
+                                module_id,
+                                assignment_id,
+                            )
+                            .await
+                            {
+                                tracing::warn!("send_marking_done_email failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
+
+    res
 }
 
 /// Clears the submission output directory

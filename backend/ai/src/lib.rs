@@ -127,11 +127,8 @@ pub async fn run_rng_job(
 ) -> Result<(), String> {
     let seed: u64 = random::<u64>();
 
-    let iterations: usize = config
-        .gatlam
-        .number_of_generations
-        .saturating_mul(config.gatlam.population_size);
-
+    //RNG has only one iteration
+    let iterations: usize = 1;
     let rng_cfgs = exec_to_rng_configs(config);
     let mut generation = RngGen::new(seed);
 
