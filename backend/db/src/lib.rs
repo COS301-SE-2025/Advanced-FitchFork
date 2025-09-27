@@ -1,3 +1,4 @@
+pub mod achievement_system;
 pub mod grade;
 pub mod models;
 pub mod test_utils;
