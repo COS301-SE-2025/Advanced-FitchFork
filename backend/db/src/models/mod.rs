@@ -1,4 +1,5 @@
 pub mod achievements;
+pub mod achievement_progress;
 pub mod announcements;
 pub mod assignment;
 pub mod assignment_file;
@@ -20,6 +21,8 @@ pub mod tickets;
 pub mod user;
 pub mod user_module_role;
 
+pub use achievements::Entity as Achievement;
+pub use achievement_progress::Entity as AchievementProgress;
 pub use announcements::Entity as Announcements;
 pub use assignment::Entity as Assignment;
 pub use assignment_file::Entity as AssignmentFile;

@@ -1,4 +1,5 @@
 pub mod achievements;
+pub mod achievement_progress;
 pub mod announcement;
 pub mod assignment;
 pub mod assignment_file;

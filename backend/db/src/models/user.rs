@@ -40,13 +40,17 @@ pub struct Model {
     pub profile_picture_path: Option<String>,
 }
 
-/// This enum would define relations if any exist. Currently unused.
-#[derive(Copy, Clone, Debug, EnumIter)]
-pub enum Relation {}
+/// Defines relationships between `users` and other tables.
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    /// Link to achievement progress records.
+    #[sea_orm(has_many = "super::achievement_progress::Entity")]
+    AchievementProgress,
+}
 
-impl RelationTrait for Relation {
-    fn def(&self) -> RelationDef {
-        panic!("No RelationDef implemented")
+impl Related<super::achievement_progress::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AchievementProgress.def()
     }
 }
 

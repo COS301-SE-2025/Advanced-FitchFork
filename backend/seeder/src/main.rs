@@ -11,6 +11,7 @@ use crate::seeds::{
     assignment_task::AssignmentTaskSeeder, module::ModuleSeeder,
     plagiarism_case::PlagiarismCaseSeeder, tickets::TicketSeeder, user::UserSeeder,
     user_role::UserRoleSeeder, achievements::AchievementSeeder,
+    achievement_progress::AchievementProgressSeeder,
 };
 
 mod seed;
@@ -49,6 +50,7 @@ async fn main() {
         ),
         (Box::new(TicketSeeder), "Ticket"),
         (Box::new(AchievementSeeder), "Achievement"),
+        (Box::new(AchievementProgressSeeder), "AchievementProgress"),
     ] {
         run_seeder(&*seeder, name, &db).await;
     }
