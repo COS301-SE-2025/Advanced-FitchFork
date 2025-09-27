@@ -18,7 +18,8 @@ use axum::{
 use db::models::tickets::Model as TicketModel;
 use serde::Serialize;
 use util::state::AppState;
-
+use db::models::user_module_role::{self, Role as ModuleRole};
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 /// Response payload for ticket status updates.
 #[derive(Serialize)]
 struct TicketStatusResponse {
@@ -80,10 +81,27 @@ pub async fn open_ticket(
             .into_response();
     }
 
-    let data = TicketStatusResponse {
-        id: ticket_id,
-        status: "open",
-    };
+    let roles = user_module_role::Entity::find()
+        .filter(user_module_role::Column::UserId.eq(user_id))
+        .filter(user_module_role::Column::ModuleId.eq(module_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+
+    let is_student = roles.iter().any(|r| matches!(r.role, ModuleRole::Student));
+    let is_staff = roles.iter().any(|r| {
+        matches!(r.role, ModuleRole::Lecturer | ModuleRole::AssistantLecturer | ModuleRole::Tutor)
+    });
+
+    if !claims.admin && is_student && !is_staff {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("Students may not reopen tickets")),
+        )
+            .into_response();
+    }
+
+    let data = TicketStatusResponse { id: ticket_id, status: "open" };
 
     match TicketModel::set_open(db, ticket_id).await {
         Ok(_) => (
