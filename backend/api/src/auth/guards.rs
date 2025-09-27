@@ -850,6 +850,7 @@ pub async fn validate_known_ids(
 }
 
 // TODO Write tests for this gaurd
+// guard*
 pub async fn allow_ticket_ws_access(
     State(app_state): State<AppState>,
     Path(params): Path<HashMap<String, String>>,

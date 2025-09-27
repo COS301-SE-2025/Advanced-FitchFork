@@ -23,8 +23,6 @@ pub mod get;
 /// Routes:
 /// - `GET /grades`         → List grades (students restricted to own)
 /// - `GET /grades/export`  → Export grades as CSV
-// TODO: Write tests for GET /grades
-// TODO: Write tests for GET /grades/export
 pub fn grade_routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route(

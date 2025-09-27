@@ -1055,7 +1055,6 @@ mod tests {
         assert_eq!(json["data"]["is_late"], false);
     }
 
-    //TODO - Reece this test passes but it should be a negative test
     #[tokio::test]
     #[serial]
     async fn test_large_file_submission() {
@@ -1089,6 +1088,69 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["filename"], "large.zip");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_large_file_submission_rejected() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let file = create_large_zip_file(200 * 1024 * 1024); // 200 MB
+
+        let (boundary, body) = multipart_body("too_big.zip", &file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+
+        assert!(
+            response.status() == StatusCode::PAYLOAD_TOO_LARGE
+                || response.status() == StatusCode::BAD_REQUEST,
+            "expected 413 or 400, got {}",
+            response.status()
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["success"], false, "expected success = false on oversized upload");
+
+        assert!(
+            json.get("error").is_some() || json.get("message").is_some(),
+            "expected an error/message field in response: {}",
+            json
+        );
+
+        if let Some(msg) = json.get("error").and_then(|v| v.as_str())
+            .or_else(|| json.get("message").and_then(|v| v.as_str()))
+        {
+            assert!(
+                msg.to_ascii_lowercase().contains("too large")
+                    || msg.to_ascii_lowercase().contains("size")
+                    || msg.to_ascii_lowercase().contains("payload"),
+                "unexpected error message: {msg}"
+            );
+        }
+
+        assert!(!json.get("data").is_some(), "did not expect data on failure");
     }
 
     #[tokio::test]
