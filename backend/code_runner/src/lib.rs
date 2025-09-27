@@ -178,13 +178,22 @@ pub async fn create_memo_outputs_for_all_tasks(
             }
 
             // Ensure makefile.zip is always included last
-            if let Some((_, makefile_content)) = task_files_base
-                .iter()
-                .find(|(name, _)| name == "makefile.zip")
-            {
-                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
-                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
-            }
+            let makefile_archive_path = first_archive_in(makefile_dir(module_id, assignment_id))?;
+            let makefile_content = std::fs::read(&makefile_archive_path)
+                .map_err(|e| format!("Failed to read makefile archive: {}", e))?;
+            let makefile_filename = makefile_archive_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| {
+                    format!(
+                        "Invalid makefile archive filename: {:?}",
+                        makefile_archive_path
+                    )
+                })?
+                .to_string();
+
+            files.retain(|(name, _)| name != &makefile_filename); // remove any overwrite copy
+            files.push((makefile_filename, makefile_content));
 
             let request_body = serde_json::json!({
                 "config": config_value,
@@ -427,13 +436,22 @@ pub async fn create_memo_outputs_for_all_tasks_with_submission_id(
             }
 
             // Ensure makefile.zip is always included last
-            if let Some((_, makefile_content)) = task_files_base
-                .iter()
-                .find(|(name, _)| name == "makefile.zip")
-            {
-                files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
-                files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
-            }
+            let makefile_archive_path = first_archive_in(makefile_dir(module_id, assignment_id))?;
+            let makefile_content = std::fs::read(&makefile_archive_path)
+                .map_err(|e| format!("Failed to read makefile archive: {}", e))?;
+            let makefile_filename = makefile_archive_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .ok_or_else(|| {
+                    format!(
+                        "Invalid makefile archive filename: {:?}",
+                        makefile_archive_path
+                    )
+                })?
+                .to_string();
+
+            files.retain(|(name, _)| name != &makefile_filename); // remove any overwrite copy
+            files.push((makefile_filename, makefile_content));
 
             let request_body = serde_json::json!({
                 "config": config_value,
@@ -644,7 +662,7 @@ pub async fn create_submission_outputs_for_all_tasks(
         let code_coverage_archive_paths = vec![
             first_archive_in(&submission_path)?,
             first_archive_in(makefile_dir(module_id, assignment_id))?,
-            first_archive_in(memo_dir(module_id, assignment_id))?, // <-- only used if needed
+            first_archive_in(memo_dir(module_id, assignment_id))?,
         ];
 
         for path in &code_coverage_archive_paths {
@@ -741,12 +759,29 @@ pub async fn create_submission_outputs_for_all_tasks(
             }
 
             // Ensure makefile.zip is always included last
-            if let Some((_, makefile_content)) = task_files_base
-                .iter()
-                .find(|(name, _)| name == "makefile.zip")
-            {
-                task_files.retain(|(name, _)| name != "makefile.zip"); // remove any overwrite copy
-                task_files.push(("makefile.zip".to_string(), makefile_content.clone())); // append original
+            match first_archive_in(makefile_dir(module_id_cloned, assignment_id_cloned)) {
+                Ok(makefile_archive_path) => {
+                    match std::fs::read(&makefile_archive_path) {
+                        Ok(makefile_content) => {
+                            if let Some(makefile_filename) = makefile_archive_path
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string())
+                            {
+                                task_files.retain(|(name, _)| name != &makefile_filename);
+                                task_files.push((makefile_filename, makefile_content));
+                            }
+                        }
+                        Err(e) => {
+                            println!("Failed to read makefile archive for task {}: {}", task.task_number, e);
+                            return false;
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to find makefile archive for task {}: {}", task.task_number, e);
+                    return false;
+                }
             }
 
 
@@ -962,65 +997,68 @@ pub async fn create_main_from_interpreter(
     let lang = config.project.language;
     let main_file_name = lang.main_filename();
 
-    // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
-    // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
-    // from the generated_string and save it as the main archive locally.
-    let looks_like_compile = lang.is_compile_cmd(&interpreter.command);
+    //WHAT IS THE POINT OF THIS?????
 
-    if looks_like_compile {
-        // --- STOPGAP BRANCH ---
-        // Build a simple source file from `generated_string`.
-        // Adjust templates per language as needed.
-        let synthesized = lang
-            .synthesize_program(generated_string)
-            .unwrap_or_else(|| {
-                // very safe fallback (keeps old behavior working even if a new lang lacks a template)
-                format!("// synthesized stub\n// {}\n", generated_string)
-            });
+    //     // Heuristic: if the "interpreter" is actually a compile/run line (e.g., g++ Main.cpp),
+    //     // then there's no source to compile yet. Synthesize a Main.cpp (or Main.*)
+    //     // from the generated_string and save it as the main archive locally.
+    //     // let looks_like_compile = lang.is_compile_cmd(&interpreter.command);
 
-        // Zip and save as the "main" archive
-        let zip_ext = std::path::Path::new(main_file_name)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("txt");
-        let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
+    // if looks_like_compile {
+    //     println!("BAAAAAAAAAAAAAD");
+    //     // --- STOPGAP BRANCH ---
+    //     // Build a simple source file from `generated_string`.
+    //     // Adjust templates per language as needed.
+    //     let synthesized = lang
+    //         .synthesize_program(generated_string)
+    //         .unwrap_or_else(|| {
+    //             // very safe fallback (keeps old behavior working even if a new lang lacks a template)
+    //             format!("// synthesized stub\n// {}\n", generated_string)
+    //         });
 
-        let mut zip_data = Vec::new();
-        {
-            let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
-            zip_writer
-                .start_file(main_file_name, FileOptions::<()>::default())
-                .map_err(|e| format!("zip start_file failed: {}", e))?;
-            zip_writer
-                .write_all(synthesized.as_bytes())
-                .map_err(|e| format!("zip write failed: {}", e))?;
-            zip_writer
-                .finish()
-                .map_err(|e| format!("zip finish failed: {}", e))?;
-        }
+    //     // Zip and save as the "main" archive
+    //     let zip_ext = std::path::Path::new(main_file_name)
+    //         .extension()
+    //         .and_then(|s| s.to_str())
+    //         .unwrap_or("txt");
+    //     let zip_filename = format!("main_interpreted.{}.zip", zip_ext);
 
-        AssignmentFileModel::save_file(
-            db,
-            assignment_id,
-            module_id,
-            FileType::Main,
-            &zip_filename,
-            &zip_data,
-        )
-        .await
-        .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
+    //     let mut zip_data = Vec::new();
+    //     {
+    //         let mut zip_writer = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+    //         zip_writer
+    //             .start_file(main_file_name, FileOptions::<()>::default())
+    //             .map_err(|e| format!("zip start_file failed: {}", e))?;
+    //         zip_writer
+    //             .write_all(synthesized.as_bytes())
+    //             .map_err(|e| format!("zip write failed: {}", e))?;
+    //         zip_writer
+    //             .finish()
+    //             .map_err(|e| format!("zip finish failed: {}", e))?;
+    //     }
 
-        if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
-            eprintln!(
-                "[DEBUG] synthesized {} ({} bytes) into {}",
-                main_file_name,
-                zip_data.len(),
-                zip_filename
-            );
-        }
+    //     AssignmentFileModel::save_file(
+    //         db,
+    //         assignment_id,
+    //         module_id,
+    //         FileType::Main,
+    //         &zip_filename,
+    //         &zip_data,
+    //     )
+    //     .await
+    //     .map_err(|e| format!("Failed to save synthesized main zip: {}", e))?;
 
-        return Ok(());
-    }
+    //     if env::var("GA_DEBUG_PRINT").ok().as_deref() == Some("1") {
+    //         eprintln!(
+    //             "[DEBUG] synthesized {} ({} bytes) into {}",
+    //             main_file_name,
+    //             zip_data.len(),
+    //             zip_filename
+    //         );
+    //     }
+
+    //     return Ok(());
+    // }
 
     // --- GENERATOR BRANCH (original intent) ---
     // The interpreter is a true generator: run it and expect source code on stdout.
@@ -1045,6 +1083,7 @@ pub async fn create_main_from_interpreter(
         "config": config_value,
         "commands": [command],
         "files": [("interpreter.zip", interpreter_bytes)],
+        "interpreter":true,
     });
 
     let resp = client
