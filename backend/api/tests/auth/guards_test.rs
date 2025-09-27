@@ -6,7 +6,7 @@ mod tests {
             guards::{
                 Empty, allow_admin, allow_assigned_to_module, allow_assistant_lecturer,
                 allow_authenticated, allow_lecturer, allow_ready_assignment, allow_student,
-                allow_tutor, validate_known_ids, allow_ticket_ws_access,
+                allow_ticket_ws_access, allow_tutor, validate_known_ids,
             },
         },
         response::ApiResponse,
@@ -1121,215 +1121,214 @@ mod tests {
         }
     }
 
-
     mod test_allow_ticket_ws_access {
-    use super::*;
-    use axum::{routing::get, middleware};
-    use db::models::{
-        assignment::{AssignmentType, Model as AssignmentModel},
-        tickets::Model as TicketModel,
-    };
-    use chrono::Utc;
+        use super::*;
+        use axum::{middleware, routing::get};
+        use chrono::Utc;
+        use db::models::{
+            assignment::{AssignmentType, Model as AssignmentModel},
+            tickets::Model as TicketModel,
+        };
 
-    /// Build a router that mounts the ticket WS guard on a path with `{ticket_id}`.
-    fn create_ticket_router(app_state: AppState) -> Router {
-        async fn test_handler() -> &'static str { "OK" }
+        /// Build a router that mounts the ticket WS guard on a path with `{ticket_id}`.
+        fn create_ticket_router(app_state: AppState) -> Router {
+            async fn test_handler() -> &'static str {
+                "OK"
+            }
 
-        Router::new()
-            .route(
-                "/tickets/{ticket_id}/ws",
-                get(test_handler)
-                    .route_layer(middleware::from_fn_with_state(
+            Router::new()
+                .route(
+                    "/tickets/{ticket_id}/ws",
+                    get(test_handler).route_layer(middleware::from_fn_with_state(
                         app_state.clone(),
                         allow_ticket_ws_access,
                     )),
-            )
-            // still require auth, as in your other guard tests
-            .layer(middleware::from_fn(allow_authenticated))
-            .with_state(app_state)
-    }
-
-    async fn create_ticket_for(
-        db: &sea_orm::DatabaseConnection,
-        assignment_id: i64,
-        author_user_id: i64,
-    ) -> TicketModel {
-        // If you already have a helper like `TicketModel::create(...)`, use it.
-        // Assuming signature: (db, assignment_id, user_id, title, body)
-        #[allow(unused_mut)]
-        let mut ticket = TicketModel::create(
-            db,
-            assignment_id,
-            author_user_id,
-            "Guard Ticket",
-            "Testing guard access",
-        )
-        .await
-        .unwrap();
-
-        /*
-        use db::models::tickets::{ActiveModel as TicketActive, Status as TicketStatus};
-        use sea_orm::{ActiveModelTrait, Set};
-        let ticket = TicketActive {
-            id: Default::default(), // auto
-            assignment_id: Set(assignment_id),
-            user_id: Set(author_user_id),
-            title: Set("Guard Ticket".to_string()),
-            body: Set("Testing guard access".to_string()),
-            status: Set(TicketStatus::Open), // adjust to your enum/defaults
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-            ..Default::default()
+                )
+                // still require auth, as in your other guard tests
+                .layer(middleware::from_fn(allow_authenticated))
+                .with_state(app_state)
         }
-        .insert(db)
-        .await
-        .unwrap();
-        */
 
-        ticket
-    }
+        async fn create_ticket_for(
+            db: &sea_orm::DatabaseConnection,
+            assignment_id: i64,
+            author_user_id: i64,
+        ) -> TicketModel {
+            // If you already have a helper like `TicketModel::create(...)`, use it.
+            // Assuming signature: (db, assignment_id, user_id, title, body)
+            #[allow(unused_mut)]
+            let mut ticket = TicketModel::create(
+                db,
+                assignment_id,
+                author_user_id,
+                "Guard Ticket",
+                "Testing guard access",
+            )
+            .await
+            .unwrap();
 
-    /// Creates a module + assignment + ticket authored by the student user from `setup()`.
-    async fn setup_with_ticket() -> (TestContext, AssignmentModel, TicketModel, Router) {
-        let ctx = setup().await;
-        let db = ctx.app_state.db();
+            /*
+            use db::models::tickets::{ActiveModel as TicketActive, Status as TicketStatus};
+            use sea_orm::{ActiveModelTrait, Set};
+            let ticket = TicketActive {
+                id: Default::default(), // auto
+                assignment_id: Set(assignment_id),
+                user_id: Set(author_user_id),
+                title: Set("Guard Ticket".to_string()),
+                body: Set("Testing guard access".to_string()),
+                status: Set(TicketStatus::Open), // adjust to your enum/defaults
+                created_at: Set(Utc::now()),
+                updated_at: Set(Utc::now()),
+                ..Default::default()
+            }
+            .insert(db)
+            .await
+            .unwrap();
+            */
 
-        // Make an assignment inside the test module
-        let assignment = AssignmentModel::create(
-            db,
-            ctx.module_id,
-            "WS-GUARD",
-            None,
-            AssignmentType::Assignment,
-            Utc::now(),
-            Utc::now(),
-        )
-        .await
-        .unwrap();
+            ticket
+        }
 
-        // Student opens a ticket for that assignment (becomes author)
-        let ticket = create_ticket_for(db, assignment.id, /* author */ {
-            // the `student_token` belongs to a user created in `setup()`
-            // We need that user's id; rebuild it via the token OR look it up.
-            // We already have it in setup() when generating JWT, so reuse the same user.
-            // Here, we re-fetch the student by username to keep this local:
-            use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
-            use db::models::user::{Entity as UserEntity, Column as UserCol};
-            let student = UserEntity::find()
-                .filter(UserCol::Username.eq("guard_student"))
-                .one(db)
-                .await
-                .unwrap()
-                .expect("student user not found");
-            student.id
-        })
-        .await;
+        /// Creates a module + assignment + ticket authored by the student user from `setup()`.
+        async fn setup_with_ticket() -> (TestContext, AssignmentModel, TicketModel, Router) {
+            let ctx = setup().await;
+            let db = ctx.app_state.db();
 
-        let app = create_ticket_router(ctx.app_state.clone());
-        (ctx, assignment, ticket, app)
-    }
+            // Make an assignment inside the test module
+            let assignment = AssignmentModel::create(
+                db,
+                ctx.module_id,
+                "WS-GUARD",
+                None,
+                AssignmentType::Assignment,
+                Utc::now(),
+                Utc::now(),
+            )
+            .await
+            .unwrap();
 
-    #[tokio::test]
-    async fn allows_author() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+            // Student opens a ticket for that assignment (becomes author)
+            let ticket = create_ticket_for(db, assignment.id, /* author */ {
+                // the `student_token` belongs to a user created in `setup()`
+                // We need that user's id; rebuild it via the token OR look it up.
+                // We already have it in setup() when generating JWT, so reuse the same user.
+                // Here, we re-fetch the student by username to keep this local:
+                use db::models::user::{Column as UserCol, Entity as UserEntity};
+                use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+                let student = UserEntity::find()
+                    .filter(UserCol::Username.eq("guard_student"))
+                    .one(db)
+                    .await
+                    .unwrap()
+                    .expect("student user not found");
+                student.id
+            })
+            .await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.student_token), // author == student
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-    }
+            let app = create_ticket_router(ctx.app_state.clone());
+            (ctx, assignment, ticket, app)
+        }
 
-    #[tokio::test]
-    async fn allows_admin() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn allows_author() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.admin_token),
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.student_token), // author == student
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
 
-    #[tokio::test]
-    async fn allows_module_staff_lecturer() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn allows_admin() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.lecturer_token),
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.admin_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
 
-    #[tokio::test]
-    async fn allows_module_staff_assistant_lecturer() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn allows_module_staff_lecturer() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.assistant_lecturer_token),
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
 
-    #[tokio::test]
-    async fn allows_module_staff_tutor() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn allows_module_staff_assistant_lecturer() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.tutor_token),
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::OK);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.assistant_lecturer_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
 
-    #[tokio::test]
-    async fn forbids_unassigned_non_author() {
-        let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn allows_module_staff_tutor() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(
-            &format!("/tickets/{}/ws", ticket.id),
-            Some(&ctx.unassigned_user_token),
-        );
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::FORBIDDEN);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.tutor_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }
 
-    #[tokio::test]
-    async fn unauthorized_without_token() {
-        let (_ctx, _assignment, ticket, app) = setup_with_ticket().await;
+        #[tokio::test]
+        async fn forbids_unassigned_non_author() {
+            let (ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request(&format!("/tickets/{}/ws", ticket.id), None);
-        let res = app.oneshot(req).await.unwrap();
-        // blocked by `allow_authenticated` layer first
-        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
-    }
+            let req = build_request(
+                &format!("/tickets/{}/ws", ticket.id),
+                Some(&ctx.unassigned_user_token),
+            );
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        }
 
-    #[tokio::test]
-    async fn not_found_for_missing_ticket() {
-        let ctx = setup().await;
-        let app = create_ticket_router(ctx.app_state.clone());
+        #[tokio::test]
+        async fn unauthorized_without_token() {
+            let (_ctx, _assignment, ticket, app) = setup_with_ticket().await;
 
-        let req = build_request("/tickets/999999/ws", Some(&ctx.admin_token));
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_FOUND);
-    }
+            let req = build_request(&format!("/tickets/{}/ws", ticket.id), None);
+            let res = app.oneshot(req).await.unwrap();
+            // blocked by `allow_authenticated` layer first
+            assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        }
 
-    #[tokio::test]
-    async fn bad_request_for_invalid_ticket_id() {
-        let ctx = setup().await;
-        let app = create_ticket_router(ctx.app_state.clone());
+        #[tokio::test]
+        async fn not_found_for_missing_ticket() {
+            let ctx = setup().await;
+            let app = create_ticket_router(ctx.app_state.clone());
 
-        let req = build_request("/tickets/abc/ws", Some(&ctx.admin_token));
-        let res = app.oneshot(req).await.unwrap();
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+            let req = build_request("/tickets/999999/ws", Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn bad_request_for_invalid_ticket_id() {
+            let ctx = setup().await;
+            let app = create_ticket_router(ctx.app_state.clone());
+
+            let req = build_request("/tickets/abc/ws", Some(&ctx.admin_token));
+            let res = app.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
     }
 }
-}
-

@@ -73,7 +73,6 @@ mod tests {
         }
     }
 
-
     #[tokio::test]
     async fn set_invalid_open_ticket_test() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;

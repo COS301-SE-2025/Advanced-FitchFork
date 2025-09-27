@@ -130,7 +130,6 @@ pub async fn update_user(
         .unwrap()
         .unwrap();
 
-
     // Prevent changing your own admin status or changing others' admin status
     if let Some(new_admin) = req.admin {
         // Does the current DB row already have this exact admin value?
@@ -143,29 +142,28 @@ pub async fn update_user(
             .one(db)
             .await;
 
-    match same_status {
-        // Row exists with the same admin value -> no change; allow the request to continue
-        Ok(Some(_)) => {}
-        // No row with the same admin value -> this would be a change; block it
-        Ok(None) => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(ApiResponse::<UserResponse>::error(
-                    "Changing admin status is not allowed",
-                )),
-            );
+        match same_status {
+            // Row exists with the same admin value -> no change; allow the request to continue
+            Ok(Some(_)) => {}
+            // No row with the same admin value -> this would be a change; block it
+            Ok(None) => {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ApiResponse::<UserResponse>::error(
+                        "Changing admin status is not allowed",
+                    )),
+                );
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::<UserResponse>::error(format!(
+                        "Database error: {}",
+                        e
+                    ))),
+                );
+            }
         }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<UserResponse>::error(format!(
-                    "Database error: {}",
-                    e
-                ))),
-            );
-        }
-    }
-
     }
 
     if let Some(email) = &req.email {

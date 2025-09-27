@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 fn key(s: &str) -> String {
-    s.trim_end().to_string() 
+    s.trim_end().to_string()
 }
 
 pub fn reorder_student_by_memo(student: Vec<String>, memo: &[String]) -> Vec<String> {

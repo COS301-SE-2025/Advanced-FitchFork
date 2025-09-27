@@ -1139,7 +1139,10 @@ mod tests {
 
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(json["success"], false, "expected success = false on oversized upload");
+        assert_eq!(
+            json["success"], false,
+            "expected success = false on oversized upload"
+        );
 
         assert!(
             json.get("error").is_some() || json.get("message").is_some(),
@@ -1147,7 +1150,9 @@ mod tests {
             json
         );
 
-        if let Some(msg) = json.get("error").and_then(|v| v.as_str())
+        if let Some(msg) = json
+            .get("error")
+            .and_then(|v| v.as_str())
             .or_else(|| json.get("message").and_then(|v| v.as_str()))
         {
             assert!(
@@ -1158,7 +1163,10 @@ mod tests {
             );
         }
 
-        assert!(!json.get("data").is_some(), "did not expect data on failure");
+        assert!(
+            !json.get("data").is_some(),
+            "did not expect data on failure"
+        );
     }
 
     #[tokio::test]

@@ -1,5 +1,10 @@
+use super::{
+    attendance_record,
+    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as UmrRole},
+};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
+use ipnet::IpNet;
 use sea_orm::FromQueryResult;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
@@ -10,11 +15,6 @@ use sea_orm::{
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::IpAddr;
-use ipnet::IpNet;
-use super::{
-    attendance_record,
-    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as UmrRole},
-};
 
 type HmacSha256 = Hmac<Sha256>;
 

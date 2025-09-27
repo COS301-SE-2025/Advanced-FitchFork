@@ -10,13 +10,13 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use db::models::tickets::TicketStatus;
 use db::models::{
     ticket_messages::Model as TicketMessageModel,
     user::{Column as UserColumn, Entity as UserEntity},
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use util::state::AppState;
-use db::models::tickets::TicketStatus;
 
 use crate::ws::tickets::{emit as t_emit, payload as t_payload};
 use crate::{
@@ -108,7 +108,10 @@ pub async fn create_message(
             .into_response();
     }
 
-        let ticket = match db::models::tickets::Entity::find_by_id(ticket_id).one(db).await {
+    let ticket = match db::models::tickets::Entity::find_by_id(ticket_id)
+        .one(db)
+        .await
+    {
         Ok(Some(t)) => t,
         Ok(None) => {
             return (
@@ -120,7 +123,9 @@ pub async fn create_message(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Database error while loading ticket")),
+                Json(ApiResponse::<()>::error(
+                    "Database error while loading ticket",
+                )),
             )
                 .into_response();
         }

@@ -268,18 +268,24 @@ impl<'a> MarkingJob<'a> {
                             .unwrap_or_default(),
                     };
 
-                    if self.config.marking.reorder_by_memo && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex) {
-                        student_lines = crate::utilities::line_normalization::reorder_student_by_memo(
-                        student_lines,
-                        &memo_or_regex_lines,
-                        );
+                    if self.config.marking.reorder_by_memo
+                        && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex)
+                    {
+                        student_lines =
+                            crate::utilities::line_normalization::reorder_student_by_memo(
+                                student_lines,
+                                &memo_or_regex_lines,
+                            );
                     }
 
-                    if self.config.marking.reorder_by_memo && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex) {
-                        student_lines = crate::utilities::line_normalization::reorder_student_by_memo(
-                        student_lines,
-                        &memo_or_regex_lines,
-                        );
+                    if self.config.marking.reorder_by_memo
+                        && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex)
+                    {
+                        student_lines =
+                            crate::utilities::line_normalization::reorder_student_by_memo(
+                                student_lines,
+                                &memo_or_regex_lines,
+                            );
                     }
 
                     let has_error = task_output
