@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-use crate::{languages::Language, paths::config_dir};
+use crate::{languages::Language, paths::config_dir, system_health};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -347,6 +347,22 @@ impl Default for SecurityOptions {
     }
 }
 
+impl ExecutionLimits {
+    pub fn sanitize(mut self) -> Self {
+        let sys = system_health::sample_system_metrics();
+        let mem_total_bytes = sys.mem_total * 1024;
+        let cpu_count = sys.cpu_cores as u32;
+
+        if self.max_memory > mem_total_bytes {
+            self.max_memory = mem_total_bytes;
+        }
+        if self.max_cpus > cpu_count.max(1) {
+            self.max_cpus = cpu_count.max(1);
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExecutionConfig {
     #[serde(default)]
@@ -372,6 +388,20 @@ pub struct ExecutionConfig {
 }
 
 impl ExecutionConfig {
+    pub fn sanitize(mut self) -> Self {
+        let sys = system_health::sample_system_metrics();
+        let mem_total_bytes = sys.mem_total * 1024;
+        let cpu_count = sys.cpu_cores as u32;
+
+        if self.execution.max_memory > mem_total_bytes {
+            self.execution.max_memory = mem_total_bytes;
+        }
+        if self.execution.max_cpus > cpu_count.max(1) {
+            self.execution.max_cpus = cpu_count.max(1);
+        }
+        self
+    }
+
     pub fn default_config() -> Self {
         ExecutionConfig {
             execution: ExecutionLimits::default(),
@@ -387,28 +417,27 @@ impl ExecutionConfig {
     pub fn get_execution_config(module_id: i64, assignment_id: i64) -> Result<Self, String> {
         let cfg_dir = config_dir(module_id, assignment_id);
 
-        // 1) Prefer canonical config.json if it exists
         let canonical = cfg_dir.join("config.json");
-        if canonical.exists() {
-            let s = fs::read_to_string(&canonical)
-                .map_err(|_| format!("Failed to read config file at {canonical:?}"))?;
-            return serde_json::from_str(&s).map_err(|_| "Invalid config JSON format".to_string());
-        }
+        let file_contents = if canonical.exists() {
+            fs::read_to_string(&canonical)
+                .map_err(|_| format!("Failed to read config file at {canonical:?}"))?
+        } else {
+            let entries = fs::read_dir(&cfg_dir)
+                .map_err(|_| format!("Failed to read config dir at {cfg_dir:?}"))?;
+            let config_path = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .find(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+                .ok_or_else(|| format!("No config json file found in config dir {cfg_dir:?}"))?;
+            fs::read_to_string(&config_path)
+                .map_err(|_| format!("Failed to read config file at {config_path:?}"))?
+        };
 
-        // 2) Fallback: any *.json in the directory
-        let entries = fs::read_dir(&cfg_dir)
-            .map_err(|_| format!("Failed to read config dir at {cfg_dir:?}"))?;
+        let mut cfg: ExecutionConfig = serde_json::from_str(&file_contents)
+            .map_err(|_| "Invalid config JSON format".to_string())?;
 
-        let config_path = entries
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .find(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
-            .ok_or_else(|| format!("No config json file found in config dir {cfg_dir:?}"))?;
-
-        let file_contents = fs::read_to_string(&config_path)
-            .map_err(|_| format!("Failed to read config file at {config_path:?}"))?;
-
-        serde_json::from_str(&file_contents).map_err(|_| "Invalid config JSON format".to_string())
+        cfg.execution = cfg.execution.clone().sanitize();
+        Ok(cfg)
     }
 
     pub fn save(&self, module_id: i64, assignment_id: i64) -> Result<(), String> {
