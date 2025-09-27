@@ -37,7 +37,7 @@ async fn test_run_java_and_cpp_code() {
 
     let manager = ContainerManager::new(1);
 
-    let result = manager.run(&config, all_commands, all_files).await;
+    let result = manager.run(&config, all_commands, all_files, false).await;
 
     match result {
         Ok(outputs) => {
