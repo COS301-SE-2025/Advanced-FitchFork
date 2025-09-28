@@ -39,7 +39,25 @@ async fn main() {
     // Set up dependencies
     let db = connect().await;
     let ws = WebSocketManager::new();
-    let app_state = AppState::new(db, ws);
+    let app_state = AppState::new(db.clone(), ws);
+
+    // Initialize achievement service
+    let achievement_config = db::achievement_service::AchievementService::initialize(
+        db.clone(),
+        Some(db::achievement_engine::AchievementEngineConfig {
+            debug_logging: config::env() != "production",
+            emit_level_events: true,
+            max_achievements_per_event: 100,
+        })
+    ).await;
+    
+    match achievement_config {
+        Ok(_) => tracing::info!("Achievement service initialized successfully"),
+        Err(e) => {
+            tracing::warn!("Failed to initialize achievement service: {}. Achievement system will be disabled.", e);
+            tracing::warn!("This may be due to missing achievements.json file or database issues.");
+        }
+    }
 
     // Spawn periodic system health broadcaster over WebSockets
     spawn_system_health_broadcaster(app_state.clone());

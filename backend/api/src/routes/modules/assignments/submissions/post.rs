@@ -29,7 +29,7 @@ use marker::feedback::{
     ai_feedback::AiFeedback, auto_feedback::AutoFeedback, manual_feedback::ManualFeedback,
 };
 use md5;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, Order, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, Order, QueryFilter, QueryOrder, PaginatorTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{fs, path::PathBuf};
@@ -93,6 +93,69 @@ pub struct FailedOperation {
 }
 
 const ERR_LATE_NOT_ALLOWED: &str = "Late submissions are not allowed";
+
+// ============================================================================
+// Achievement Event Helpers
+// ============================================================================
+
+/// Emit assignment submission achievement event
+async fn emit_assignment_submission_event(
+    user_id: i64,
+    assignment_id: i64,
+    module_id: i64,
+    attempt: i64,
+    is_practice: bool,
+    filename: &str,
+    assignment: &db::models::assignment::Model,
+    db: &DatabaseConnection,
+) -> Result<(), String> {
+    // Get submission count for this user and assignment
+    let submission_count = assignment_submission::Entity::find()
+        .filter(assignment_submission::Column::UserId.eq(user_id))
+        .filter(assignment_submission::Column::AssignmentId.eq(assignment_id))
+        .count(db)
+        .await
+        .map_err(|e| format!("Failed to get submission count: {}", e))? as u32;
+
+    // Emit achievement event
+    db::achievement_service::emit_assignment_submitted_global(
+        user_id,
+        assignment_id,
+        module_id,
+        attempt,
+        is_practice,
+        filename.to_string(),
+        submission_count,
+        assignment.due_date,
+        assignment.available_from,
+    ).await;
+
+    Ok(())
+}
+
+/// Emit assignment graded achievement event
+async fn emit_assignment_graded_event(
+    user_id: i64,
+    assignment_id: i64,
+    module_id: i64,
+    submission_id: i64,
+    attempt: i64,
+    earned: f64,
+    total: f64,
+) {
+    let score = earned.round() as i32;
+    let total_marks = total.round() as i32;
+
+    db::achievement_service::emit_assignment_graded_global(
+        user_id,
+        assignment_id,
+        module_id,
+        submission_id,
+        attempt,
+        score,
+        total_marks,
+    ).await;
+}
 
 // ============================================================================
 // Helper Functions
@@ -919,6 +982,17 @@ async fn grade_submission(
         .await
         .map_err(|e| e.to_string())?;
 
+    // Emit achievement event for assignment grading
+    emit_assignment_graded_event(
+        submission.user_id,
+        assignment.id,
+        assignment.module_id,
+        submission.id,
+        submission.attempt,
+        mark.earned,
+        mark.total,
+    ).await;
+
     let now = Utc::now();
     let resp = SubmissionDetailResponse {
         id: submission.id,
@@ -1551,6 +1625,20 @@ pub async fn submit_assignment(
             );
         }
     };
+
+    // Emit achievement event for assignment submission
+    if let Err(e) = emit_assignment_submission_event(
+        claims.sub,
+        assignment_id,
+        module_id,
+        attempt,
+        is_practice,
+        &file_name,
+        &assignment,
+        db,
+    ).await {
+        tracing::warn!("Failed to emit assignment submission achievement event: {}", e);
+    }
 
     let username_opt = user::Entity::find_by_id(claims.sub)
         .one(db)

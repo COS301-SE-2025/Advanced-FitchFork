@@ -1,4 +1,6 @@
-pub mod achievement_system;
+pub mod achievement_engine;
+pub mod achievement_service;
+pub mod events;
 pub mod grade;
 pub mod models;
 pub mod test_utils;
