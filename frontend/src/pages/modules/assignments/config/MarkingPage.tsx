@@ -12,10 +12,12 @@ import { useAssignment } from '@/context/AssignmentContext';
 import { message } from '@/utils/message';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 type FormShape = AssignmentMarkingConfig;
 
 export default function MarkingPage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
   const [form] = Form.useForm<FormShape>();

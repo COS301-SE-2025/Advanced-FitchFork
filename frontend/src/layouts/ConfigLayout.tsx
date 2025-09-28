@@ -7,6 +7,8 @@ import { message } from '@/utils/message';
 import { listAssignmentFiles, downloadAssignmentFile } from '@/services/modules/assignments';
 import { getAssignmentConfig, setAssignmentConfig } from '@/services/modules/assignments/config';
 import Tip from '@/components/common/Tip';
+import { requiresMainForMode, requiresInterpreterForMode } from '@/policies/submission';
+import type { SubmissionMode } from '@/types/modules/assignments/config';
 
 type MenuKey =
   | 'assignment'
@@ -24,9 +26,8 @@ type MenuKey =
 
 const ConfigLayout = () => {
   const { assignment, config, refreshAssignment } = useAssignment();
-  const moduleId = assignment.module_id ?? assignment.module_id ?? (assignment as any)?.module?.id; // fallback safety
+  const moduleId = assignment.module_id ?? assignment.module_id ?? (assignment as any)?.module?.id;
   const assignmentId = assignment.id;
-
   const location = useLocation();
   const path = location.pathname;
 
@@ -49,14 +50,15 @@ const ConfigLayout = () => {
   }, [path]);
 
   // Mode-aware visibility
-  const submissionMode = config?.project?.submission_mode ?? 'manual';
-  const isGatlam = submissionMode === 'gatlam';
+  const mode = (config?.project?.submission_mode ?? 'manual') as SubmissionMode;
+  const showAI = requiresInterpreterForMode(mode); // gatlam | rng | codecoverage
+  const needsMain = requiresMainForMode(mode); // manual only
 
   const fileChildren = [
-    ...(isGatlam ? [] : [{ key: 'files-main', label: <Link to={'files/main'}>Main File</Link> }]),
-    { key: 'files-makefile', label: <Link to={'files/makefile'}>Makefile</Link> },
-    { key: 'files-memo', label: <Link to={'files/memo'}>Memo File</Link> },
-    { key: 'files-spec', label: <Link to={'files/spec'}>Specification</Link> },
+    ...(needsMain ? [{ key: 'files-main', label: <Link to="files/main">Main File</Link> }] : []),
+    { key: 'files-makefile', label: <Link to="files/makefile">Makefile</Link> },
+    { key: 'files-memo', label: <Link to="files/memo">Memo File</Link> },
+    { key: 'files-spec', label: <Link to="files/spec">Specification</Link> },
   ];
 
   const generalGroup = {
@@ -73,14 +75,14 @@ const ConfigLayout = () => {
     ],
   };
 
-  const gatlamGroup = isGatlam
+  const aiGroup = showAI
     ? [
         {
-          key: 'gatlam-group',
-          label: 'GATLAM',
+          key: 'ai-group',
+          label: 'AI',
           type: 'group' as const,
           children: [
-            { key: 'gatlam', label: <Link to="gatlam">GATLAM</Link> },
+            { key: 'gatlam', label: <Link to="gatlam">AI Settings</Link> },
             { key: 'interpreter', label: <Link to="interpreter">Interpreter</Link> },
           ],
         },
@@ -89,7 +91,7 @@ const ConfigLayout = () => {
 
   const menuItems = [
     generalGroup,
-    ...gatlamGroup,
+    ...aiGroup,
     {
       key: 'files-group',
       label: 'Files',
@@ -98,7 +100,7 @@ const ConfigLayout = () => {
     },
   ];
 
-  // ───────────────────────────── handlers ─────────────────────────────
+  // ----------------------------- import/export handlers -----------------------------
   const importProps = {
     accept: '.json,application/json',
     showUploadList: false,
@@ -111,14 +113,10 @@ const ConfigLayout = () => {
         if (typeof parsed !== 'object' || parsed == null) {
           throw new Error('Config JSON must be an object');
         }
-
         const res = await setAssignmentConfig(moduleId, assignmentId, parsed);
-        if (!res?.success) {
-          throw new Error(res?.message || 'Failed to save config');
-        }
-
+        if (!res?.success) throw new Error(res?.message || 'Failed to save config');
         message.success('Config imported and saved.');
-        await refreshAssignment?.(); // refresh if context exposes it
+        await refreshAssignment?.();
         onSuccess?.(true);
       } catch (e: any) {
         console.error(e);
@@ -133,20 +131,15 @@ const ConfigLayout = () => {
   const downloadConfig = async () => {
     try {
       setDownloading(true);
-
-      // Try download via stored file if exists
       const files = await listAssignmentFiles(moduleId, assignmentId);
       const cfg = (Array.isArray(files) ? files : files?.data)?.find(
         (f: any) => f.file_type === 'config',
       );
-
       if (cfg) {
         await downloadAssignmentFile(moduleId, assignmentId, Number(cfg.id));
         message.success('Download started');
         return;
       }
-
-      // Fallback: fetch current config JSON and generate a file client-side
       const res = await getAssignmentConfig(moduleId, assignmentId);
       if (res?.success) {
         const content = JSON.stringify(res.data ?? {}, null, 2);
@@ -174,7 +167,6 @@ const ConfigLayout = () => {
   return (
     <div className="flex flex-col gap-4">
       <div className="hidden sm:grid w-full grid-cols-[240px_minmax(0,1fr)] bg-white dark:bg-gray-900 border rounded-md border-gray-200 dark:border-gray-800">
-        {/* Sidebar */}
         <div className="bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 px-2 py-2">
           <Menu
             mode="inline"
@@ -185,7 +177,6 @@ const ConfigLayout = () => {
           />
         </div>
 
-        {/* Main */}
         <div className="flex flex-col">
           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-gray-200 dark:border-gray-800 p-4">
             <Space align="center" size={6} className="flex-wrap">
@@ -200,7 +191,6 @@ const ConfigLayout = () => {
               />
             </Space>
 
-            {/* Top-right actions */}
             <Space align="center" wrap>
               <Upload {...importProps}>
                 <Tooltip title="Import an execution config from a JSON file">
@@ -209,7 +199,6 @@ const ConfigLayout = () => {
                   </Button>
                 </Tooltip>
               </Upload>
-
               <Tooltip title="Download the current execution config">
                 <Button icon={<DownloadOutlined />} onClick={downloadConfig} loading={downloading}>
                   Download JSON
@@ -217,14 +206,12 @@ const ConfigLayout = () => {
               </Tooltip>
             </Space>
           </div>
-
           <div className="flex flex-col p-4">
             <Outlet />
           </div>
         </div>
       </div>
 
-      {/* Mobile */}
       <div className="block sm:hidden">
         <Outlet />
       </div>

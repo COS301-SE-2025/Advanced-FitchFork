@@ -211,7 +211,6 @@ const ControlBar = <T,>(props: Props<T>) => {
     },
   ];
 
-  // ——— helpers that can render as full-width on mobile ———
   const FiltersButton = ({ block = false }: { block?: boolean }) => (
     <Dropdown
       menu={{
@@ -245,8 +244,7 @@ const ControlBar = <T,>(props: Props<T>) => {
         className={`whitespace-nowrap flex items-center gap-1 ${block ? 'w-full justify-center' : ''}`}
       >
         <FilterOutlined />
-        {isDesktop && <span>Filters</span>}
-        {!isDesktop && <span>Filters & Sort</span>}
+        {isDesktop ? <span>Filters</span> : <span>Filters & Sort</span>}
       </Button>
     </Dropdown>
   );
@@ -433,6 +431,8 @@ const ControlBar = <T,>(props: Props<T>) => {
   const searchClasses = isDesktop ? 'w-full max-w-[360px]' : 'w-full';
   const compactClasses = isDesktop ? '' : 'w-full';
 
+  const hasFilterOrSort = filterGroups.length > 0 || sortOptions.length > 0;
+
   return (
     <div className={rootClasses}>
       {/* LEFT: view toggle (desktop), search, filters, clear (desktop inline) */}
@@ -465,20 +465,8 @@ const ControlBar = <T,>(props: Props<T>) => {
         )}
 
         {isDesktop ? (
-          // desktop: keep compact row UX
-          viewMode === 'grid' || listMode ? (
-            <Space.Compact className={compactClasses}>
-              <Search
-                placeholder={searchPlaceholder}
-                allowClear
-                onChange={(e) => handleSearch(e.target.value)}
-                value={searchTerm}
-                className={searchClasses}
-                data-testid="entity-search"
-              />
-              {(filterGroups.length > 0 || sortOptions.length > 0) && <FiltersButton />}
-            </Space.Compact>
-          ) : (
+          // Desktop: always show Filters button if filters/sort exist (table, grid, or list)
+          <Space.Compact className={compactClasses}>
             <Search
               placeholder={searchPlaceholder}
               allowClear
@@ -487,9 +475,10 @@ const ControlBar = <T,>(props: Props<T>) => {
               className={searchClasses}
               data-testid="entity-search"
             />
-          )
+            {hasFilterOrSort && <FiltersButton />}
+          </Space.Compact>
         ) : (
-          // mobile: stack full-width
+          // Mobile: stack full-width
           <div className="w-full flex flex-col gap-2">
             <Search
               placeholder={searchPlaceholder}
@@ -499,7 +488,7 @@ const ControlBar = <T,>(props: Props<T>) => {
               className="w-full"
               data-testid="entity-search"
             />
-            {(filterGroups.length > 0 || sortOptions.length > 0) && <FiltersButton block />}
+            {hasFilterOrSort && <FiltersButton block />}
             <RefreshBtn block />
           </div>
         )}

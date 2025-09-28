@@ -1,7 +1,0 @@
-{
-    "name": "fitchfork-k6-tests",
-    "version": "1.0.0",
-    "scripts": {
-        "k6:submission": "k6 run scenarios/submissionLoad/index.js"
-    }
-}

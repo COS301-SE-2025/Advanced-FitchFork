@@ -50,12 +50,13 @@ const AssignmentsEmptyState = ({
                 onClick={onCreate}
                 className="min-w-[200px]"
                 disabled={!onCreate}
+                data-testid="empty-add"
               >
                 Add assignment
               </Button>
             )}
             {onRefresh && (
-              <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+              <Button icon={<ReloadOutlined />} onClick={onRefresh} data-testid="empty-refresh">
                 Refresh
               </Button>
             )}

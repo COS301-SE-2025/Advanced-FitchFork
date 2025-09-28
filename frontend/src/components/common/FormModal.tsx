@@ -39,8 +39,8 @@ type Constraints =
         min?: number;
         max?: number;
         integer?: boolean;
-        step?: number; // also applied to UI
-        precision?: number; // UI + validator will allow decimals unless integer
+        step?: number; // UI hint only
+        precision?: number; // UI hint only
         message?: string;
         messageMin?: string;
         messageMax?: string;
@@ -113,6 +113,7 @@ const rulesFromConstraints = (
 
   const rs: Rule[] = [];
 
+  // 1) Dedicated required rule handles empty values and shows the message ONCE
   if (c.required) {
     rs.push({
       required: true,
@@ -120,6 +121,7 @@ const rulesFromConstraints = (
     });
   }
 
+  // 2) Standard type/length/pattern rules
   if (f.type === 'email' || c.email) {
     rs.push({ type: 'email', message: c.email?.message ?? 'Please enter a valid email address' });
   }
@@ -136,56 +138,64 @@ const rulesFromConstraints = (
     rs.push({ pattern: c.pattern.regex, message: c.pattern.message ?? `Invalid ${f.label}` });
   }
 
+  // 3) Number rule: DO NOT throw for empty -> let the required rule handle empties
   if (c.number && f.type === 'number') {
     const { min, max, integer, message, messageMin, messageMax } = c.number;
     rs.push({
       validator: async (_rule, value) => {
-        const isReq = !!c.required;
-        if (value === undefined || value === null || value === '') {
-          if (isReq) throw new Error(`Please enter ${f.label}`);
-          return;
-        }
-        if (typeof value !== 'number' || Number.isNaN(value))
+        // if empty, required rule (if any) will display; avoid double messages
+        if (value === undefined || value === null || value === '') return;
+
+        if (typeof value !== 'number' || Number.isNaN(value)) {
           throw new Error(message ?? 'Must be a number');
-        if (integer && !Number.isInteger(value)) throw new Error('Must be an integer');
-        if (typeof min === 'number' && value < min)
+        }
+        if (integer && !Number.isInteger(value)) {
+          throw new Error('Must be an integer');
+        }
+        if (typeof min === 'number' && value < min) {
           throw new Error(messageMin ?? `Must be ≥ ${min}`);
-        if (typeof max === 'number' && value > max)
+        }
+        if (typeof max === 'number' && value > max) {
           throw new Error(messageMax ?? `Must be ≤ ${max}`);
+        }
       },
     });
   }
 
+  // 4) Datetime rule: DO NOT throw for empty -> let the required rule handle empties
   if (c.date && f.type === 'datetime') {
     const { min, max, messageMin, messageMax } = c.date;
     rs.push({
       validator: async (_rule, value: Dayjs | null) => {
-        const isReq = !!c.required;
-        if (!value) {
-          if (isReq) throw new Error(`Please select ${f.label}`);
-          return;
-        }
-        const d = toDayjs(value);
+        if (!value) return; // avoid dup with required rule
+
+        const d = dayjs.isDayjs(value) ? value : dayjs(value);
         if (!d.isValid()) throw new Error('Please select a valid date/time');
+
         if (min) {
-          const md = toDayjs(min);
-          if (d.isBefore(md))
+          const md = dayjs.isDayjs(min) ? min : dayjs(min);
+          if (d.isBefore(md)) {
             throw new Error(messageMin ?? `Must be on/after ${md.format('YYYY-MM-DD HH:mm')}`);
+          }
         }
         if (max) {
-          const xd = toDayjs(max);
-          if (d.isAfter(xd))
+          const xd = dayjs.isDayjs(max) ? max : dayjs(max);
+          if (d.isAfter(xd)) {
             throw new Error(messageMax ?? `Must be on/before ${xd.format('YYYY-MM-DD HH:mm')}`);
+          }
         }
       },
     });
   }
 
+  // 5) Custom rule: same pattern—don’t re-validate empties here
   if (c.custom) {
     rs.push({
       validator: async () => {
         const all = form.getFieldsValue(true);
-        await c.custom!.validator(all[f.name], all);
+        const v = all[f.name];
+        if (v === undefined || v === null || v === '') return; // let required handle empties
+        await c.custom!.validator(v, all);
       },
       message: c.custom.message,
     } as Rule);
@@ -203,13 +213,19 @@ const controlPropsFromConstraints = (f: FormModalField): Record<string, any> => 
 
   switch (f.type) {
     case 'number': {
-      const p: InputNumberProps = {};
-      if (c.number?.min !== undefined) p.min = c.number.min;
-      if (c.number?.max !== undefined) p.max = c.number.max;
+      // IMPORTANT:
+      // Do NOT pass min/max to InputNumber — that clamps/snap-backs the UI.
+      // We only hint step/precision; real bounds are enforced in rules.
+      const p: InputNumberProps = {
+        style: { width: '100%', ...(overrides as any).style },
+        // Keep integers friendlier without clamping:
+        parser: (raw) => {
+          const s = (raw ?? '').toString();
+          return s.replace(/[^\d-]/g, '');
+        },
+      };
       if (c.number?.step !== undefined) p.step = c.number.step;
       if (c.number?.precision !== undefined) p.precision = c.number.precision;
-      // full-width sensible default
-      p.style = { width: '100%', ...(overrides.style || {}) };
       return { ...p, ...overrides };
     }
 
@@ -231,6 +247,9 @@ const controlPropsFromConstraints = (f: FormModalField): Record<string, any> => 
         options: f.options,
         placeholder: f.placeholder,
         optionLabelProp: 'label',
+        getPopupContainer: (trigger) => trigger.parentElement as HTMLElement,
+        dropdownMatchSelectWidth: false,
+        virtual: false,
       };
       return { ...sp, ...overrides };
     }
@@ -243,7 +262,6 @@ const controlPropsFromConstraints = (f: FormModalField): Record<string, any> => 
         style: { width: '100%' },
         treeNodeLabelProp: 'title',
       };
-      // Merge style last to allow override.style to win
       return { ...tp, style: { ...tp.style, ...(overrides.style || {}) }, ...overrides };
     }
 
@@ -305,7 +323,7 @@ const FormModal = ({
       const raw = await form.validateFields();
       const values = { ...raw };
 
-      // Coerce numeric strings just in case
+      // Coerce numeric strings just in case (after rules validation)
       fields.forEach((f) => {
         if (f.type === 'number') {
           const v = values[f.name];
