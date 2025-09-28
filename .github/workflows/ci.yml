@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet || true
+          df -h
+
       # --- Toolchains ---
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
