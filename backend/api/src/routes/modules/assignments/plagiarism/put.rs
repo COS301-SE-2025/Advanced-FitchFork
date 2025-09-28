@@ -1,15 +1,20 @@
+use crate::response::ApiResponse;
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
-use db::models::plagiarism_case::{Entity as PlagiarismEntity, Status, Column as PlagiarismColumn};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, ActiveModelTrait, IntoActiveModel};
+use db::models::{
+    assignment_submission::Model as SubmissionModel,
+    plagiarism_case::{Column as PlagiarismColumn, Entity as PlagiarismEntity, Status},
+};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 #[derive(Serialize, Deserialize)]
 pub struct UpdatePlagiarismCasePayload {
@@ -158,10 +163,19 @@ pub async fn update_plagiarism_case(
         }
     }
 
-    // Fetch the case
+    let txn = match app_state.db().begin().await {
+        Ok(txn) => txn,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!("Database error: {}", e))),
+            );
+        }
+    };
+
     let case = match PlagiarismEntity::find_by_id(case_id)
         .filter(PlagiarismColumn::AssignmentId.eq(assignment_id))
-        .one(app_state.db())
+        .one(&txn)
         .await
     {
         Ok(Some(case)) => case,
@@ -184,17 +198,20 @@ pub async fn update_plagiarism_case(
         }
     };
 
-    // Apply updates
-    let mut case = case.into_active_model();
+    let mut active_case = case.clone().into_active_model();
+    let mut is_flagged = false;
 
     if let Some(description) = payload.description {
-        case.description = sea_orm::ActiveValue::Set(description);
+        active_case.description = sea_orm::ActiveValue::Set(description);
     }
 
     if let Some(status_str) = payload.status {
         let status = match status_str.as_str() {
             "review" => Status::Review,
-            "flagged" => Status::Flagged,
+            "flagged" => {
+                is_flagged = true;
+                Status::Flagged
+            }
             "reviewed" => Status::Reviewed,
             _ => {
                 return (
@@ -205,17 +222,16 @@ pub async fn update_plagiarism_case(
                 );
             }
         };
-        case.status = sea_orm::ActiveValue::Set(status);
+        active_case.status = sea_orm::ActiveValue::Set(status);
     }
 
     if let Some(sim) = payload.similarity {
-        case.similarity = sea_orm::ActiveValue::Set(sim);
+        active_case.similarity = sea_orm::ActiveValue::Set(sim);
     }
 
-    case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
+    active_case.updated_at = sea_orm::ActiveValue::Set(Utc::now());
 
-    // Persist
-    let updated_case = match case.update(app_state.db()).await {
+    let updated_case = match active_case.update(&txn).await {
         Ok(updated) => updated,
         Err(e) => {
             return (
@@ -228,7 +244,37 @@ pub async fn update_plagiarism_case(
         }
     };
 
-    // Respond
+    if is_flagged {
+        if let Err(e) = SubmissionModel::zero_out_marks(&txn, case.submission_id_1).await {
+            let _ = txn.rollback().await;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!(
+                    "Failed to zero out marks for submission 1: {}",
+                    e
+                ))),
+            );
+        }
+
+        if let Err(e) = SubmissionModel::zero_out_marks(&txn, case.submission_id_2).await {
+            let _ = txn.rollback().await;
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(format!(
+                    "Failed to zero out marks for submission 2: {}",
+                    e
+                ))),
+            );
+        }
+    }
+
+    if let Err(e) = txn.commit().await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(format!("Database error: {}", e))),
+        );
+    }
+
     let response = PlagiarismCaseResponse {
         id: updated_case.id,
         assignment_id: updated_case.assignment_id,
@@ -236,7 +282,7 @@ pub async fn update_plagiarism_case(
         submission_id_2: updated_case.submission_id_2,
         description: updated_case.description,
         status: updated_case.status.to_string(),
-        similarity: updated_case.similarity, // <- new
+        similarity: updated_case.similarity,
         created_at: updated_case.created_at,
         updated_at: updated_case.updated_at,
     };

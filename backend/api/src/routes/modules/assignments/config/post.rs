@@ -1,15 +1,14 @@
-use db::models::assignment_file::{FileType, Model as AssignmentFile};
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Json, Path},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
-use serde_json::Value;
-use crate::response::ApiResponse;
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
+use db::models::assignment_file::{FileType, Model as AssignmentFile};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde_json::Value;
 use util::{execution_config::ExecutionConfig, state::AppState};
-
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config
 ///
@@ -35,7 +34,7 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 ///   "marking": {
 ///     "marking_scheme": "exact",
 ///     "feedback_scheme": "auto",
-///     "deliminator": "&-=-&"
+///     "deliminator": "###"
 ///   }
 /// }
 /// ```
@@ -55,8 +54,9 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - **500** – Internal error saving the file
 ///
 /// ### Notes
-/// - Configuration is saved to disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`.
+/// - Configuration is saved to disk.
 /// - Only valid `ExecutionConfig` objects are accepted.
+// api route
 pub async fn set_assignment_config(
     State(app_state): State<AppState>,
     Path((module_id, assignment_id)): Path<(i64, i64)>,
@@ -67,7 +67,9 @@ pub async fn set_assignment_config(
     if !config_json.is_object() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::<()>::error("Configuration must be a JSON object")),
+            Json(ApiResponse::<()>::error(
+                "Configuration must be a JSON object",
+            )),
         );
     }
 
@@ -76,35 +78,38 @@ pub async fn set_assignment_config(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(ApiResponse::<()>::error(format!("Invalid config format: {}", e))),
+                Json(ApiResponse::<()>::error(format!(
+                    "Invalid config format: {}",
+                    e
+                ))),
             );
         }
     };
 
-    // Check assignment existence
-    let assignment = match AssignmentEntity::find()
+    // Ensure assignment exists
+    if let Err(resp) = AssignmentEntity::find()
         .filter(AssignmentColumn::Id.eq(assignment_id as i32))
         .filter(AssignmentColumn::ModuleId.eq(module_id as i32))
         .one(db)
         .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ApiResponse::<()>::error("Assignment or module not found")),
-            );
-        }
-        Err(e) => {
+        .map_err(|e| {
             eprintln!("DB error: {:?}", e);
-            return (
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::<()>::error("Database error")),
-            );
-        }
-    };
+            )
+        })
+        .and_then(|opt| {
+            opt.ok_or((
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::error("Assignment or module not found")),
+            ))
+        })
+    {
+        return resp;
+    }
 
-    // Save as assignment file using `save_file`
+    // Serialize and overwrite-in-place (handled inside save_file)
     let bytes = match serde_json::to_vec_pretty(&config) {
         Ok(b) => b,
         Err(e) => {
@@ -118,7 +123,7 @@ pub async fn set_assignment_config(
 
     match AssignmentFile::save_file(
         &db,
-        assignment.id.into(),
+        assignment_id,
         module_id,
         FileType::Config,
         "config.json",
@@ -134,12 +139,11 @@ pub async fn set_assignment_config(
             eprintln!("File save error: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<()>::error("Failed to save config as assignment file")),
+                Json(ApiResponse::<()>::error("Failed to save config")),
             )
         }
     }
 }
-
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/config/reset
 ///
@@ -171,7 +175,9 @@ pub async fn reset_assignment_config(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::<ExecutionConfig>::error("Assignment or module not found")),
+                Json(ApiResponse::<ExecutionConfig>::error(
+                    "Assignment or module not found",
+                )),
             );
         }
         Err(e) => {
@@ -193,7 +199,9 @@ pub async fn reset_assignment_config(
             eprintln!("Serialization error: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<ExecutionConfig>::error("Failed to serialize default config")),
+                Json(ApiResponse::<ExecutionConfig>::error(
+                    "Failed to serialize default config",
+                )),
             );
         }
     };

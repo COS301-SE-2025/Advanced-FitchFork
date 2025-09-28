@@ -49,12 +49,26 @@ export type EntityListProps<T> = {
   listMode?: boolean;
   emptyNoEntities?: React.ReactNode;
   showControlBar?: boolean;
+  refreshButtonLabel?: string;
+  onRefreshClick?: () => void;
+  /** Persist filters to localStorage (default true when no custom key). */
+  persistFilters?: boolean;
+  /** Optional explicit key for saving filters; if set, it’s used verbatim */
+  filtersStorageKey?: string;
 };
 
 export type EntityListHandle = {
   refresh: () => void;
   clearSelection: () => void;
   getSelectedRowKeys: () => React.Key[];
+  /** Optimistically update a single row by key with a partial patch */
+  updateRow: (key: React.Key, patch: Partial<any>) => void;
+  /** Remove a set of rows by keys (keeps pagination.total in sync) */
+  removeRows: (keys: React.Key[]) => void;
+  /** Insert or update rows; mode=replace replaces by key if exists, else inserts (append/prepend) */
+  upsertRows: (rows: any[], mode?: 'append' | 'prepend' | 'replace') => void;
+  bufferRows: (rows: any[]) => void; // push WS items here
+  applyBuffer: () => void; // merge & flash
 };
 
 const EntityList = forwardRef(function <T>(
@@ -76,6 +90,9 @@ const EntityList = forwardRef(function <T>(
     renderListItem,
     emptyNoEntities,
     showControlBar = true,
+    onRefreshClick,
+    filtersStorageKey,
+    persistFilters = true,
   } = props;
 
   const {
@@ -95,30 +112,19 @@ const EntityList = forwardRef(function <T>(
     viewModeKey,
     defaultViewMode,
     getInitialNewItem: () => ({}) as Partial<T>,
+    // Use explicit key if provided; else fall back to `${viewModeKey}:filters` when persistFilters=true
+    persistFiltersKey: filtersStorageKey ?? (persistFilters ? `${viewModeKey}:filters` : undefined),
   });
 
   const { notifyError } = useNotifier();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<T[] | null>(null); // null => initial not-fetched
+  const [buffer, setBuffer] = useState<Map<React.Key, any>>(new Map());
+  const [justAppliedKeys, setJustAppliedKeys] = useState<Set<React.Key>>(new Set());
 
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
     new Set(columns.filter((col) => col.defaultHidden).map((col) => col.key as string)),
   );
-  const [scrollHeight, setScrollHeight] = useState<number | undefined>();
-
-  useEffect(() => {
-    const updateHeight = () => {
-      const viewportHeight = window.innerHeight;
-      const tableTop =
-        document.getElementById('scrollable-entity-table')?.getBoundingClientRect().top ?? 0;
-      const footerHeight = 120; // estimated AntD pagination
-      const padding = 32; // safety margin
-      setScrollHeight(viewportHeight - tableTop - footerHeight - padding);
-    };
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
 
   const toggleColumn = (key: string) => {
     setHiddenColumns((prev) => {
@@ -194,10 +200,128 @@ const EntityList = forwardRef(function <T>(
     }
   };
 
+  // Key resolver (stable reference)
+  const keyOf = (item: T) => props.getRowKey(item);
+
+  const bufferRows = (rows: any[]) => {
+    setBuffer((prev) => {
+      const next = new Map(prev);
+      for (const r of rows) {
+        next.set(keyOf(r), { ...(next.get(keyOf(r)) ?? {}), ...r });
+      }
+      return next;
+    });
+  };
+
+  // Replace your applyBuffer with this version:
+  const applyBuffer = async () => {
+    if (buffer.size === 0) return;
+
+    // 1) Snapshot keys/rows before clearing (no stale state reads)
+    const incomingKeys = new Set(Array.from(buffer.keys()));
+
+    // 2) Clear badge immediately
+    setBuffer(new Map());
+
+    // 3) Refetch from server so the view is authoritative
+    await fetchData();
+
+    // 4) Flash rows we expect to have changed/appeared after refetch
+    setJustAppliedKeys(incomingKeys);
+    setTimeout(() => setJustAppliedKeys(new Set()), 900);
+  };
+
+  // --- Local mutation helpers ---
+  const updateRow = (key: React.Key, patch: Partial<T>) => {
+    setItems((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const next = prev.map((it) => {
+        if (keyOf(it) === key) {
+          changed = true;
+          return { ...it, ...patch };
+        }
+        return it;
+      });
+      return changed ? next : prev;
+    });
+  };
+
+  const removeRows = (keys: React.Key[]) => {
+    if (!keys.length) return;
+
+    setItems((prev) => {
+      if (!prev) return prev;
+
+      const keySet = new Set(keys);
+      const next = prev.filter((it) => !keySet.has(keyOf(it)));
+
+      // keep pagination.total in sync if it exists
+      if (next.length !== prev.length) {
+        const removedCount = prev.length - next.length;
+
+        // use the *current* pagination from closure; pass a partial object (no function)
+        const nextTotal = Math.max(0, (pagination.total ?? prev.length) - removedCount);
+        const nextCurrent =
+          next.length === 0 && (pagination.current ?? 1) > 1
+            ? (pagination.current as number) - 1
+            : pagination.current;
+
+        setPagination({
+          total: nextTotal,
+          current: nextCurrent,
+        });
+      }
+
+      return next;
+    });
+
+    // clear selection of removed rows (non-functional form)
+    setSelectedRowKeys(selectedRowKeys.filter((k) => !keys.includes(k)));
+  };
+
+  const upsertRows = (rows: T[], mode: 'append' | 'prepend' | 'replace' = 'replace') => {
+    if (!rows.length) return;
+    setItems((prev) => {
+      const prevList = prev ?? [];
+      const byKey = new Map(prevList.map((r) => [keyOf(r), r]));
+      for (const r of rows) {
+        const k = keyOf(r);
+        if (byKey.has(k)) {
+          // replace existing
+          byKey.set(k, { ...byKey.get(k)!, ...r });
+        } else {
+          // insert new
+          if (mode === 'prepend') {
+            byKey.set(Symbol('___prepend___') as any, r); // marker to control order
+          } else {
+            byKey.set(k, r);
+          }
+        }
+      }
+      // rebuild preserving original order + new inserts at chosen side
+      const existing = prevList.map((r) => byKey.get(keyOf(r))!).filter(Boolean);
+      const inserted = rows.filter((r) => !prevList.some((p) => keyOf(p) === keyOf(r)));
+      const next =
+        mode === 'prepend'
+          ? [...inserted, ...existing]
+          : mode === 'append'
+            ? [...existing, ...inserted]
+            : existing; // replace mode doesn't add brand-new rows unless they were in rows
+      return next;
+    });
+  };
+
+  // --- expose in imperative handle ---
   useImperativeHandle(ref, () => ({
     refresh: fetchData,
     clearSelection: () => setSelectedRowKeys([]),
     getSelectedRowKeys: () => selectedRowKeys,
+    updateRow,
+    removeRows,
+    upsertRows,
+    bufferRows,
+    applyBuffer,
   }));
 
   useEffect(() => {
@@ -501,6 +625,14 @@ const EntityList = forwardRef(function <T>(
           hiddenColumns={hiddenColumns}
           onToggleColumn={toggleColumn}
           listMode={listMode}
+          onRefreshClick={() => {
+            if (buffer.size > 0) applyBuffer();
+            else onRefreshClick ? onRefreshClick() : fetchData();
+          }}
+          refreshBadgeCount={buffer.size}
+          refreshBadgeTooltip={
+            buffer.size > 0 ? `${buffer.size} new ${name.toLowerCase()}` : undefined
+          }
         />
       )}
 
@@ -662,13 +794,18 @@ const EntityList = forwardRef(function <T>(
 
                         const actionButtons = [InlineButton, DropdownButton].filter(Boolean);
                         return (
-                          <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>
+                          <div
+                            key={getRowKey(item)}
+                            data-testid="entity-card"
+                          >
+                            {renderGridItem(item, actionButtons)}
+                          </div>
                         );
                       })}
                     </div>
 
                     {pagination.total > pagination.pageSize && (
-                      <div className="mt-6 flex justify-between items-center pb-4">
+                      <div className="mt-4 flex justify-between items-center pb-4">
                         <Button
                           onClick={() => goToPage(pagination.current - 1)}
                           disabled={pagination.current === 1}
@@ -697,14 +834,25 @@ const EntityList = forwardRef(function <T>(
                 <List
                   itemLayout="vertical"
                   dataSource={items!}
-                  renderItem={renderListItem}
+                  renderItem={(item) => (
+                    <div
+                      className={
+                        justAppliedKeys.has(getRowKey(item))
+                          ? 'bg-green-50 transition-colors duration-700 rounded-xl'
+                          : ''
+                      }
+                      data-testid="entity-list-item"
+                    >
+                      {renderListItem!(item)}
+                    </div>
+                  )}
                   bordered
                   locale={{ emptyText: renderFilteredEmptyState() }}
                   className="overflow-hidden bg-white dark:bg-gray-950 !border-gray-200 dark:!border-gray-800"
                   data-testid="entity-list"
                 />
                 {items!.length < (pagination.total ?? 0) && (
-                  <div className="flex justify-between items-center mt-4">
+                  <div className="flex justify-between items-center mt-4 pb-4">
                     <Button
                       onClick={() => goToPage(pagination.current - 1)}
                       disabled={pagination.current === 1}
@@ -727,20 +875,20 @@ const EntityList = forwardRef(function <T>(
                 )}
               </>
             ) : (
-              <div id="scrollable-entity-table" className="h-full flex flex-col overflow-hidden">
+              <div className="pb-4">
                 <Table<T>
                   columns={extendedColumns}
                   dataSource={items!}
                   rowKey={getRowKey}
                   loading={loading}
                   tableLayout="auto"
+                  scroll={{ x: 'max-content' }}
                   pagination={{
                     ...pagination,
                     showSizeChanger: true,
                     showQuickJumper: true,
                     onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
                   }}
-                  scroll={{ y: scrollHeight }}
                   rowSelection={
                     bulkActions.length > 0
                       ? {
@@ -790,6 +938,11 @@ const EntityList = forwardRef(function <T>(
                       </Empty>
                     ),
                   }}
+                  rowClassName={(record: any) =>
+                    justAppliedKeys.has(getRowKey(record))
+                      ? 'bg-green-50 transition-colors duration-700'
+                      : ''
+                  }
                   data-testid="entity-table"
                   className="bg-white dark:bg-gray-900 border-1 border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
                 />

@@ -23,7 +23,7 @@ const AssignmentsEmptyState = ({
   const title = canCreate ? 'No assignments yet' : 'No assignments available';
   const description = canCreate
     ? `Create your first assignment for ${moduleLabel}.`
-    : `There aren&apos;t any assignments available for ${moduleLabel} right now.`;
+    : `There aren't any assignments available for ${moduleLabel} right now.`;
 
   return (
     <div className="flex-1 flex items-center justify-center h-full rounded-xl border-2 border-dashed bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
@@ -50,12 +50,13 @@ const AssignmentsEmptyState = ({
                 onClick={onCreate}
                 className="min-w-[200px]"
                 disabled={!onCreate}
+                data-testid="empty-add"
               >
                 Add assignment
               </Button>
             )}
             {onRefresh && (
-              <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+              <Button icon={<ReloadOutlined />} onClick={onRefresh} data-testid="empty-refresh">
                 Refresh
               </Button>
             )}

@@ -33,24 +33,13 @@ impl MigrationTrait for Migration {
                             .big_integer()
                             .not_null(),
                     )
-                    .col(
-                        ColumnDef::new(Alias::new("title"))
-                            .text()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Alias::new("description"))
-                            .text()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(Alias::new("title")).text().not_null())
+                    .col(ColumnDef::new(Alias::new("description")).text().not_null())
                     .col(
                         ColumnDef::new(Alias::new("status"))
                             .enumeration(
                                 Alias::new("ticket_status"),
-                                vec![
-                                    Alias::new("open"),
-                                    Alias::new("closed"),
-                                ],
+                                vec![Alias::new("open"), Alias::new("closed")],
                             )
                             .not_null()
                             .default("open"),
@@ -86,11 +75,7 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(
-                Table::drop()
-                    .table(Alias::new("tickets"))
-                    .to_owned(),
-            )
+            .drop_table(Table::drop().table(Alias::new("tickets")).to_owned())
             .await
     }
 }

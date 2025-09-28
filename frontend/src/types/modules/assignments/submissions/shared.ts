@@ -1,8 +1,33 @@
+// src/types/modules/assignments/submissions.ts
 import type { Timestamp } from "@/types/common";
+
+// ─────────────────────────────────────────────────────────────
+// Live submission status/phase (shared)
+// ─────────────────────────────────────────────────────────────
+export const SUBMISSION_STATUSES = [
+  'queued',
+  'running',
+  'grading',
+  'graded',
+  'failed_upload',
+  'failed_compile',
+  'failed_execution',
+  'failed_grading',
+  'failed_internal',
+  'failed_disallowed_code',
+] as const;
+export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
 // ─────────────────────────────────────────────────────────────
 // Shared Types
 // ─────────────────────────────────────────────────────────────
+
+export interface PlagiarismInfo {
+  flagged: boolean;
+  similarity: number;
+  lines_matched: number;
+  description: string;
+}
 
 export interface Submission extends Timestamp {
   id: number;
@@ -12,10 +37,13 @@ export interface Submission extends Timestamp {
   mark: SubmissionMark;
   is_practice: boolean;
   is_late: boolean;
+  ignored: boolean;
+  status: SubmissionStatus;
   score?: number;
   tasks?: TaskBreakdown[];
-  code_coverage?: CodeCoverageEntry[];
+  code_coverage?: CodeCoverage;
   user?: SubmissionUserInfo;
+  plagiarism?: PlagiarismInfo;
 }
 
 export interface SubmissionMark {
@@ -28,19 +56,37 @@ export interface SubsectionBreakdown {
   status: string;
   earned: number;
   total: number;
+  feedback?: string;
 }
 
 export interface TaskBreakdown {
   task_number: number;
   name: string;
   score: SubmissionMark;
-  feedback: string;
   subsections: SubsectionBreakdown[];
 }
 
-export interface CodeCoverageEntry {
-  class: string;
-  percentage: number;
+// ─────────────────────────────────────────────────────────────
+// Code Coverage (aligned with backend)
+// ─────────────────────────────────────────────────────────────
+
+export interface CodeCoverageSummary {
+  earned: number;
+  total: number;
+  total_lines: number;
+  covered_lines: number;
+  coverage_percent: number;
+}
+
+export interface CodeCoverageFile {
+  path: string;
+  earned: number; 
+  total: number;  
+}
+
+export interface CodeCoverage {
+  summary?: CodeCoverageSummary;
+  files: CodeCoverageFile[];
 }
 
 export interface SubmissionUserInfo {
@@ -53,7 +99,6 @@ export interface SubmissionTaskOutput {
   task_number: number;
   raw: string;
 }
-
 
 // Request payload: either specific IDs or all=true (mutually exclusive)
 export type ResubmitRequest =
@@ -68,6 +113,7 @@ export interface FailedResubmission {
 
 // Response shape from the endpoint
 export interface ResubmitResponse {
-  resubmitted: number;
+  started: number;
+  skipped_in_progress: number;
   failed: FailedResubmission[];
 }

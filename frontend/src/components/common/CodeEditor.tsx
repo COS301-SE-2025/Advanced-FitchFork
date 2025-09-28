@@ -1,5 +1,5 @@
-import { Editor } from '@monaco-editor/react';
-import { useState } from 'react';
+import { Editor, type OnMount } from '@monaco-editor/react';
+import { useRef, useState, useEffect } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { CopyOutlined, CheckOutlined } from '@ant-design/icons';
 import { Tooltip, message } from 'antd';
@@ -8,12 +8,14 @@ interface CodeEditorProps {
   value: string;
   language?: string;
   onChange?: (value: string | undefined) => void;
-  /** accept percentage for fluid height */
-  height?: number | string;
+  height?: number | string; // accept percentage for fluid height
   readOnly?: boolean;
   className?: string;
   title?: string;
   minimal?: boolean;
+  showLineNumbers?: boolean;
+  fitContent?: boolean;
+  hideCopyButton?: boolean;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -25,11 +27,21 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   className = '',
   title,
   minimal = false,
+  showLineNumbers = true,
+  fitContent = false,
+  hideCopyButton = false,
 }) => {
   const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
-
   const langLabel = language.toUpperCase();
+
+  const initialHeight = typeof height === 'number' ? `${height}px` : height;
+  const [dynamicHeight, setDynamicHeight] = useState<number | string>(
+    fitContent ? 0 : initialHeight,
+  );
+
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null);
+  const disposeRef = useRef<{ dispose: () => void } | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value || '');
@@ -38,16 +50,37 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // Normalize height for wrapper style and Monaco prop
-  const editorHeight = typeof height === 'number' ? `${height}px` : height;
+  const handleMount: OnMount = (editor) => {
+    editorRef.current = editor;
+
+    if (fitContent) {
+      const applyHeight = () => {
+        const contentHeight = editor.getContentHeight();
+        setDynamicHeight(contentHeight);
+        const { width } = editor.getLayoutInfo();
+        editor.layout({ width, height: contentHeight });
+      };
+
+      applyHeight();
+      disposeRef.current = editor.onDidContentSizeChange(applyHeight);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      disposeRef.current?.dispose();
+      disposeRef.current = null;
+      editorRef.current = null;
+    };
+  }, []);
+
+  const effectiveHeight = fitContent ? dynamicHeight : initialHeight;
 
   return (
     <div
       className={`relative rounded-md overflow-hidden border border-gray-300 dark:border-gray-700 group
                   flex flex-col min-h-0 ${className}`}
-      /* container can stretch if parent gives it height */
     >
-      {/* Standard header */}
       {!minimal && (
         <div
           className={`flex items-center justify-between px-3 py-2 text-sm font-medium flex-shrink-0
@@ -68,26 +101,26 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
               {langLabel}
             </span>
 
-            <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              >
-                {copied ? <CheckOutlined /> : <CopyOutlined />}
-              </button>
-            </Tooltip>
+            {!hideCopyButton && (
+              <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {copied ? <CheckOutlined /> : <CopyOutlined />}
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
       )}
 
-      {/* Editor wrapper fills remaining height */}
       <div
         className="relative flex-1 min-h-0"
-        style={{ height: editorHeight }} /* '100%' makes it fluid; numeric makes fixed */
+        style={{ height: effectiveHeight as number | string }}
       >
-        {/* Minimal floating copy button */}
-        {minimal && (
+        {minimal && !hideCopyButton && (
           <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
             <button
               type="button"
@@ -106,10 +139,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         )}
 
         <Editor
-          height={editorHeight} // ← accepts "100%" too
+          height={effectiveHeight}
           language={language}
           value={value}
           onChange={onChange}
+          onMount={handleMount}
           theme={isDarkMode ? 'vs-dark' : 'light'}
           options={{
             readOnly,
@@ -118,6 +152,33 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
             wordWrap: 'on',
             scrollBeyondLastLine: false,
             automaticLayout: true,
+            // 🔒 Always disable active-line highlight (no prop to re-enable)
+            renderLineHighlight: 'none',
+            renderLineHighlightOnlyWhenFocus: false,
+            // Optional: also avoid extra selection glow/occurrence highlights (keeps things calmer)
+            selectionHighlight: false,
+            occurrencesHighlight: 'off',
+
+            lineNumbers: showLineNumbers ? 'on' : 'off',
+            ...(showLineNumbers
+              ? {}
+              : {
+                  glyphMargin: false,
+                  lineDecorationsWidth: 0,
+                  lineNumbersMinChars: 0,
+                }),
+            ...(fitContent
+              ? {
+                  scrollbar: {
+                    vertical: 'hidden',
+                    horizontal: 'auto',
+                    handleMouseWheel: false,
+                    alwaysConsumeMouseWheel: false,
+                  },
+                  overviewRulerLanes: 0,
+                  overviewRulerBorder: false,
+                }
+              : {}),
           }}
         />
       </div>

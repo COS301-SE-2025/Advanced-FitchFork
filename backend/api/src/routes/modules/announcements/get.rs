@@ -10,13 +10,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
-use serde::{Deserialize, Serialize};
-use util::state::AppState;
 use db::models::announcements::{
     Column as AnnouncementColumn, Entity as AnnouncementEntity, Model as AnnouncementModel,
 };
-use db::models::user::{Entity as UserEntity};
+use db::models::user::Entity as UserEntity;
+use sea_orm::{ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use serde::{Deserialize, Serialize};
+use util::state::AppState;
 
 #[derive(Serialize)]
 pub struct MinimalUser {
@@ -29,7 +29,6 @@ pub struct ShowAnnouncementResponse {
     pub announcement: AnnouncementModel,
     pub user: MinimalUser,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct FilterReq {
@@ -163,7 +162,7 @@ pub async fn get_announcements(
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<FilterResponse>::error("Invalid field used")),
                 )
-                .into_response();
+                    .into_response();
             }
         }
     }
@@ -189,7 +188,7 @@ pub async fn get_announcements(
                     StatusCode::BAD_REQUEST,
                     Json(ApiResponse::<FilterResponse>::error("Invalid pinned value")),
                 )
-                .into_response();
+                    .into_response();
             }
         }
     }
@@ -243,7 +242,9 @@ pub async fn get_announcements(
 
     // Default pinned DESC if not explicitly sorted by pinned
     if !applied_pinned_sort {
-        query = query.order_by_desc(AnnouncementColumn::Pinned).order_by_desc(AnnouncementColumn::CreatedAt);
+        query = query
+            .order_by_desc(AnnouncementColumn::Pinned)
+            .order_by_desc(AnnouncementColumn::CreatedAt);
     }
 
     let paginator = query.clone().paginate(db, per_page as u64);
@@ -253,9 +254,11 @@ pub async fn get_announcements(
             eprintln!("Error counting announcements: {:?}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<FilterResponse>::error("Error counting announcements")),
+                Json(ApiResponse::<FilterResponse>::error(
+                    "Error counting announcements",
+                )),
             )
-            .into_response();
+                .into_response();
         }
     };
 
@@ -269,7 +272,7 @@ pub async fn get_announcements(
                     "Announcements retrieved successfully",
                 )),
             )
-            .into_response()
+                .into_response()
         }
         Err(err) => {
             eprintln!("Error fetching announcements: {:?}", err);
@@ -279,7 +282,7 @@ pub async fn get_announcements(
                     "Failed to retrieve announcements",
                 )),
             )
-            .into_response()
+                .into_response()
         }
     }
 }

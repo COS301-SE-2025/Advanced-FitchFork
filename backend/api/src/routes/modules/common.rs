@@ -8,7 +8,7 @@
 //! Includes `From` implementations to convert database models into API-friendly responses.
 
 use chrono::{Datelike, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +81,7 @@ pub struct ModuleRequest {
     #[validate(length(max = 1000, message = "Description must be at most 1000 characters"))]
     pub description: Option<String>,
 
-    #[validate(range(min = 1, message = "Credits must be a positive number"))]
+    #[validate(range(min = 1, max = 9999, message = "Credits must be between 1 and 9999"))]
     pub credits: i32,
 }
 

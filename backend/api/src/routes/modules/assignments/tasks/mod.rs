@@ -2,18 +2,21 @@
 //!
 //! This module defines the routing for assignment task-related endpoints, including retrieving, editing, creating, and deleting task details. It applies access control middleware to ensure only lecturers or admins can access these endpoints.
 
-use axum::{Router, routing::{get, post, put, delete}};
-use get::{get_task_details, list_tasks};
-use put::edit_task;
-use post::create_task;
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
 use delete::delete_task;
+use get::{get_task_details, list_tasks};
+use post::create_task;
+use put::edit_task;
 use util::state::AppState;
 
-pub mod get;
-pub mod put;
-pub mod post;
-pub mod delete;
 pub mod common;
+pub mod delete;
+pub mod get;
+pub mod post;
+pub mod put;
 
 /// Registers the routes for assignment task endpoints.
 ///
@@ -30,7 +33,7 @@ pub mod common;
 /// # Returns
 /// An [`axum::Router`] with the task endpoints and their associated middleware.
 pub fn tasks_routes() -> Router<AppState> {
-    Router::new()        
+    Router::new()
         .route("/", get(list_tasks))
         .route("/", post(create_task))
         .route("/{task_id}", get(get_task_details))

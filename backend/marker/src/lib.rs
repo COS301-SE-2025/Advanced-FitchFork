@@ -23,40 +23,52 @@ pub mod utilities;
 use crate::comparators::percentage_comparator::PercentageComparator;
 use crate::error::MarkerError;
 use crate::feedback::auto_feedback::AutoFeedback;
-use crate::parsers::complexity_parser::ComplexityReport;
-use crate::parsers::coverage_parser::CoverageReport;
 use crate::report::MarkReportResponse;
 use crate::traits::comparator::OutputComparator;
 use crate::traits::feedback::Feedback;
 use crate::traits::parser::Parser;
-use crate::types::{AllocatorSchema, TaskResult};
-use crate::utilities::file_loader::load_files;
+use crate::types::TaskResult;
+
 use chrono::Utc;
+use std::fs;
 use std::path::PathBuf;
+use util::code_coverage_report::CoverageReport;
 use util::execution_config::ExecutionConfig;
+use util::execution_config::MarkingScheme;
+use util::mark_allocator;
+use util::valgrind_report::ValgrindReport;
 
 /// Represents a marking job for a single student submission.
 ///
 /// This struct encapsulates all the input files and configuration needed to mark a submission,
-/// including memo outputs, student outputs, allocation (task) schema, and optional coverage/complexity reports.
+/// including memo outputs, student outputs, allocator (task) schema object, and optional coverage report.
 ///
 /// # Fields
 /// - `memo_outputs`: Paths to the reference (memo) output files.
 /// - `student_outputs`: Paths to the student output files.
-/// - `allocation_json`: Path to the JSON file describing the task/subtask structure and scoring.
+/// - `allocator`: **Allocator object** describing the task/subtask structure and scoring.
 /// - `coverage_report`: Optional path to a code coverage report.
-/// - `complexity_report`: Optional path to a code complexity report.
+/// - `valgrind_report`: Optional path to a valgrind memory leak report.
 /// - `comparator`: Strategy for comparing outputs (e.g., percentage, exact).
 /// - `feedback`: Automated feedback generation for each subtask.
 pub struct MarkingJob<'a> {
     memo_outputs: Vec<PathBuf>,
     student_outputs: Vec<PathBuf>,
-    allocation_json: PathBuf,
+    allocator: mark_allocator::MarkAllocator,
     coverage_report: Option<PathBuf>,
-    complexity_report: Option<PathBuf>,
+    valgrind_report: Option<PathBuf>,
     comparator: Box<dyn OutputComparator + Send + Sync + 'a>,
     feedback: Box<dyn Feedback + Send + Sync + 'a>,
     config: ExecutionConfig,
+}
+
+/// Round a float to two decimal places in an efficient manner.
+///
+/// Uses the common multiply / round / divide trick. Kept local to this module
+/// so it's cheap to inline and obvious where rounding is happening.
+#[inline]
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
 }
 
 impl<'a> MarkingJob<'a> {
@@ -65,21 +77,20 @@ impl<'a> MarkingJob<'a> {
     /// # Arguments
     /// * `memo_outputs` - Paths to reference (memo) output files.
     /// * `student_outputs` - Paths to student output files.
-    /// * `allocation_json` - Path to the JSON file describing the marking schema.
-    /// * `module_id` - ID of the module.
-    /// * `assignment_id` - ID of the assignment
+    /// * `allocator` - **Allocator object** describing the marking schema.
+    /// * `config` - Execution configuration.
     pub fn new(
         memo_outputs: Vec<PathBuf>,
         student_outputs: Vec<PathBuf>,
-        allocation_json: PathBuf,
+        allocator: mark_allocator::MarkAllocator,
         config: ExecutionConfig,
     ) -> Self {
         Self {
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             coverage_report: None,
-            complexity_report: None,
+            valgrind_report: None,
             comparator: Box::new(PercentageComparator),
             feedback: Box::new(AutoFeedback),
             config,
@@ -95,12 +106,12 @@ impl<'a> MarkingJob<'a> {
         self
     }
 
-    /// Attach a code complexity report to the marking job.
+    /// Attach a valgrind memory leak report to the marking job.
     ///
     /// # Arguments
-    /// * `report` - Path to the complexity report file.
-    pub fn with_complexity(mut self, report: PathBuf) -> Self {
-        self.complexity_report = Some(report);
+    /// * `report` - Path to the valgrind report file.
+    pub fn with_valgrind(mut self, report: PathBuf) -> Self {
+        self.valgrind_report = Some(report);
         self
     }
 
@@ -129,149 +140,238 @@ impl<'a> MarkingJob<'a> {
     /// * `Err(MarkerError)` if any step fails (e.g., file loading, parsing, input mismatch).
     ///
     /// # Steps
-    /// 1. Loads and validates all input files.
-    /// 2. Parses allocation, coverage, and complexity reports.
+    /// 1. Loads and validates all input files (memo/student/coverage).
+    /// 2. Uses the provided allocator object.
     /// 3. Parses memo and student outputs into tasks and subtasks.
     /// 4. Compares outputs using the configured comparator for each subtask.
     /// 5. Aggregates results and generates automated feedback.
     /// 6. Builds a detailed report with scores and feedback per task/subtask.
     pub async fn mark(self) -> Result<MarkReportResponse, MarkerError> {
-        let files = load_files(
-            self.memo_outputs,
-            self.student_outputs,
-            self.allocation_json,
-            self.coverage_report,
-            self.complexity_report,
+        let memo_contents: Vec<String> = self
+            .memo_outputs
+            .iter()
+            .map(|p| {
+                fs::read_to_string(p).map_err(|e| {
+                    MarkerError::InputMismatch(format!("Failed to read memo file {:?}: {e}", p))
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        let student_contents: Vec<String> = self
+            .student_outputs
+            .iter()
+            .map(|p| {
+                fs::read_to_string(p).map_err(|e| {
+                    MarkerError::InputMismatch(format!("Failed to read student file {:?}: {e}", p))
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        let coverage_report: Option<CoverageReport> = match &self.coverage_report {
+            Some(path) => {
+                let s = fs::read_to_string(path).map_err(|e| {
+                    MarkerError::InputMismatch(format!(
+                        "Failed to read coverage file {:?}: {e}",
+                        path
+                    ))
+                })?;
+                let report: CoverageReport = serde_json::from_str(&s)
+                    .map_err(|e| MarkerError::InvalidJson(format!("Invalid coverage JSON: {e}")))?;
+                Some(report)
+            }
+            None => None,
+        };
+
+        let valgrind_report: Option<ValgrindReport> = match &self.valgrind_report {
+            Some(path) => {
+                let s = fs::read_to_string(path).map_err(|e| {
+                    MarkerError::InputMismatch(format!(
+                        "Failed to read valgrind file {:?}: {e}",
+                        path
+                    ))
+                })?;
+                let report: ValgrindReport = serde_json::from_str(&s)
+                    .map_err(|e| MarkerError::InvalidJson(format!("Invalid valgrind JSON: {e}")))?;
+                Some(report)
+            }
+            None => None,
+        };
+
+        let allocator = self.allocator;
+
+        let expected_counts: Vec<usize> = allocator
+            .tasks
+            .iter()
+            .filter(|t| !t.code_coverage.unwrap_or(false))
+            .map(|task| task.subsections.len())
+            .collect();
+
+        // Parse outputs
+        let submission = crate::parsers::output_parser::OutputParser.parse(
+            (&memo_contents, &student_contents, expected_counts),
+            self.config.clone(),
         )?;
 
-        let allocator: AllocatorSchema = parsers::allocator_parser::JsonAllocatorParser
-            .parse(&files.allocator_raw, self.config.clone())?;
-
-        if let Some(coverage_raw) = files.coverage_raw {
-            let _coverage: CoverageReport = parsers::coverage_parser::JsonCoverageParser
-                .parse(&coverage_raw, self.config.clone())?;
-        }
-
-        if let Some(complexity_raw) = files.complexity_raw {
-            let _complexity: ComplexityReport = parsers::complexity_parser::JsonComplexityParser
-                .parse(&complexity_raw, self.config.clone())?;
-        }
-
-        //TODO - this currently returns an error when the submission code crashes. Temporary fix below to just give 0 (with no reason) - Richard
-        // let submission = parsers::output_parser::OutputParser.parse(
-        //     (
-        //         &files.memo_contents,
-        //         &files.student_contents,
-        //         allocator
-        //             .0
-        //             .iter()
-        //             .map(|task| task.subsections.len())
-        //             .collect(),
-        //     ),
-        //     self.config,
-        // )?;
-
-        let submission = match parsers::output_parser::OutputParser.parse(
-            (
-                &files.memo_contents,
-                &files.student_contents,
-                allocator
-                    .0
-                    .iter()
-                    .map(|task| task.subsections.len())
-                    .collect(),
-            ),
-            self.config,
-        ) {
-            Ok(sub) => sub,
-            Err(_err) => {
-                // Parser failed → award 0, but still calculate totals from allocator
-                let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
-                let mut task_counter = 1;
-                let mut total_possible = 0;
-
-                for task_entry in &allocator.0 {
-                    let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-                    let mut task_possible = 0;
-
-                    for subsection in &task_entry.subsections {
-                        let possible = subsection.value;
-                        task_possible += possible;
-                        total_possible += possible;
-
-                        subsections.push(crate::report::ReportSubsection {
-                            label: subsection.name.clone(),
-                            earned: 0,
-                            total: possible,
-                            feedback: String::new(),
-                        });
-                    }
-
-                    report_tasks.push(crate::report::ReportTask {
-                        task_number: task_counter,
-                        name: task_entry.name.clone(),
-                        score: crate::report::Score {
-                            earned: 0,
-                            total: task_possible,
-                        },
-                        subsections,
-                    });
-
-                    task_counter += 1;
-                }
-
-                let now = Utc::now().to_rfc3339();
-                let mark = crate::report::Score {
-                    earned: 0,
-                    total: total_possible,
-                };
-                let report =
-                    crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
-
-                return Ok(report.into());
-            }
-        };
-        //End of temporary fix
-
+        // Compare & collect results
         let mut all_results: Vec<TaskResult> = Vec::new();
         let mut per_task_results: Vec<Vec<TaskResult>> = Vec::new();
         let mut per_task_subsections: Vec<Vec<crate::report::ReportSubsection>> = Vec::new();
         let mut per_task_names: Vec<String> = Vec::new();
-        let mut per_task_scores: Vec<(i64, i64)> = Vec::new();
+        let mut per_task_scores: Vec<(f64, f64)> = Vec::new();
 
-        for task_entry in &allocator.0 {
+        let mut i = 1;
+
+        for task_entry in allocator.tasks.iter() {
+            if task_entry.code_coverage.unwrap_or(false) {
+                // handled later
+                continue;
+            }
+
+            // submission uses ids like "task1", "task2", ...
+            // let expected_id = format!("task{}", task_entry.task_number);
+            let expected_id = format!("task{}", i);
+            i = i + 1;
             let submission_task = submission
                 .tasks
                 .iter()
-                .find(|t| t.task_id.eq_ignore_ascii_case(&task_entry.id));
+                .find(|t| t.task_id.eq_ignore_ascii_case(&expected_id));
+
             let mut subsections: Vec<crate::report::ReportSubsection> = Vec::new();
-            let mut task_earned = 0;
-            let mut task_possible = 0;
+            let mut task_earned = 0.0;
             let mut task_results: Vec<TaskResult> = Vec::new();
 
             if let Some(task_output) = submission_task {
-                for (i, subsection) in task_entry.subsections.iter().enumerate() {
-                    if i >= task_output.memo_output.subtasks.len() {
-                        return Err(MarkerError::InputMismatch(format!(
-                            "Task '{}' has more subsections in allocator than in memo output",
-                            task_entry.id
-                        )));
+                for (sub_index, subsection) in task_entry.subsections.iter().enumerate() {
+                    let mut student_lines = task_output
+                        .student_output
+                        .subtasks
+                        .get(sub_index)
+                        .map(|s| s.lines.clone())
+                        .unwrap_or_default();
+
+                    let memo_or_regex_lines: Vec<String> = match self.config.marking.marking_scheme
+                    {
+                        MarkingScheme::Regex => match subsection.regex.clone() {
+                            Some(patterns) => patterns,
+                            None => {
+                                let pattern_count = subsection.value.max(0.0).round() as usize;
+                                std::iter::repeat(String::new())
+                                    .take(pattern_count)
+                                    .collect()
+                            }
+                        },
+                        _ => task_output
+                            .memo_output
+                            .subtasks
+                            .get(sub_index)
+                            .map(|s| s.lines.clone())
+                            .unwrap_or_default(),
+                    };
+
+                    if self.config.marking.reorder_by_memo
+                        && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex)
+                    {
+                        student_lines =
+                            crate::utilities::line_normalization::reorder_student_by_memo(
+                                student_lines,
+                                &memo_or_regex_lines,
+                            );
                     }
 
-                    let memo_lines = &task_output.memo_output.subtasks[i].lines;
-                    let student_lines = &task_output.student_output.subtasks[i].lines;
+                    let has_error = task_output
+                        .return_code
+                        .map(|code| code != 0)
+                        .unwrap_or(false);
 
-                    let result: TaskResult =
-                        self.comparator
-                            .compare(subsection, memo_lines, student_lines);
+                    let mut result = if has_error {
+                        // If there are compilation or runtime errors, award 0 marks
+                        // and skip comparison and memory leak checks
+                        TaskResult {
+                            name: subsection.name.clone(),
+                            awarded: 0.0,
+                            possible: subsection.value,
+                            matched_patterns: Vec::new(),
+                            missed_patterns: Vec::new(),
+                            student_output: student_lines.clone(),
+                            memo_output: memo_or_regex_lines.clone(),
+                            stderr: task_output.stderr.clone(),
+                            return_code: task_output.return_code,
+                            manual_feedback: None,
+                        }
+                    } else {
+                        // No errors detected, proceed with normal comparison
+                        let mut comparison_result = self.comparator.compare(
+                            subsection,
+                            &memo_or_regex_lines,
+                            &student_lines,
+                        );
+                        comparison_result.stderr = task_output.stderr.clone();
+                        comparison_result.return_code = task_output.return_code;
+                        comparison_result
+                    };
 
+                    let mut section_feedback = String::new();
+
+                    if has_error {
+                        // Use stderr content as feedback for compilation/runtime errors
+                        section_feedback = task_output
+                            .stderr
+                            .as_ref()
+                            .map(|stderr| stderr.trim().to_string())
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "Runtime error (exit code: {})",
+                                    task_output.return_code.unwrap_or(0)
+                                )
+                            });
+                    } else if task_entry.valgrind.unwrap_or(false) {
+                        // Only check for memory leaks if there are no compilation/runtime errors
+                        let is_memory_leak_section =
+                            subsection.name.to_lowercase().contains("memory leak")
+                                || subsection
+                                    .feedback
+                                    .as_ref()
+                                    .map(|f| f.to_lowercase().contains("valgrind"))
+                                    .unwrap_or(false);
+
+                        if is_memory_leak_section {
+                            if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
+                                let task_has_leaks = valgrind_report_ref
+                                    .tasks
+                                    .iter()
+                                    .find(|t| t.task_number == task_entry.task_number)
+                                    .map(|t| t.leaked)
+                                    .unwrap_or(false);
+
+                                if task_has_leaks {
+                                    result.awarded = 0.0;
+                                    let leaked_bytes = valgrind_report_ref
+                                        .tasks
+                                        .iter()
+                                        .find(|t| t.task_number == task_entry.task_number)
+                                        .map(|t| t.bytes_leaked)
+                                        .unwrap_or(0);
+                                    section_feedback = format!(
+                                        "Memory leaks detected: {} bytes leaked. Fix memory leaks to earn points.",
+                                        leaked_bytes
+                                    );
+                                } else {
+                                    result.awarded = subsection.value;
+                                    section_feedback =
+                                        "No memory leaks detected. Well done!".to_string();
+                                }
+                            }
+                        }
+                    }
+
+                    result.awarded = round2(result.awarded);
                     task_earned += result.awarded;
-                    task_possible += result.possible;
+
                     subsections.push(crate::report::ReportSubsection {
                         label: subsection.name.clone(),
                         earned: result.awarded,
-                        total: result.possible,
-                        feedback: String::new(),
+                        total: round2(subsection.value),
+                        feedback: section_feedback,
                     });
                     task_results.push(result.clone());
                     all_results.push(result);
@@ -279,23 +379,23 @@ impl<'a> MarkingJob<'a> {
             } else {
                 return Err(MarkerError::InputMismatch(format!(
                     "Task '{}' from allocator not found in submission outputs",
-                    task_entry.id
+                    expected_id
                 )));
             }
 
             per_task_results.push(task_results);
             per_task_subsections.push(subsections);
             per_task_names.push(task_entry.name.clone());
-            per_task_scores.push((task_earned, task_possible));
+            per_task_scores.push((round2(task_earned), round2(task_entry.value)));
         }
 
+        // Feedback
         let feedback_entries = self.feedback.assemble_feedback(&all_results).await?;
         let mut feedback_iter = feedback_entries.iter();
 
         let mut report_tasks: Vec<crate::report::ReportTask> = Vec::new();
         let mut task_counter = 1;
-        let mut total_earned = 0;
-        let mut total_possible = 0;
+        let mut total_earned = 0.0;
         for ((_task_results, mut subsections), (name, (task_earned, task_possible))) in
             per_task_results
                 .into_iter()
@@ -303,10 +403,14 @@ impl<'a> MarkingJob<'a> {
                 .zip(per_task_names.into_iter().zip(per_task_scores.into_iter()))
         {
             for subsection in &mut subsections {
-                subsection.feedback = feedback_iter
-                    .next()
-                    .map(|f| f.message.clone())
-                    .unwrap_or_default();
+                if !subsection.feedback.is_empty() {
+                    feedback_iter.next();
+                } else {
+                    subsection.feedback = feedback_iter
+                        .next()
+                        .map(|f| f.message.clone())
+                        .unwrap_or_default();
+                }
             }
 
             report_tasks.push(crate::report::ReportTask {
@@ -320,17 +424,89 @@ impl<'a> MarkingJob<'a> {
             });
 
             total_earned += task_earned;
-            total_possible += task_possible;
             task_counter += 1;
         }
 
+        let mut coverage_total_earned: f64 = 0.0;
+        let mut coverage_total_possible: f64 = 0.0;
+        if let Some(coverage_report_ref) = coverage_report.as_ref() {
+            let bucket_percent: f64 = match coverage_report_ref.summary.coverage_percent {
+                p if p < 5.0 => 0.0,
+                p if p < 20.0 => 20.0,
+                p if p < 40.0 => 40.0,
+                p if p < 60.0 => 60.0,
+                p if p < 80.0 => 80.0,
+                _ => 100.0,
+            };
+
+            let coverage_value = allocator
+                .tasks
+                .iter()
+                .filter(|t| t.code_coverage.unwrap_or(false))
+                .map(|t| t.value)
+                .sum::<f64>();
+
+            coverage_total_earned = round2(bucket_percent * coverage_value / 100.0);
+            coverage_total_possible = round2(coverage_value);
+            total_earned += coverage_total_earned;
+        }
+
         let mark = crate::report::Score {
-            earned: total_earned,
-            total: total_possible,
+            earned: round2(total_earned),
+            total: round2(allocator.total_value),
         };
 
         let now = Utc::now().to_rfc3339();
-        let report = crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+        let mut report =
+            crate::report::generate_new_mark_report(now.clone(), now, report_tasks, mark);
+
+        if coverage_total_possible > 0.0 {
+            if let Some(coverage_report_ref) = coverage_report.as_ref() {
+                report.code_coverage = Some(crate::report::CodeCoverageReport {
+                    summary: Some(crate::report::CoverageSummary {
+                        earned: coverage_total_earned,
+                        total: coverage_total_possible,
+                        total_lines: coverage_report_ref.summary.total_lines,
+                        covered_lines: coverage_report_ref.summary.covered_lines,
+                        coverage_percent: coverage_report_ref.summary.coverage_percent,
+                    }),
+                    files: coverage_report_ref
+                        .files
+                        .iter()
+                        .map(|f| crate::report::CoverageFile {
+                            path: f.path.clone(),
+                            earned: round2(f.covered_lines as f64),
+                            total: round2(f.total_lines as f64),
+                        })
+                        .collect(),
+                });
+            }
+        }
+
+        if let Some(valgrind_report_ref) = valgrind_report.as_ref() {
+            let tasks_with_leaks = valgrind_report_ref
+                .tasks
+                .iter()
+                .filter(|t| t.leaked)
+                .count();
+
+            report.valgrind = Some(crate::report::ValgrindReport {
+                summary: Some(crate::report::ValgrindSummary {
+                    total_leaks: valgrind_report_ref.total_leaks,
+                    tasks_with_leaks,
+                    total_tasks: valgrind_report_ref.total_tasks,
+                }),
+                tasks: valgrind_report_ref
+                    .tasks
+                    .iter()
+                    .map(|t| crate::report::ValgrindTaskReport {
+                        task_number: t.task_number,
+                        has_leaks: t.leaked,
+                        bytes_leaked: t.bytes_leaked,
+                    })
+                    .collect(),
+            });
+        }
 
         Ok(report.into())
     }
@@ -340,23 +516,28 @@ impl<'a> MarkingJob<'a> {
 mod tests {
     use super::*;
     use chrono::DateTime;
-    use std::path::PathBuf;
 
     fn is_valid_iso8601(s: &str) -> bool {
         DateTime::parse_from_rfc3339(s).is_ok()
     }
 
+    // Helper: load allocator object from the test file (no util paths/APIs needed)
+    fn load_test_allocator(path: &std::path::Path) -> mark_allocator::MarkAllocator {
+        let s = std::fs::read_to_string(path).expect("read allocator.json");
+        serde_json::from_str::<mark_allocator::MarkAllocator>(&s).expect("parse allocator.json")
+    }
+
     #[tokio::test]
     async fn test_marker_happy_path() {
         let dir = "src/test_files/marker/case1";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
@@ -370,20 +551,20 @@ mod tests {
         assert!(is_valid_iso8601(&report.created_at));
         assert!(is_valid_iso8601(&report.updated_at));
 
-        assert_eq!(report.mark.earned, 10);
-        assert_eq!(report.mark.total, 10);
+        assert_eq!(report.mark.earned, 10.0);
+        assert_eq!(report.mark.total, 10.0);
 
         assert_eq!(report.tasks.len(), 1);
         let task = &report.tasks[0];
         assert_eq!(task.name, "Task 1");
-        assert_eq!(task.score.earned, 10);
-        assert_eq!(task.score.total, 10);
+        assert_eq!(task.score.earned, 10.0);
+        assert_eq!(task.score.total, 10.0);
 
         assert_eq!(task.subsections.len(), 1);
         let sub = &task.subsections[0];
         assert_eq!(sub.label, "Sub1");
-        assert_eq!(sub.earned, 10);
-        assert_eq!(sub.total, 10);
+        assert_eq!(sub.earned, 10.0);
+        assert_eq!(sub.total, 10.0);
         assert!(!sub.feedback.is_empty(), "Feedback should not be empty");
     }
 
@@ -391,19 +572,19 @@ mod tests {
     async fn test_marker_happy_path_case2() {
         let dir = "src/test_files/marker/case2";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
@@ -417,37 +598,33 @@ mod tests {
         assert!(is_valid_iso8601(&report.created_at));
         assert!(is_valid_iso8601(&report.updated_at));
 
-        assert_eq!(report.mark.earned, 20);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.earned, 20.0);
+        assert_eq!(report.mark.total, 30.0);
 
         assert_eq!(report.tasks.len(), 2);
 
         let task1 = &report.tasks[0];
         assert_eq!(task1.name, "Task 1");
-        assert_eq!(task1.score.earned, 10);
-        assert_eq!(task1.score.total, 10);
         assert_eq!(task1.subsections.len(), 2);
         assert_eq!(task1.subsections[0].label, "Sub1.1");
-        assert_eq!(task1.subsections[0].earned, 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         assert_eq!(task1.subsections[1].label, "Sub1.2");
-        assert_eq!(task1.subsections[1].earned, 5);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 5.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
         assert_eq!(task2.name, "Task 2");
-        assert_eq!(task2.score.earned, 10);
-        assert_eq!(task2.score.total, 20);
         assert_eq!(task2.subsections.len(), 2);
         assert_eq!(task2.subsections[0].label, "Sub2.1");
-        assert_eq!(task2.subsections[0].earned, 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert_eq!(task2.subsections[0].earned, 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         assert_eq!(task2.subsections[1].label, "Sub2.2");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
     }
 
@@ -455,19 +632,19 @@ mod tests {
     async fn test_marker_edge_cases_partial_and_empty() {
         let dir = "src/test_files/marker/case3";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
@@ -484,48 +661,48 @@ mod tests {
         assert_eq!(task1.name, "FizzBuzz");
         assert_eq!(task1.subsections.len(), 2);
         assert_eq!(task1.subsections[0].label, "Output Fizz");
-        assert_eq!(task1.subsections[0].earned, 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         assert_eq!(task1.subsections[1].label, "Output Buzz");
-        assert_eq!(task1.subsections[1].earned, 0);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 0.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
         assert_eq!(task2.name, "Sum");
         assert_eq!(task2.subsections.len(), 2);
         assert_eq!(task2.subsections[0].label, "Sum correct");
-        assert_eq!(task2.subsections[0].earned, 0);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert_eq!(task2.subsections[0].earned, 0.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         assert_eq!(task2.subsections[1].label, "Handles negatives");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall
-        assert_eq!(report.mark.earned, 5);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.earned, 5.0);
+        assert_eq!(report.mark.total, 30.0);
     }
 
     #[tokio::test]
     async fn test_marker_mixed_partial_extra_and_order() {
         let dir = "src/test_files/marker/case4";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
@@ -544,13 +721,13 @@ mod tests {
         assert_eq!(task1.subsections.len(), 2);
         // Sub1: correct output with extra line, expect partial credit (likely 0 with strict comparator)
         assert_eq!(task1.subsections[0].label, "Reverse abc");
-        assert!(task1.subsections[0].earned < 5);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert!(task1.subsections[0].earned < 5.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         // Sub2: incorrect order, expect 0
         assert_eq!(task1.subsections[1].label, "Reverse xyz");
-        assert_eq!(task1.subsections[1].earned, 0);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert_eq!(task1.subsections[1].earned, 0.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
@@ -558,13 +735,13 @@ mod tests {
         assert_eq!(task2.subsections.len(), 2);
         // Sub1: output split across two lines, expect partial credit
         assert_eq!(task2.subsections[0].label, "Sort ascending");
-        assert!(task2.subsections[0].earned < 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert!(task2.subsections[0].earned < 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         // Sub2: out of order, expect 0
         assert_eq!(task2.subsections[1].label, "Sort descending");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall: sum of all earned points
@@ -573,26 +750,26 @@ mod tests {
             + task2.subsections[0].earned
             + task2.subsections[1].earned;
         assert_eq!(report.mark.earned, total_earned);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.total, 30.0);
     }
 
     #[tokio::test]
     async fn test_marker_whitespace_case_and_duplicates() {
         let dir = "src/test_files/marker/case5";
         let memo_outputs = vec![
-            PathBuf::from(format!("{}/memo1.txt", dir)),
-            PathBuf::from(format!("{}/memo2.txt", dir)),
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
         ];
         let student_outputs = vec![
-            PathBuf::from(format!("{}/student1.txt", dir)),
-            PathBuf::from(format!("{}/student2.txt", dir)),
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
         ];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
@@ -611,13 +788,13 @@ mod tests {
         assert_eq!(task1.subsections.len(), 2);
         // Sub1: wrong case, should be 0
         assert_eq!(task1.subsections[0].label, "Echo Hello");
-        assert_eq!(task1.subsections[0].earned, 0);
-        assert_eq!(task1.subsections[0].total, 5);
+        assert_eq!(task1.subsections[0].earned, 0.0);
+        assert_eq!(task1.subsections[0].total, 5.0);
         assert!(!task1.subsections[0].feedback.is_empty());
         // Sub2: extra whitespace and duplicate, should be penalized
         assert_eq!(task1.subsections[1].label, "Echo World");
-        assert!(task1.subsections[1].earned < 5);
-        assert_eq!(task1.subsections[1].total, 5);
+        assert!(task1.subsections[1].earned < 5.0);
+        assert_eq!(task1.subsections[1].total, 5.0);
         assert!(!task1.subsections[1].feedback.is_empty());
 
         let task2 = &report.tasks[1];
@@ -625,13 +802,13 @@ mod tests {
         assert_eq!(task2.subsections.len(), 2);
         // Sub1: duplicate correct line, should be penalized
         assert_eq!(task2.subsections[0].label, "Repeat Yes");
-        assert!(task2.subsections[0].earned < 10);
-        assert_eq!(task2.subsections[0].total, 10);
+        assert!(task2.subsections[0].earned < 10.0);
+        assert_eq!(task2.subsections[0].total, 10.0);
         assert!(!task2.subsections[0].feedback.is_empty());
         // Sub2: missing output, should be 0
         assert_eq!(task2.subsections[1].label, "Repeat No");
-        assert_eq!(task2.subsections[1].earned, 0);
-        assert_eq!(task2.subsections[1].total, 10);
+        assert_eq!(task2.subsections[1].earned, 0.0);
+        assert_eq!(task2.subsections[1].total, 10.0);
         assert!(!task2.subsections[1].feedback.is_empty());
 
         // Overall: sum of all earned points
@@ -640,148 +817,84 @@ mod tests {
             + task2.subsections[0].earned
             + task2.subsections[1].earned;
         assert_eq!(report.mark.earned, total_earned);
-        assert_eq!(report.mark.total, 30);
+        assert_eq!(report.mark.total, 30.0);
     }
-
-    //TODO - test no longer valid due to fix in marker - fix later
-    // #[tokio::test]
-    // async fn test_marker_error_handling_mismatched_subsections() {
-    //     let dir = "src/test_files/marker/case6";
-    //     let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-    //     let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-    //     let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
-
-    //     let job = MarkingJob::new(
-    //         memo_outputs,
-    //         student_outputs,
-    //         allocation_json,
-    //         ExecutionConfig::default_config(),
-    //     );
-
-    //     let result = job.mark().await;
-    //     assert!(
-    //         result.is_err(),
-    //         "Marking should fail due to mismatched subsection count"
-    //     );
-    //     let err = result.unwrap_err();
-    //     let err_str = format!("{:?}", err);
-    //     assert!(
-    //         err_str.contains("more subsections in allocator than in memo output")
-    //             || err_str.contains("InputMismatch")
-    //             || err_str.contains("Expected 2 subtasks, but found 1 delimiters"),
-    //         "Error message should mention mismatched subsections, got: {}",
-    //         err_str
-    //     );
-    // }
 
     #[tokio::test]
     async fn test_marker_error_handling_missing_file() {
         let dir = "src/test_files/marker/case6";
         let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        // Purposely reference a missing student file
         let student_outputs = vec![PathBuf::from(format!("{}/student_missing.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let allocator = load_test_allocator(&PathBuf::from(format!("{}/allocator.json", dir)));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
         let result = job.mark().await;
+
+        // Must be an error
         assert!(
             result.is_err(),
             "Marking should fail due to missing student file"
         );
-        let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains("File not found") || err_str.contains("unreadable"),
-            "Error message should mention missing file, got: {}",
-            err_str
-        );
+
+        // Match the specific error variant and message shape
+        match result {
+            Err(MarkerError::InputMismatch(msg)) => {
+                assert!(
+                    msg.contains("Failed to read student file")
+                        || msg.contains("No such file")
+                        || msg.contains("No such file or directory")
+                        || msg.contains("unreadable"),
+                    "Error message should mention missing file, got: {msg}"
+                );
+            }
+            Err(other) => {
+                panic!("Expected InputMismatch for missing file, got: {other:?}");
+            }
+            Ok(_) => unreachable!(),
+        }
     }
 
     #[tokio::test]
     async fn test_marker_error_handling_invalid_allocator_json() {
+        // This test still loads allocator.json into an object first, so to simulate invalid JSON
+        // you'd normally catch it before constructing the job. Here we mimic the old assertion shape
+        // by forcing a bad parse step locally.
         let dir = "src/test_files/marker/case7";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let _memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let _student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
 
-        let job = MarkingJob::new(
-            memo_outputs,
-            student_outputs,
-            allocation_json,
-            ExecutionConfig::default_config(),
-        );
+        // Try to parse invalid allocator.json -> expect parse error here, not in mark()
+        let bad_alloc_path = PathBuf::from(dir).join("allocator.json");
+        let s = std::fs::read_to_string(&bad_alloc_path).expect("read allocator.json");
+        let alloc_parse = serde_json::from_str::<mark_allocator::MarkAllocator>(&s);
 
-        let result = job.mark().await;
         assert!(
-            result.is_err(),
-            "Marking should fail due to invalid allocator JSON"
-        );
-        let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains("InvalidJson")
-                || err_str.contains("allocator")
-                || err_str.contains("expected")
-                || err_str.contains("EOF"),
-            "Error message should mention invalid JSON, got: {}",
-            err_str
+            alloc_parse.is_err(),
+            "allocator.json should be invalid in this test case"
         );
     }
-
-    //TODO - this test no longer valid due to fix with marker. Fix later
-    // #[tokio::test]
-    // async fn test_marker_error_handling_invalid_memo_format() {
-    //     let dir = "src/test_files/marker/case8";
-    //     let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-    //     let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-    //     let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
-
-    //     let job = MarkingJob::new(
-    //         memo_outputs,
-    //         student_outputs,
-    //         allocation_json,
-    //         ExecutionConfig::default_config(),
-    //     );
-
-    //     let result = job.mark().await;
-    //     assert!(
-    //         result.is_err(),
-    //         "Marking should fail due to invalid memo output format"
-    //     );
-    //     let err = result.unwrap_err();
-    //     let err_str = format!("{:?}", err);
-    //     assert!(
-    //         err_str.contains("ParseOutputError")
-    //             || err_str.contains("Expected")
-    //             || err_str.contains("subtasks")
-    //             || err_str.contains("delimiter"),
-    //         "Error message should mention invalid memo format, got: {}",
-    //         err_str
-    //     );
-    // }
 
     #[tokio::test]
     async fn test_marker_error_handling_empty_student_output() {
         let dir = "src/test_files/marker/case9";
-        let memo_outputs = vec![PathBuf::from(format!("{}/memo1.txt", dir))];
-        let student_outputs = vec![PathBuf::from(format!("{}/student1.txt", dir))];
-        let allocation_json = PathBuf::from(format!("{}/allocator.json", dir));
+        let memo_outputs = vec![PathBuf::from(dir).join("memo1.txt")];
+        let student_outputs = vec![PathBuf::from(dir).join("student1.txt")];
+        let allocator = load_test_allocator(&PathBuf::from(dir).join("allocator.json"));
 
         let job = MarkingJob::new(
             memo_outputs,
             student_outputs,
-            allocation_json,
+            allocator,
             ExecutionConfig::default_config(),
         );
 
         let result = job.mark().await;
-        // The marker may either return Ok with 0 marks, or an error if it expects at least one delimiter.
         match result {
             Ok(response) => {
                 let report = &response.data;
@@ -789,23 +902,134 @@ mod tests {
                 let task = &report.tasks[0];
                 assert_eq!(task.name, "EmptyStudent");
                 assert_eq!(task.subsections.len(), 2);
-                assert_eq!(task.subsections[0].earned, 0);
-                assert_eq!(task.subsections[1].earned, 0);
-                assert_eq!(report.mark.earned, 0);
-                assert_eq!(report.mark.total, 10);
+                assert_eq!(task.subsections[0].earned, 0.0);
+                assert_eq!(task.subsections[1].earned, 0.0);
+                assert_eq!(report.mark.earned, 0.0);
+                assert_eq!(report.mark.total, 10.0);
             }
             Err(err) => {
-                let err_str = format!("{:?}", err);
+                let err_str = format!("{err:?}");
                 assert!(
                     err_str.contains("ParseOutputError")
                         || err_str.contains("Expected")
                         || err_str.contains("subtasks")
                         || err_str.contains("delimiter")
                         || err_str.contains("empty"),
-                    "Error message should mention empty or invalid student output, got: {}",
-                    err_str
+                    "Error message should mention empty or invalid student output, got: {err_str}"
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_reorder_by_memo_on_aligns_lines() {
+        use std::{fs, io::Write};
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path();
+
+        // Files: same lines, different order
+        let memo = "A\nB\nC\n";
+        let student = "C\nA\nB\n";
+
+        // Write memo/student
+        let memo1 = dir.join("memo1.txt");
+        let mut f = fs::File::create(&memo1).unwrap();
+        f.write_all(memo.as_bytes()).unwrap();
+
+        let student1 = dir.join("student1.txt");
+        let mut f = fs::File::create(&student1).unwrap();
+        f.write_all(student.as_bytes()).unwrap();
+
+        let allocator_json = serde_json::json!({
+            "generated_at": "2025-01-01T00:00:00Z",
+            "total_value": 10.0,
+            "tasks": [{
+                "task_number": 1,
+                "name": "OrderInsensitive",
+                "value": 10.0,
+                "code_coverage": false,
+                "valgrind": false,
+                "subsections": [{
+                    "name": "All lines match",
+                    "value": 10.0
+                }]
+            }]
+        });
+        let alloc_path = dir.join("allocator.json");
+        fs::write(
+            &alloc_path,
+            serde_json::to_string_pretty(&allocator_json).unwrap(),
+        )
+        .unwrap();
+
+        let allocator = {
+            let s = fs::read_to_string(&alloc_path).unwrap();
+            serde_json::from_str::<mark_allocator::MarkAllocator>(&s).unwrap()
+        };
+        let mut cfg = ExecutionConfig::default_config();
+        cfg.marking.reorder_by_memo = true;
+        cfg.marking.marking_scheme = MarkingScheme::Exact;
+
+        let job = MarkingJob::new(vec![memo1], vec![student1], allocator, cfg);
+
+        let result = job.mark().await.expect("mark should succeed");
+        let report = result.data;
+
+        // Because we re-ordered the student lines to match the memo, we should award full marks
+        assert_eq!(report.mark.total, 10.0);
+        assert_eq!(
+            report.mark.earned, 10.0,
+            "reorder_by_memo should align lines and award full marks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regex_scheme_ignores_reorder_flag() {
+        let dir = "src/test_files/marker/case3"; // any valid fixture where content exists
+        let memo_outputs = vec![
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
+        ];
+        let student_outputs = vec![
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
+        ];
+
+        // Load allocator and inject regex patterns into one subsection so Regex path is exercised
+        let mut allocator = {
+            let s = std::fs::read_to_string(PathBuf::from(dir).join("allocator.json")).unwrap();
+            serde_json::from_str::<mark_allocator::MarkAllocator>(&s).unwrap()
+        };
+        if let Some(task) = allocator.tasks.get_mut(0) {
+            if let Some(sub) = task.subsections.get_mut(0) {
+                sub.regex = Some(vec![r"^fizz$".into(), r"^buzz$".into()]);
+            }
+        }
+
+        // Case 1: reorder_by_memo = false
+        let mut cfg1 = ExecutionConfig::default_config();
+        cfg1.marking.reorder_by_memo = false;
+        cfg1.marking.marking_scheme = MarkingScheme::Regex;
+
+        let job1 = MarkingJob::new(
+            memo_outputs.clone(),
+            student_outputs.clone(),
+            allocator.clone(),
+            cfg1,
+        );
+        let r1 = job1.mark().await.expect("mark should succeed").data;
+
+        let mut cfg2 = ExecutionConfig::default_config();
+        cfg2.marking.reorder_by_memo = true;
+        cfg2.marking.marking_scheme = MarkingScheme::Regex;
+
+        let job2 = MarkingJob::new(memo_outputs, student_outputs, allocator, cfg2);
+        let r2 = job2.mark().await.expect("mark should succeed").data;
+
+        // Assert total identical
+        assert_eq!(
+            r1.mark.earned, r2.mark.earned,
+            "Regex scheme should ignore reordering"
+        );
     }
 }

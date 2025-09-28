@@ -39,6 +39,10 @@ pub struct Task {
     pub memo_output: TaskOutput,
     /// Student output for this task.
     pub student_output: TaskOutput,
+    /// The stderr output (stack trace) if the student's code crashed.
+    pub stderr: Option<String>,
+    /// The return code from running the student's code.
+    pub return_code: Option<i32>,
 }
 
 /// Represents the output content for a single task.
@@ -90,14 +94,17 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
         {
             let task_id = format!("Task{}", i + 1);
             let expected_subtask_count = expected_subtasks[i];
-            let memo_output = parse_task_output(memo_content, expected_subtask_count, &config)?;
-            let student_output =
+            let (memo_output, _, _) =
+                parse_task_output(memo_content, expected_subtask_count, &config)?;
+            let (student_output, stderr, return_code) =
                 parse_task_output(student_content, expected_subtask_count, &config)?;
 
             tasks.push(Task {
                 task_id,
                 memo_output,
                 student_output,
+                stderr,
+                return_code,
             });
         }
 
@@ -105,16 +112,17 @@ impl<'a> Parser<(&'a [String], &'a [String], Vec<usize>), Submission> for Output
     }
 }
 
-/// Parse a single task's output content into structured subtasks.
+/// Parse a single task's output content into structured subtasks with crash information.
 ///
 /// # Arguments
 ///
 /// * `content` - Raw content of the task output file
 /// * `expected_subtask_count` - Expected number of subtasks in this task
+/// * `config` - Execution configuration
 ///
 /// # Returns
 ///
-/// A [`TaskOutput`] struct containing the parsed subtasks.
+/// A tuple containing [`TaskOutput`], optional stderr, and optional return code.
 ///
 /// # Errors
 ///
@@ -123,12 +131,29 @@ fn parse_task_output(
     content: &str,
     expected_subtask_count: usize,
     config: &ExecutionConfig,
-) -> Result<TaskOutput, MarkerError> {
-    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+) -> Result<(TaskOutput, Option<String>, Option<i32>), MarkerError> {
+    let (content_without_system_delimiters, stderr, return_code) = extract_crash_info(content);
+
+    let lines: Vec<String> = content_without_system_delimiters
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
     if lines.is_empty() {
-        return Err(MarkerError::ParseOutputError(
-            "Content is empty".to_string(),
-        ));
+        if stderr.is_some() || return_code.is_some() {
+            let mut subtasks = Vec::new();
+            for i in 0..expected_subtask_count {
+                subtasks.push(SubtaskOutput {
+                    name: format!("Subtask{}", i + 1),
+                    lines: Vec::new(),
+                });
+            }
+            return Ok((TaskOutput { subtasks }, stderr, return_code));
+        } else {
+            return Err(MarkerError::ParseOutputError(
+                "Content is empty".to_string(),
+            ));
+        }
     }
 
     let content_lines = &lines[1..];
@@ -136,10 +161,6 @@ fn parse_task_output(
     let pattern = format!(r"^{}(.+)$", escape(&deliminator));
     let delimiter_regex = Regex::new(&pattern)
         .map_err(|e| MarkerError::ParseOutputError(format!("Failed to compile regex: {}", e)))?;
-
-    //No longer hardcoded
-    // let delimiter_regex = Regex::new(r"^&-=-&(.+)$")
-    //     .map_err(|e| MarkerError::ParseOutputError(format!("Failed to compile regex: {}", e)))?;
 
     let mut delimiters = Vec::new();
     for (line_num, line) in content_lines.iter().enumerate() {
@@ -150,35 +171,146 @@ fn parse_task_output(
         }
     }
 
-    if delimiters.len() != expected_subtask_count {
-        return Err(MarkerError::ParseOutputError(format!(
-            "Expected {} subtasks, but found {} delimiters",
-            expected_subtask_count,
-            delimiters.len()
-        )));
+    let mut subtasks = Vec::new();
+    if delimiters.is_empty() {
+        for i in 0..expected_subtask_count {
+            subtasks.push(SubtaskOutput {
+                name: format!("Subtask{}", i + 1),
+                lines: Vec::new(),
+            });
+        }
+    } else {
+        for (i, (line_num, subtask_name)) in delimiters.iter().enumerate() {
+            let start_line = *line_num + 1;
+            let end_line = if i + 1 < delimiters.len() {
+                delimiters[i + 1].0
+            } else {
+                content_lines.len()
+            };
+
+            let mut subtask_lines: Vec<String> = content_lines[start_line..end_line]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+
+            strip_trailing_newlines(&mut subtask_lines);
+
+            subtasks.push(SubtaskOutput {
+                name: subtask_name.clone(),
+                lines: subtask_lines,
+            });
+        }
     }
 
-    let mut subtasks = Vec::new();
-    for (i, (line_num, subtask_name)) in delimiters.iter().enumerate() {
-        let start_line = *line_num + 1;
-        let end_line = if i + 1 < delimiters.len() {
-            delimiters[i + 1].0
+    Ok((TaskOutput { subtasks }, stderr, return_code))
+}
+
+/// Extracts the clean content, stderr, and return code from raw output.
+///
+/// # Arguments
+///
+/// * `content` - The raw output content including system delimiters
+///
+/// # Returns
+///
+/// A tuple containing (clean_content, stderr, return_code)
+fn extract_crash_info(content: &str) -> (String, Option<String>, Option<i32>) {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.is_empty() {
+        return (content.to_string(), None, None);
+    }
+
+    let stderr_marker = "&FITCHFORK&StandardError";
+    let ret_marker = "&FITCHFORK&ReturnCode";
+    let error_marker = "&FITCHFORK&Error";
+
+    let stderr_start = lines.iter().position(|l| l.trim() == stderr_marker);
+    let return_code_start = lines.iter().position(|l| l.trim() == ret_marker);
+    let error_start = lines.iter().position(|l| l.trim() == error_marker);
+
+    // If we have a &FITCHFORK&Error marker, treat the content after it as stderr
+    // and set a non-zero return code to indicate failure
+    if let Some(epos) = error_start {
+        let error_content = if epos + 1 < lines.len() {
+            let slice = &lines[epos + 1..];
+            let mut start = 0usize;
+            let mut end = slice.len();
+            while start < end && slice[start].trim().is_empty() {
+                start += 1;
+            }
+            while end > start && slice[end - 1].trim().is_empty() {
+                end -= 1;
+            }
+            if start < end {
+                Some(slice[start..end].join("\n").trim().to_string())
+            } else {
+                None
+            }
         } else {
-            content_lines.len()
+            None
         };
 
-        let subtask_lines: Vec<String> = content_lines[start_line..end_line]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-
-        subtasks.push(SubtaskOutput {
-            name: subtask_name.clone(),
-            lines: subtask_lines,
-        });
+        // Return empty clean content, error message as stderr, and -1 return code for error cases
+        return ("".to_string(), error_content, Some(-1));
     }
 
-    Ok(TaskOutput { subtasks })
+    let clean_content = if let Some(spos) = stderr_start {
+        lines[..spos].join("\n")
+    } else {
+        content.to_string()
+    };
+
+    let stderr = if let (Some(spos), Some(rpos)) = (stderr_start, return_code_start) {
+        if spos + 1 < rpos {
+            let slice = &lines[spos + 1..rpos];
+            let mut start = 0usize;
+            let mut end = slice.len();
+            while start < end && slice[start].trim().is_empty() {
+                start += 1;
+            }
+            while end > start && slice[end - 1].trim().is_empty() {
+                end -= 1;
+            }
+            if start < end {
+                Some(slice[start..end].join("\n").trim().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let return_code = if let Some(rpos) = return_code_start {
+        let mut found: Option<i32> = None;
+        for l in lines.iter().skip(rpos + 1) {
+            let t = l.trim();
+            if t.is_empty() {
+                continue;
+            }
+            if let Some(rest) = t.strip_prefix("Retcode:") {
+                if let Ok(n) = rest.trim().parse::<i32>() {
+                    found = Some(n);
+                }
+            } else if let Ok(n) = t.parse::<i32>() {
+                found = Some(n);
+            }
+            break;
+        }
+        found
+    } else {
+        None
+    };
+
+    (clean_content, stderr, return_code)
+}
+
+fn strip_trailing_newlines(lines: &mut Vec<String>) {
+    while matches!(lines.last(), Some(s) if s.is_empty() || s.chars().all(|c| c == '\r')) {
+        lines.pop();
+    }
 }
 
 #[cfg(test)]
@@ -188,14 +320,14 @@ mod tests {
     #[test]
     fn test_parse_task_output_valid_format() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
+###Subtask1
 line1
 line2
-&-=-&Subtask2
+###Subtask2
 line3"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
-        let task_output = result.unwrap();
+        let (task_output, _, _) = result.unwrap();
         assert_eq!(task_output.subtasks.len(), 2);
         assert_eq!(task_output.subtasks[0].name, "Subtask1");
         assert_eq!(task_output.subtasks[0].lines, vec!["line1", "line2"]);
@@ -204,69 +336,20 @@ line3"#;
     }
 
     #[test]
-    fn test_parse_task_output_too_few_delimiters() {
-        let content = r#"gcc -o program program.c
-&-=-&Subtask1
-line1"#;
-        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 2 subtasks, but found 1 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
-    }
-
-    #[test]
-    fn test_parse_task_output_too_many_delimiters() {
-        let content = r#"gcc -o program program.c
-&-=-&Subtask1
-line1
-&-=-&Subtask2
-line2
-&-=-&Subtask3
-line3"#;
-        let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 2 subtasks, but found 3 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
-    }
-
-    #[test]
     fn test_parse_task_output_empty_subtask_content() {
         let content = r#"gcc -o program program.c
-&-=-&Subtask1
-&-=-&Subtask2
+###Subtask1
+###Subtask2
 line1
 line2"#;
         let result = parse_task_output(content, 2, &ExecutionConfig::default_config());
         assert!(result.is_ok());
-        let task_output = result.unwrap();
+        let (task_output, _, _) = result.unwrap();
         assert_eq!(task_output.subtasks.len(), 2);
         assert_eq!(task_output.subtasks[0].name, "Subtask1");
         assert!(task_output.subtasks[0].lines.is_empty());
         assert_eq!(task_output.subtasks[1].name, "Subtask2");
         assert_eq!(task_output.subtasks[1].lines, vec!["line1", "line2"]);
-    }
-
-    #[test]
-    fn test_parse_task_output_no_delimiters() {
-        let content = r#"gcc -o program program.c
-Some random output
-without any delimiters."#;
-        let result = parse_task_output(content, 1, &ExecutionConfig::default_config());
-        assert!(result.is_err());
-        match result.err().unwrap() {
-            MarkerError::ParseOutputError(msg) => {
-                assert!(msg.contains("Expected 1 subtasks, but found 0 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error"),
-        }
     }
 
     #[test]
@@ -287,7 +370,7 @@ without any delimiters."#;
         let content = "gcc -o program program.c";
         let result = parse_task_output(content, 0, &ExecutionConfig::default_config());
         assert!(result.is_ok());
-        let task_output = result.unwrap();
+        let (task_output, _, _) = result.unwrap();
         assert!(task_output.subtasks.is_empty());
     }
 
@@ -330,50 +413,6 @@ without any delimiters."#;
         assert_eq!(task.student_output.subtasks[1].lines.len(), 2);
         assert_eq!(task.student_output.subtasks[2].name, "Sub3");
         assert_eq!(task.student_output.subtasks[2].lines.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_case2_missing_delimiter() {
-        let memo_contents = vec![read_test_file(
-            "src/test_files/output_parser/case2/memo.txt",
-        )];
-        let student_contents = vec![read_test_file(
-            "src/test_files/output_parser/case2/student.txt",
-        )];
-        let parser = OutputParser;
-        let result = parser.parse(
-            (&memo_contents, &student_contents, vec![3]),
-            ExecutionConfig::default_config(),
-        );
-
-        match result {
-            Err(MarkerError::ParseOutputError(msg)) => {
-                assert!(msg.contains("Expected 3 subtasks, but found 2 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error for missing delimiter"),
-        }
-    }
-
-    #[test]
-    fn test_parse_case3_extra_delimiter() {
-        let memo_contents = vec![read_test_file(
-            "src/test_files/output_parser/case3/memo.txt",
-        )];
-        let student_contents = vec![read_test_file(
-            "src/test_files/output_parser/case3/student.txt",
-        )];
-        let parser = OutputParser;
-        let result = parser.parse(
-            (&memo_contents, &student_contents, vec![3]),
-            ExecutionConfig::default_config(),
-        );
-
-        match result {
-            Err(MarkerError::ParseOutputError(msg)) => {
-                assert!(msg.contains("Expected 3 subtasks, but found 4 delimiters"));
-            }
-            _ => panic!("Expected InvalidOutputFormat error for extra delimiter"),
-        }
     }
 
     #[test]

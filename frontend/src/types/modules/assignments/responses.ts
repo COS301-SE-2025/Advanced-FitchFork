@@ -1,21 +1,5 @@
-import type { Assignment, AssignmentFile, AssignmentReadiness } from ".";
-import type { ApiResponse, PaginationResponse } from "@/types/common";
-
-// ─────────────────────────────────────────────────────────────
-// GET Responses Types
-// ─────────────────────────────────────────────────────────────
-
-export type GetListAssignmentsResponse = ApiResponse<{
-  assignments: Assignment[];
-} & PaginationResponse>;
-
-export type GetAssignmentResponse = ApiResponse<{
-  files: AssignmentFile[];
-} & Assignment>
-
-export type GetListAssignmentFilesResponse = ApiResponse<AssignmentFile[]>;
-
-export type GetAssignmentReadinessResponse = ApiResponse<AssignmentReadiness>;
+import type { Assignment, AssignmentFile } from ".";
+import type { ApiResponse } from "@/types/common";
 
 // ─────────────────────────────────────────────────────────────
 // POST Responses Types

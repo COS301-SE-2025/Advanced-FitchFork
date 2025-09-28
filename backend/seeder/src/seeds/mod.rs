@@ -9,6 +9,6 @@ pub mod assignment_submission_output;
 pub mod assignment_task;
 pub mod module;
 pub mod plagiarism_case;
+pub mod tickets;
 pub mod user;
 pub mod user_role;
-pub mod tickets;

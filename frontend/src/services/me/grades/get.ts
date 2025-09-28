@@ -1,6 +1,5 @@
-import type { ApiResponse, PaginationRequest, PaginationResponse } from "@/types/common"
+import type { ApiResponse, PaginationRequest, PaginationResponse } from "@/types/common";
 import type { ModuleRole } from "@/types/modules";
-import type { Grade } from "@/types/modules/grades";
 import { api } from "@/utils/api";
 
 // Query should allow searching by assignment title, username, and module code
@@ -8,28 +7,40 @@ import { api } from "@/utils/api";
 type MyGradesOptions = {
   role?: ModuleRole;
   year?: number;
+  module_id?: number;
 } & PaginationRequest;
 
-type MyGradeItem = {
-  user: {
-    id: number;
-    username: number;
-  };
+export type MyGradeScore = {
+  earned: number;
+  total: number;
+};
+
+export type MyGradeItem = {
+  id: number;
+  score: MyGradeScore;
+  percentage: number;
+  created_at: string;
+  updated_at: string;
   module: {
     id: number;
-    code: number;
-  }
+    code: string;
+  };
   assignment: {
     id: number;
-    name: string;
-    description: string;
+    title: string;
   };
-} & Grade;
+  user: {
+    id: number;
+    username: string;
+  };
+};
 
-type MyGradesResponse = ApiResponse<{grades: MyGradeItem[]} & PaginationResponse>;
+export type MyGradesResponse = ApiResponse<
+  { grades: MyGradeItem[] } & PaginationResponse
+>;
 
 export const getMyGrades = async (
   options: MyGradesOptions
 ): Promise<MyGradesResponse> => {
-  return api.get("/me/grades", options)
-}
+  return api.get("/me/grades", options);
+};

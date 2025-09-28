@@ -1,6 +1,6 @@
 echo task2
-&-=-&Sub2.1
+###Sub2.1
 alpha
 alpha
-&-=-&Sub2.2
+###Sub2.2
 gamma

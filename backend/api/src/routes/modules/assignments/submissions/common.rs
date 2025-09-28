@@ -10,8 +10,6 @@
 //! - `SubmissionsListResponse` → paginated submissions list
 //! - `SubmissionResponse` → minimal response for a single submission
 //! - `MarkSummary` → summary of earned vs total marks
-//! - `CodeComplexitySummary` → summary of code complexity metrics
-//! - `CodeComplexity` → detailed code complexity information
 //! - `SubmissionDetailResponse` → detailed response after grading a submission
 
 use serde::{Deserialize, Serialize};
@@ -25,10 +23,12 @@ pub struct ListSubmissionsQuery {
     pub query: Option<String>,
     pub username: Option<String>,
     pub late: Option<bool>,
+    pub ignored: Option<bool>,
+    pub status: Option<String>,
 }
 
 /// Represents a user associated with a submission.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserResponse {
     pub id: i64,
     pub username: String,
@@ -38,8 +38,8 @@ pub struct UserResponse {
 /// Represents the mark of a submission.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Mark {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f32,
+    pub total: f32,
 }
 
 /// Single item in a submissions list response.
@@ -54,6 +54,8 @@ pub struct SubmissionListItem {
     pub is_practice: bool,
     pub is_late: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,
+    pub status: String,
 }
 
 /// Paginated response of submissions list.
@@ -76,27 +78,40 @@ pub struct SubmissionResponse {
     pub is_late: bool,
     pub is_practice: bool,
     pub mark: Option<Mark>,
+    pub ignored: bool,
+    pub status: String,
 }
 
 /// Represents a summary of earned vs total marks.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarkSummary {
-    pub earned: i64,
-    pub total: i64,
+    pub earned: f64,
+    pub total: f64,
 }
 
-/// Represents a summary of code complexity metrics.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CodeComplexitySummary {
-    pub earned: i64,
-    pub total: i64,
+/// Represents a code coverage summary with coverage statistics.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverageSummary {
+    pub earned: f64,
+    pub total: f64,
+    pub total_lines: u32,
+    pub covered_lines: u32,
+    pub coverage_percent: f64,
 }
 
-/// Represents code complexity details, including per-metric results.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CodeComplexity {
-    pub summary: CodeComplexitySummary,
-    pub metrics: Vec<serde_json::Value>,
+/// Represents code coverage for a submission.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverageFile {
+    pub path: String,
+    pub earned: f64,
+    pub total: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CodeCoverage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<CodeCoverageSummary>,
+    pub files: Vec<CodeCoverageFile>,
 }
 
 /// Detailed response returned after grading a submission.
@@ -111,9 +126,33 @@ pub struct SubmissionDetailResponse {
     pub mark: MarkSummary,
     pub is_practice: bool,
     pub is_late: bool,
+    pub ignored: bool,
+    pub status: String,
     pub tasks: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_coverage: Option<Vec<serde_json::Value>>,
+    pub code_coverage: Option<CodeCoverage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub code_complexity: Option<CodeComplexity>,
+    pub user: Option<serde_json::Value>,
+    pub plagiarism: PlagiarismInfo,
+}
+
+// ---- instant ACK (client will GET /submissions/{id} and attach WS) ----
+#[derive(serde::Serialize)]
+pub struct SubmitAck {
+    pub id: i64,
+    pub status: String, // e.g. "queued", "failed_upload"
+    pub attempt: i64,
+    pub is_practice: bool,
+    pub filename: String,
+    pub hash: String,
+    pub created_at: String, // RFC3339
+}
+
+/// Represents plagiarism-related information for a submission.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlagiarismInfo {
+    pub flagged: bool,
+    pub similarity: f32,
+    pub lines_matched: i64,
+    pub description: String,
 }

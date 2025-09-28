@@ -1,16 +1,19 @@
+use crate::response::ApiResponse;
 use axum::{
-    extract::{State, Multipart, Path},
+    Json,
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
+use db::models::{
+    assignment::Entity as AssignmentEntity,
+    assignment_file::{FileType, Model as FileModel},
+    module::Entity as ModuleEntity,
+    user::Model as UserModel,
+};
+use sea_orm::EntityTrait;
 use serde::Serialize;
-use db::models::assignment_file::{
-    FileType,
-    Model as FileModel,
-};
 use util::state::AppState;
-use crate::response::ApiResponse;
 
 #[derive(Debug, Serialize)]
 pub struct UploadedFileMetadata {
@@ -99,26 +102,46 @@ pub async fn upload_files(
     let mut file_bytes: Option<Vec<u8>> = None;
     let mut file_count = 0;
 
-    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+    while let Some(field) = match multipart.next_field().await {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("multipart read error: {e}");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<UploadedFileMetadata>::error(
+                    "Malformed multipart payload",
+                )),
+            )
+                .into_response();
+        }
+    } {
         let name = field.name().unwrap_or("");
 
         match name {
-            "file_type" => {
-                if let Ok(ftype_str) = field.text().await {
-                    match ftype_str.parse::<FileType>() {
-                        Ok(ftype) => file_type = Some(ftype),
-                        Err(_) => {
-                            return (
-                                StatusCode::BAD_REQUEST,
-                                Json(ApiResponse::<UploadedFileMetadata>::error(
-                                    "Invalid file_type",
-                                )),
-                            )
-                                .into_response();
-                        }
+            "file_type" => match field.text().await {
+                Ok(ftype_str) => match ftype_str.parse::<FileType>() {
+                    Ok(ftype) => file_type = Some(ftype),
+                    Err(_) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(ApiResponse::<UploadedFileMetadata>::error(
+                                "Invalid file_type",
+                            )),
+                        )
+                            .into_response();
                     }
+                },
+                Err(e) => {
+                    eprintln!("file_type read error: {e}");
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(ApiResponse::<UploadedFileMetadata>::error(
+                            "Missing or unreadable file_type",
+                        )),
+                    )
+                        .into_response();
                 }
-            }
+            },
             "file" => {
                 if file_count > 0 {
                     return (
@@ -130,7 +153,19 @@ pub async fn upload_files(
                         .into_response();
                 }
                 file_name = field.file_name().map(|s| s.to_string());
-                file_bytes = Some(field.bytes().await.unwrap_or_default().to_vec());
+                match field.bytes().await {
+                    Ok(b) => file_bytes = Some(b.to_vec()),
+                    Err(e) => {
+                        eprintln!("file bytes read error: {e}");
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(ApiResponse::<UploadedFileMetadata>::error(
+                                "Unreadable file payload",
+                            )),
+                        )
+                            .into_response();
+                    }
+                }
                 file_count += 1;
             }
             _ => continue,
@@ -187,6 +222,46 @@ pub async fn upload_files(
     .await
     {
         Ok(saved) => {
+            if file_type == FileType::Spec {
+                // recipients
+                let email_list = UserModel::get_emails_by_module_id(db, module_id).await;
+
+                // context (best-effort)
+                let module_opt = ModuleEntity::find_by_id(module_id)
+                    .one(db)
+                    .await
+                    .ok()
+                    .flatten();
+                let assignment_opt = AssignmentEntity::find_by_id(assignment_id)
+                    .one(db)
+                    .await
+                    .ok()
+                    .flatten();
+
+                // use references so we don't move the Options
+                if let (Some(module), Some(assignment)) =
+                    (module_opt.as_ref(), assignment_opt.as_ref())
+                {
+                    crate::services::email::EmailService::send_spec_change_email(
+                        email_list,
+                        &module.code,
+                        module.year,
+                        module_id,
+                        assignment_id,
+                        &assignment.name,
+                        &saved.filename,
+                        Some("Specification file updated."),
+                    )
+                    .await;
+                } else {
+                    eprintln!(
+                        "Spec uploaded but context missing: module {:?}, assignment {:?}",
+                        module_opt.as_ref().map(|m| m.id),
+                        assignment_opt.as_ref().map(|a| a.id)
+                    );
+                }
+            }
+
             let metadata = UploadedFileMetadata {
                 id: saved.id,
                 assignment_id: saved.assignment_id,
@@ -195,6 +270,7 @@ pub async fn upload_files(
                 created_at: saved.created_at.to_rfc3339(),
                 updated_at: saved.updated_at.to_rfc3339(),
             };
+
             (
                 StatusCode::CREATED,
                 Json(ApiResponse::success(metadata, "File uploaded successfully")),

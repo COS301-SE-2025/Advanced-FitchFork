@@ -13,15 +13,16 @@
 //! ## Usage
 //! Call `me_routes()` to get a configured `Router` for `/me` endpoints to be mounted in the main app.
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use util::state::AppState;
 
 pub mod announcements;
 pub mod assignments;
-pub mod tickets;
-pub mod grades;
-pub mod submissions;
 pub mod events;
+pub mod grades;
+pub mod plagiarism;
+pub mod submissions;
+pub mod tickets;
 
 /// Builds and returns the `/me` route group.
 ///
@@ -32,6 +33,7 @@ pub mod events;
 /// - `GET /me/grades`        → fetch grades for the logged-in user
 /// - `GET /me/submissions`   → fetch submissions for the logged-in user
 /// - `GET /me/events`        → fetch events for the logged-in user
+/// - `GET /me/plagiarism`    → fetch plagiarism cases for lecturer/assistant lecturer roles
 ///
 /// All routes operate on the currently authenticated user and require the application state.
 pub fn me_routes() -> Router<AppState> {
@@ -42,4 +44,5 @@ pub fn me_routes() -> Router<AppState> {
         .route("/grades", get(grades::get_my_grades))
         .route("/submissions", get(submissions::get_my_submissions))
         .route("/events", get(events::get_my_events))
+        .route("/plagiarism", get(plagiarism::get_my_plagiarism_cases))
 }

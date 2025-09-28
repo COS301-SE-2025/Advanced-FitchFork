@@ -1,32 +1,36 @@
+use crate::response::ApiResponse;
+use crate::routes::modules::assignments::tasks::common::TaskResponse;
 use axum::{
-    extract::{State, Path},
+    Json,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
+use db::models::assignment_task::{ActiveModel, Column, Entity, TaskType};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use util::state::AppState;
-use crate::response::ApiResponse;
-use db::models::assignment_task::{ActiveModel, Column, Entity};
-use crate::routes::modules::assignments::tasks::common::TaskResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
+    /// Unique sequential number within the assignment
     task_number: i64,
-    name: String,    
+    /// Short descriptive name
+    name: String,
+    /// Command to execute
     command: String,
+    /// Optional; defaults to "normal". One of: "normal" | "coverage" | "valgrind".
+    #[serde(default)]
+    task_type: Option<TaskType>,
 }
 
 /// POST /api/modules/{module_id}/assignments/{assignment_id}/tasks
 ///
-/// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles
-/// assigned to the module.
+/// Create a new task for a given assignment. Accessible to users with Lecturer or Admin roles.
 ///
 /// Each task must have a unique `task_number` within the assignment. The `name` field defines a short,
-/// human-readable title for the task, while the `command` field defines how the task will be executed
-/// during evaluation (e.g., test commands, build commands).
+/// human-readable title, while `command` defines how the task is executed during evaluation.
 ///
 /// ### Path Parameters
 /// - `module_id` (i64): The ID of the module containing the assignment
@@ -37,25 +41,39 @@ pub struct CreateTaskRequest {
 /// {
 ///   "task_number": 1,
 ///   "name": "Unit Tests",
-///   "command": "cargo test --lib"
+///   "command": "cargo test --lib",
+///   "task_type": "normal"
 /// }
 /// ```
 ///
-/// ### Request Body Fields
-/// - `task_number` (i64, required): Unique sequential number for the task within the assignment
-/// - `name` (string, required): Short descriptive name for the task (e.g., "Compile", "Unit Tests")
-/// - `command` (string, required): Command to execute for this task (e.g., test commands, build scripts)
+/// #### `task_type`
+/// - `"normal"`: Regular task (default)
+/// - `"coverage"`: Code coverage task (special handling)
+/// - `"valgrind"`: Memory leak test (Valgrind)
 ///
-/// ### Example Request
+/// ### Example Requests
+/// Normal:
 /// ```bash
 /// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
 ///   -H "Authorization: Bearer <token>" \
 ///   -H "Content-Type: application/json" \
-///   -d '{
-///     "task_number": 1,
-///     "name": "Unit Tests",
-///     "command": "cargo test --lib"
-///   }'
+///   -d '{"task_number":1,"name":"Build","command":"cargo build"}'
+/// ```
+///
+/// Coverage:
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number":2,"name":"Coverage run","command":"cargo llvm-cov --no-report","task_type":"coverage"}'
+/// ```
+///
+/// Valgrind:
+/// ```bash
+/// curl -X POST http://localhost:3000/api/modules/1/assignments/2/tasks \
+///   -H "Authorization: Bearer <token>" \
+///   -H "Content-Type: application/json" \
+///   -d '{"task_number":3,"name":"Memcheck","command":"valgrind --leak-check=full ./app","task_type":"valgrind"}'
 /// ```
 ///
 /// ### Success Response (201 Created)
@@ -65,75 +83,20 @@ pub struct CreateTaskRequest {
 ///   "message": "Task created successfully",
 ///   "data": {
 ///     "id": 123,
-///     "task_number": 1,
-///     "name": "Unit Tests",
-///     "command": "cargo test --lib",
-///     "created_at": "2024-01-01T00:00:00Z",
-///     "updated_at": "2024-01-01T00:00:00Z"
+///     "task_number": 3,
+///     "name": "Memcheck",
+///     "command": "valgrind --leak-check=full ./app",
+///     "task_type": "valgrind",
+///     "created_at": "2025-05-29T00:00:00Z",
+///     "updated_at": "2025-05-29T00:00:00Z"
 ///   }
 /// }
 /// ```
 ///
 /// ### Error Responses
-///
-/// **400 Bad Request** - Invalid JSON body
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid JSON body"
-/// }
-/// ```
-///
-/// **403 Forbidden** - Insufficient permissions
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Access denied"
-/// }
-/// ```
-///
-/// **404 Not Found** - Assignment or module not found
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Assignment or module not found"
-/// }
-/// ```
-///
-/// **422 Unprocessable Entity** - Validation errors
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Invalid task_number, name, or command"
-/// }
-/// ```
-/// or
-/// ```json
-/// {
-///   "success": false,
-///   "message": "task_number must be unique"
-/// }
-/// ```
-///
-/// **500 Internal Server Error** - Database or server error
-/// ```json
-/// {
-///   "success": false,
-///   "message": "Failed to create task"
-/// }
-/// ```
-///
-/// ### Validation Rules
-/// - `task_number` must be greater than 0
-/// - `name` must not be empty or whitespace-only
-/// - `command` must not be empty or whitespace-only
-/// - `task_number` must be unique within the assignment
-/// - Assignment must exist and belong to the specified module
-///
-/// ### Notes
-/// - Tasks are executed in order of their `task_number` during assignment evaluation
-/// - The `command` field supports any shell command that can be executed in the evaluation environment
-/// - Task creation is restricted to users with appropriate module permissions
+/// - 422: `"Invalid task_number, name, or command"`
+/// - 422: `"task_number must be unique"`
+/// - 500: `"Failed to create task"`
 pub async fn create_task(
     State(app_state): State<AppState>,
     Path((_, assignment_id)): Path<(i64, i64)>,
@@ -148,34 +111,48 @@ pub async fn create_task(
     {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("Invalid task_number, name, or command")),
+            Json(ApiResponse::<()>::error(
+                "Invalid task_number, name, or command",
+            )),
         )
             .into_response();
     }
 
-    // Ensure task_number uniqueness
-    let exists = Entity::find()
+    // Ensure task_number uniqueness within the assignment
+    match Entity::find()
         .filter(Column::AssignmentId.eq(assignment_id))
         .filter(Column::TaskNumber.eq(payload.task_number))
         .one(db)
-        .await;
-
-    if let Ok(Some(_)) = exists {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ApiResponse::<()>::error("task_number must be unique")),
-        )
-            .into_response();
+        .await
+    {
+        Ok(Some(_)) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ApiResponse::<()>::error("task_number must be unique")),
+            )
+                .into_response();
+        }
+        Ok(None) => {}
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("Failed to create task")),
+            )
+                .into_response();
+        }
     }
 
     let now = Utc::now();
+    let task_type = payload.task_type.unwrap_or(TaskType::Normal);
+
     let new_task = ActiveModel {
         assignment_id: sea_orm::ActiveValue::Set(assignment_id),
         task_number: sea_orm::ActiveValue::Set(payload.task_number),
         name: sea_orm::ActiveValue::Set(payload.name.clone()),
         command: sea_orm::ActiveValue::Set(payload.command.clone()),
-        created_at: sea_orm::ActiveValue::Set(now.clone()),
-        updated_at: sea_orm::ActiveValue::Set(now.clone()),
+        task_type: sea_orm::ActiveValue::Set(task_type),
+        created_at: sea_orm::ActiveValue::Set(now),
+        updated_at: sea_orm::ActiveValue::Set(now),
         ..Default::default()
     };
 
@@ -186,6 +163,7 @@ pub async fn create_task(
                 task_number: task.task_number,
                 name: task.name,
                 command: task.command,
+                task_type: task.task_type,
                 created_at: task.created_at.to_rfc3339(),
                 updated_at: task.updated_at.to_rfc3339(),
             };

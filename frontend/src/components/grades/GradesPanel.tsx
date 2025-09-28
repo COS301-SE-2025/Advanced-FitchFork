@@ -1,105 +1,58 @@
-import { useMemo, useState } from 'react';
-import { List, Typography, Empty, Tooltip } from 'antd';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { List, Typography, Empty, Tooltip, Alert } from 'antd';
 import { ClockCircleOutlined, FileDoneOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import type { Assignment } from '@/types/modules/assignments';
-import type { Module } from '@/types/modules';
-import type { Grade } from '@/types/modules/grades';
 import { useUI } from '@/context/UIContext';
-import ScoreTag from './ScoreTag';
+import { useNavigate } from 'react-router-dom';
+import { getMyGrades, type MyGradeItem } from '@/services/me/grades/get';
+import { PercentageTag } from '../common';
 
 dayjs.extend(relativeTime);
 
-const { Text, Title } = Typography;
-
-// ---------- Mock data ----------
-const MOCK_MODULES: Record<number, Module> = {
-  101: {
-    id: 101,
-    code: 'COS101',
-    year: 2025,
-    description: 'Intro to CS',
-    credits: 16,
-    created_at: '',
-    updated_at: '',
-  },
-  344: {
-    id: 344,
-    code: 'COS344',
-    year: 2025,
-    description: 'Systems',
-    credits: 24,
-    created_at: '',
-    updated_at: '',
-  },
+type GradesPanelProps = {
+  moduleId?: number;
+  perPage?: number;
+  limit?: number;
+  minimal?: boolean;
 };
 
-const mkA = (id: number, module_id: number, name: string): Assignment =>
-  ({
-    id,
-    module_id,
-    name,
-    description: '',
-    assignment_type: 'assignment',
-    available_from: dayjs().subtract(14, 'day').toISOString(),
-    due_date: dayjs().add(3, 'day').toISOString(),
-    status: 'open',
-    created_at: '',
-    updated_at: '',
-  }) as any;
-
-const MOCK_ASSIGNMENTS: Record<number, Assignment> = Object.fromEntries(
-  [
-    mkA(701, 101, 'A1: Basics'),
-    mkA(702, 101, 'A2: Data Structures'),
-    mkA(703, 344, 'Prac 2: Sockets'),
-    mkA(704, 344, 'Prac 3: Threads'),
-  ].map((a) => [a.id, a]),
-);
-
-const CURRENT_USER_ID = 55;
-
-const MOCK_GRADES: Grade[] = [
-  {
-    id: 1,
-    assignment_id: 701,
-    student_id: CURRENT_USER_ID,
-    submission_id: 201,
-    score: 78,
-    created_at: dayjs().subtract(2, 'hour').toISOString(),
-    updated_at: dayjs().subtract(2, 'hour').toISOString(),
-  },
-  {
-    id: 2,
-    assignment_id: 703,
-    student_id: CURRENT_USER_ID,
-    submission_id: 202,
-    score: 44,
-    created_at: dayjs().subtract(3, 'day').toISOString(),
-    updated_at: dayjs().subtract(3, 'day').toISOString(),
-  },
-  {
-    id: 3,
-    assignment_id: 704,
-    student_id: CURRENT_USER_ID,
-    submission_id: 203,
-    score: 19,
-    created_at: dayjs().subtract(20, 'day').toISOString(),
-    updated_at: dayjs().subtract(20, 'day').toISOString(),
-  },
-];
-
-// ---------- Component ----------
-const GradesPanel = () => {
+const { Text, Title } = Typography;
+const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50, limit, minimal = false }) => {
   const { isSm } = useUI();
+  const navigate = useNavigate();
 
-  const [grades] = useState<Grade[]>(MOCK_GRADES.filter((g) => g.student_id === CURRENT_USER_ID));
+  const [grades, setGrades] = useState<MyGradeItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pageSize = limit ?? perPage;
+
+  const fetchGrades = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getMyGrades({ page: 1, per_page: pageSize, module_id: moduleId });
+      if (!res.success) throw new Error(res.message || 'Failed to load grades');
+
+      const rows = Array.isArray(res.data?.grades) ? res.data?.grades : [];
+      setGrades(rows ?? []);
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load grades');
+      setGrades([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [moduleId, pageSize]);
+
+  useEffect(() => {
+    void fetchGrades();
+  }, [fetchGrades]);
 
   // Show grades from the last 30 days only
   const visible = useMemo(() => {
     const cutoff = dayjs().subtract(30, 'day');
-    return grades
+    const recent = grades
       .filter((g) => {
         const ts = dayjs(g.updated_at || g.created_at);
         return ts.isValid() && ts.isAfter(cutoff);
@@ -109,7 +62,8 @@ const GradesPanel = () => {
           dayjs(b.updated_at || b.created_at).valueOf() -
           dayjs(a.updated_at || a.created_at).valueOf(),
       );
-  }, [grades]);
+    return limit ? recent.slice(0, limit) : recent;
+  }, [grades, limit]);
 
   return (
     <div className="h-full min-h-0 flex flex-col w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
@@ -123,9 +77,16 @@ const GradesPanel = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="px-3 py-2">
+          <Alert type="error" showIcon message="Failed to load grades" description={error} />
+        </div>
+      )}
+
       {/* List */}
       <List
         className="flex-1 overflow-y-auto"
+        loading={loading}
         locale={{
           emptyText: (
             <Empty
@@ -136,39 +97,60 @@ const GradesPanel = () => {
         }}
         dataSource={visible}
         renderItem={(g) => {
-          const a = MOCK_ASSIGNMENTS[g.assignment_id];
-          const moduleCode = a ? (MOCK_MODULES[a.module_id]?.code ?? `M-${a.module_id}`) : '—';
+          const gradeModuleId = g.module?.id;
+          const assignmentId = g.assignment?.id;
+          const moduleCode = g.module?.code ?? (gradeModuleId ? `M-${gradeModuleId}` : '—');
           const when = dayjs(g.updated_at || g.created_at);
+          const percentage = typeof g.percentage === 'number' ? g.percentage : 0;
+          const roundedPercentage = Math.round(percentage * 10) / 10;
+          const earned = g.score?.earned;
+          const total = g.score?.total;
+          const canNavigate = gradeModuleId != null && assignmentId != null;
 
           return (
             <List.Item
               className="!px-3 cursor-pointer"
-              onClick={() => console.log('Open assignment', { id: a?.id, name: a?.name })}
+              onClick={
+                canNavigate
+                  ? () => navigate(`/modules/${gradeModuleId}/assignments/${assignmentId}`)
+                  : undefined
+              }
             >
               <div className="flex flex-col gap-1.5 w-full">
                 {/* Title + score */}
                 <div className="flex items-center justify-between gap-2 min-w-0">
                   <Text strong className="truncate">
-                    {a?.name ?? 'Unknown Assignment'}
+                    {g.assignment?.title ?? 'Unknown assignment'}
                   </Text>
-                  <ScoreTag score={g.score} />
+                  <PercentageTag value={roundedPercentage} />
                 </div>
 
-                {/* Meta */}
-                <div className="flex items-center gap-2">
-                  <Text type="secondary" className="!text-[12px]">
-                    {moduleCode}
-                  </Text>
-                  <Text type="secondary" className="!text-[12px]">
-                    •
-                  </Text>
-                  <Text type="secondary" className="inline-flex items-center !text-[12px]">
-                    <Tooltip title={when.format('YYYY-MM-DD HH:mm')}>
-                      <ClockCircleOutlined className="mr-1" />
-                    </Tooltip>
-                    graded {when.fromNow()}
-                  </Text>
-                </div>
+                {!minimal && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Text type="secondary" className="!text-[12px]">
+                      {moduleCode}
+                    </Text>
+                    {Number.isFinite(earned) && Number.isFinite(total) && (
+                      <>
+                        <Text type="secondary" className="!text-[12px]">
+                          •
+                        </Text>
+                        <Text type="secondary" className="!text-[12px]">
+                          {earned}/{total} marks
+                        </Text>
+                      </>
+                    )}
+                    <Text type="secondary" className="!text-[12px]">
+                      •
+                    </Text>
+                    <Text type="secondary" className="inline-flex items-center !text-[12px]">
+                      <Tooltip title={when.format('YYYY-MM-DD HH:mm')}>
+                        <ClockCircleOutlined className="mr-1" />
+                      </Tooltip>
+                      graded {when.fromNow()}
+                    </Text>
+                  </div>
+                )}
               </div>
             </List.Item>
           );

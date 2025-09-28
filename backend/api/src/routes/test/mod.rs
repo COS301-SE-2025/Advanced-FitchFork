@@ -9,20 +9,20 @@
 //! - DELETE `/api/test/users/{id}`          – Delete a user by numeric ID.
 
 use axum::{
-    routing::{delete, post},
     Router,
+    routing::{delete, post},
 };
 use util::state::AppState;
 
 mod common;
+mod delete;
 mod get;
 mod post;
-mod delete;
 
 pub use common::{TestUserResponse, UpsertUserRequest};
+pub use delete::delete_user;
 pub use get::get_user;
 pub use post::upsert_user;
-pub use delete::delete_user;
 
 /// Registers the test routes on a `Router<AppState>`.
 ///

@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
@@ -13,10 +14,9 @@ mod tests {
         user::Model as UserModel,
         user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use serial_test::serial;
     use serde_json::Value;
+    use serial_test::serial;
     use tower::ServiceExt;
-    use crate::helpers::app::make_test_app;
 
     struct TestData {
         student1: UserModel,
@@ -80,8 +80,8 @@ mod tests {
             assignment1.id,
             student1.id,
             1,
-            80,
-            100,
+            80.0,
+            100.0,
             false,
             "s1.zip",
             "hash1",
@@ -94,8 +94,8 @@ mod tests {
             assignment1.id,
             student2.id,
             1,
-            90,
-            100,
+            90.0,
+            100.0,
             false,
             "s2.zip",
             "hash2",
@@ -114,7 +114,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_as_student_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.student1.id, false);
@@ -142,7 +142,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_as_lecturer_success() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_unauthorized() {
-        let (app, _) = make_test_app().await;
+        let (app, _app_state, _tmp) = make_test_app_with_storage().await;
         let req = Request::builder()
             .method("GET")
             .uri("/api/me/grades")
@@ -183,7 +183,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_filter_by_year() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -208,7 +208,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_filter_by_query() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -234,7 +234,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_sort_by_score_asc() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -247,20 +247,20 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 80);
-        assert_eq!(grades[1]["score"]["earned"], 90);
+        assert_eq!(grades[0]["score"]["earned"], 80.0);
+        assert_eq!(grades[1]["score"]["earned"], 90.0);
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_grades_sort_by_score_desc() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -279,14 +279,14 @@ mod tests {
             .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         let grades = json["data"]["grades"].as_array().unwrap();
-        assert_eq!(grades[0]["score"]["earned"], 90);
-        assert_eq!(grades[1]["score"]["earned"], 80);
+        assert_eq!(grades[0]["score"]["earned"], 90.0);
+        assert_eq!(grades[1]["score"]["earned"], 80.0);
     }
 
     #[tokio::test]
     #[serial]
     async fn test_get_grades_pagination() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -313,7 +313,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_invalid_page() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -331,7 +331,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_get_grades_no_grades_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.lecturer.id, false);
@@ -344,7 +344,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();

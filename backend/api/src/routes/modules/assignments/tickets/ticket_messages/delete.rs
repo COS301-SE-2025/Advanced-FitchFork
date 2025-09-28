@@ -14,7 +14,9 @@ use axum::{
 use db::models::ticket_messages::Model as TicketMessageModel;
 use util::state::AppState;
 
-use crate::{auth::AuthUser, response::ApiResponse, ws::tickets::topics::ticket_chat_topic};
+use crate::{auth::AuthUser, response::ApiResponse};
+
+use crate::ws::tickets::emit as t_emit;
 
 /// DELETE /api/modules/{module_id}/assignments/{assignment_id}/tickets/{ticket_id}/messages/{message_id}
 ///
@@ -87,13 +89,8 @@ pub async fn delete_ticket_message(
     }
 
     // Broadcast deletion to the per-ticket chat topic
-    let topic = ticket_chat_topic(ticket_id);
     let ws = app_state.ws_clone();
-    let event = serde_json::json!({
-        "event": "message_deleted",
-        "payload": { "id": message_id }
-    });
-    ws.broadcast(&topic, event.to_string()).await;
+    t_emit::message_deleted(&ws, ticket_id, message_id).await;
 
     // HTTP response
     (

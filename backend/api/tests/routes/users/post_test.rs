@@ -1,16 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::user::Model as UserModel,
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode},
     };
+    use db::models::user::Model as UserModel;
+    use serde_json::{Value, json};
     use tower::ServiceExt;
-    use serde_json::{json, Value};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
 
     struct TestData {
         admin_user: UserModel,
@@ -20,8 +18,13 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "admin_user", "admin@test.com", "adminpass", true).await.unwrap();
-        let non_admin_user = UserModel::create(db, "normal_user", "user@test.com", "userpass", false).await.unwrap();
+        let admin_user = UserModel::create(db, "admin_user", "admin@test.com", "adminpass", true)
+            .await
+            .unwrap();
+        let non_admin_user =
+            UserModel::create(db, "normal_user", "user@test.com", "userpass", false)
+                .await
+                .unwrap();
 
         TestData {
             admin_user,
@@ -30,14 +33,16 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
     /// Test Case: Successful Creation of Single User as Admin
     #[tokio::test]
     async fn test_create_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -66,7 +71,7 @@ mod tests {
     /// Test Case: Creating Single User is Forbidden for Non-Admin
     #[tokio::test]
     async fn test_create_user_forbidden_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -91,7 +96,7 @@ mod tests {
     /// Test Case: Single User Creation Validation Failure
     #[tokio::test]
     async fn test_create_user_validation_failure() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -116,7 +121,7 @@ mod tests {
     /// Test Case: Successful Bulk User Creation
     #[tokio::test]
     async fn test_bulk_create_users_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -146,7 +151,7 @@ mod tests {
     /// Test Case: Bulk User Creation Validation Failure
     #[tokio::test]
     async fn test_bulk_create_users_validation_failure() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -171,10 +176,12 @@ mod tests {
     /// Test Case: Bulk User Creation Conflict on Duplicate
     #[tokio::test]
     async fn test_bulk_create_users_conflict() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
-        UserModel::create(app_state.db(), "dupe", "dupe@test.com", "pass1234", false).await.unwrap();
+        UserModel::create(app_state.db(), "dupe", "dupe@test.com", "pass1234", false)
+            .await
+            .unwrap();
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
 
         let req_body = json!({

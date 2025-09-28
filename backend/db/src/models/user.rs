@@ -157,7 +157,7 @@ impl Model {
 
         if let Some(user) = Self::get_by_username(db, username).await? {
             let parsed = PasswordHash::new(&user.password_hash)
-                .map_err(|e| DbErr::Custom(format!("Invalid hash: {}", e)))?;
+                .map_err(|e| DbErr::Custom(format!("Invalid hash: {e}")))?;
 
             if Argon2::default()
                 .verify_password(password.as_bytes(), &parsed)
@@ -168,6 +168,34 @@ impl Model {
         }
 
         Ok(None)
+    }
+
+    /// Retrieves all email addresses of users assigned to a specific module.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection.
+    /// * `module_id` - The module ID to query.
+    ///
+    /// # Returns
+    /// A list of email addresses.
+    pub async fn get_emails_by_module_id(db: &DatabaseConnection, module_id: i64) -> Vec<String> {
+        let roles = RoleEntity::find()
+            .filter(RoleColumn::ModuleId.eq(module_id))
+            .all(db)
+            .await
+            .unwrap_or_default();
+
+        let mut emails: Vec<String> = Vec::new();
+        for role in roles {
+            if let Some(user) = UserEntity::find_by_id(role.user_id)
+                .one(db)
+                .await
+                .unwrap_or(None)
+            {
+                emails.push(user.email.clone());
+            }
+        }
+        emails
     }
 
     /// Retrieves all module roles associated with the user.
@@ -222,7 +250,7 @@ impl Model {
         role: &str,
     ) -> Result<bool, DbErr> {
         let parsed_role = Role::from_str(role)
-            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{}'", role)))?;
+            .map_err(|_| DbErr::Custom(format!("Invalid role string: '{role}'")))?;
 
         let exists = RoleEntity::find()
             .filter(RoleColumn::UserId.eq(user_id))
@@ -287,7 +315,7 @@ mod tests {
         let found = found.unwrap();
         assert_eq!(found.email, email);
         assert_eq!(found.username, username);
-        assert_eq!(found.admin, false);
+        assert!(!found.admin);
     }
 
     #[tokio::test]
@@ -343,7 +371,6 @@ mod tests {
             user_id: Set(user.id),
             module_id: Set(module.id),
             role: Set(UserRole::Lecturer),
-            ..Default::default()
         }
         .insert(&db)
         .await

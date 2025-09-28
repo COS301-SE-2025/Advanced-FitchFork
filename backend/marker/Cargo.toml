@@ -12,4 +12,6 @@ tokio = { version = "1.0", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
 dotenvy = "0.15"
+tracing = "0.1"
 util = { path = "../util" }
+tempfile = "3.3"

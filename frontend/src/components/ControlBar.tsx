@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Input, Button, Dropdown, Segmented, Col, Space, Checkbox, Popconfirm } from 'antd';
+import {
+  Input,
+  Button,
+  Dropdown,
+  Segmented,
+  Col,
+  Space,
+  Checkbox,
+  Popconfirm,
+  Badge,
+  Tooltip,
+} from 'antd';
 import {
   ReloadOutlined,
   TableOutlined,
@@ -48,29 +59,37 @@ interface Props<T> {
   hiddenColumns?: Set<string>;
   onToggleColumn?: (key: string) => void;
   listMode?: boolean;
+  onRefreshClick?: () => void;
+  refreshBadgeCount?: number;
+  refreshBadgeTooltip?: string;
 }
 
-const ControlBar = <T,>({
-  handleSearch,
-  searchTerm,
-  viewMode,
-  onViewModeChange,
-  selectedRowKeys = [],
-  searchPlaceholder = 'Search...',
-  sortOptions = [],
-  currentSort = [],
-  onSortChange,
-  filterGroups = [],
-  activeFilters = [],
-  onFilterChange,
-  actions = [],
-  bulkActions = [],
-  columnToggleEnabled = false,
-  columns = [],
-  hiddenColumns = new Set(),
-  onToggleColumn = () => {},
-  listMode = false,
-}: Props<T>) => {
+const ControlBar = <T,>(props: Props<T>) => {
+  const {
+    handleSearch,
+    searchTerm,
+    viewMode,
+    onViewModeChange,
+    selectedRowKeys = [],
+    searchPlaceholder = 'Search...',
+    sortOptions = [],
+    currentSort = [],
+    onSortChange,
+    filterGroups = [],
+    activeFilters = [],
+    onFilterChange,
+    actions = [],
+    bulkActions = [],
+    columnToggleEnabled = false,
+    columns = [],
+    hiddenColumns = new Set(),
+    onToggleColumn = () => {},
+    listMode = false,
+    onRefreshClick,
+    refreshBadgeCount,
+    refreshBadgeTooltip,
+  } = props;
+
   const { isSm } = useUI();
   const isDesktop = isSm;
 
@@ -122,86 +141,77 @@ const ControlBar = <T,>({
     ? bulkActions.filter((a) => a.key !== resolvedPrimaryBulk.key)
     : [];
 
-  const columnToggleMenu = (
-    <Dropdown
-      trigger={['click']}
-      menu={{
-        items: [
-          ...columns?.map((col) => ({
-            key: col.key,
-            label: (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={!hiddenColumns?.has(col.key)}
-                  onChange={() => onToggleColumn?.(col.key)}
-                >
-                  {col.label}
-                </Checkbox>
-              </div>
-            ),
-          })),
-          { type: 'divider' },
-          {
-            key: 'showAll',
-            label: (
-              <Button
-                type="link"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  columns?.forEach((col) => {
-                    if (hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
-                  });
-                }}
-              >
-                Show All
-              </Button>
-            ),
-          },
-          {
-            key: 'hideAll',
-            label: (
-              <Button
-                type="link"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  columns?.forEach((col) => {
-                    if (!hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
-                  });
-                }}
-              >
-                Hide All
-              </Button>
-            ),
-          },
-          {
-            key: 'resetDefault',
-            label: (
-              <Button
-                type="link"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  columns?.forEach((col) => {
-                    const shouldBeHidden = !!(col as any).defaultHidden;
-                    const currentlyHidden = hiddenColumns?.has(col.key);
-                    if (shouldBeHidden !== currentlyHidden) onToggleColumn?.(col.key);
-                  });
-                }}
-              >
-                Reset to Default
-              </Button>
-            ),
-          },
-        ],
-      }}
-    >
-      <Button icon={<MoreOutlined />}>Columns</Button>
-    </Dropdown>
-  );
+  const columnsMenuItems: MenuItemType[] = [
+    ...(columns?.map((col) => ({
+      key: col.key,
+      label: (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={!hiddenColumns?.has(col.key)}
+            onChange={() => onToggleColumn?.(col.key)}
+          >
+            {col.label}
+          </Checkbox>
+        </div>
+      ),
+    })) ?? []),
+    { type: 'divider' } as any,
+    {
+      key: 'showAll',
+      label: (
+        <Button
+          type="link"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            columns?.forEach((col) => {
+              if (hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
+            });
+          }}
+        >
+          Show All
+        </Button>
+      ),
+    },
+    {
+      key: 'hideAll',
+      label: (
+        <Button
+          type="link"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            columns?.forEach((col) => {
+              if (!hiddenColumns?.has(col.key)) onToggleColumn?.(col.key);
+            });
+          }}
+        >
+          Hide All
+        </Button>
+      ),
+    },
+    {
+      key: 'resetDefault',
+      label: (
+        <Button
+          type="link"
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            columns?.forEach((col) => {
+              const shouldBeHidden = !!(col as any).defaultHidden;
+              const currentlyHidden = hiddenColumns?.has(col.key);
+              if (shouldBeHidden !== currentlyHidden) onToggleColumn?.(col.key);
+            });
+          }}
+        >
+          Reset to Default
+        </Button>
+      ),
+    },
+  ];
 
-  const FiltersButton = (
+  const FiltersButton = ({ block = false }: { block?: boolean }) => (
     <Dropdown
       menu={{
         items: [
@@ -229,11 +239,34 @@ const ControlBar = <T,>({
       }}
       trigger={['click']}
     >
-      <Button data-testid="filters-dropdown" className="whitespace-nowrap flex items-center gap-1">
+      <Button
+        data-testid="filters-dropdown"
+        className={`whitespace-nowrap flex items-center gap-1 ${block ? 'w-full justify-center' : ''}`}
+      >
         <FilterOutlined />
-        {isDesktop && <span>Filters</span>}
+        {isDesktop ? <span>Filters</span> : <span>Filters & Sort</span>}
       </Button>
     </Dropdown>
+  );
+
+  const RefreshBtn = ({ block = false }: { block?: boolean }) => (
+    <Tooltip
+      title={refreshBadgeCount ? (refreshBadgeTooltip ?? `${refreshBadgeCount} new`) : undefined}
+    >
+      <Button
+        icon={<ReloadOutlined />}
+        onClick={onRefreshClick}
+        data-testid="refresh-button"
+        className={block ? 'w-full justify-center' : undefined}
+      >
+        <span className="inline-flex items-center gap-2">
+          <span>Refresh</span>
+          {typeof refreshBadgeCount === 'number' && refreshBadgeCount > 0 ? (
+            <Badge count={Math.min(refreshBadgeCount, 99)} overflowCount={99} />
+          ) : null}
+        </span>
+      </Button>
+    </Tooltip>
   );
 
   const ClearControl = (
@@ -243,13 +276,16 @@ const ControlBar = <T,>({
           icon={<ReloadOutlined />}
           onClick={() => clearMenuItems[0].onClick?.({ key: clearMenuItems[0].key } as any)}
           data-testid={clearMenuItems[0].key}
-          className={isDesktop ? undefined : 'w-full'}
+          className={isDesktop ? undefined : 'w-full justify-center'}
         >
           {clearMenuItems[0].label}
         </Button>
       ) : (
         <Dropdown menu={{ items: clearMenuItems }}>
-          <Button icon={<ReloadOutlined />} className={isDesktop ? undefined : 'w-full'}>
+          <Button
+            className={isDesktop ? undefined : 'w-full justify-center'}
+            icon={<ReloadOutlined />}
+          >
             Clear
           </Button>
         </Dropdown>
@@ -377,18 +413,14 @@ const ControlBar = <T,>({
           )}
         </div>
       )}
-
-      {columnToggleEnabled && columns?.length && !listMode && <div>{columnToggleMenu}</div>}
     </div>
   );
 
   const rootClasses = isDesktop
     ? 'mb-4 flex flex-row items-center justify-between gap-4 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-200 dark:border-gray-800'
-    : 'mb-4 flex flex-col gap-4';
+    : 'mb-4 flex flex-col gap-3';
 
-  const leftClasses = isDesktop
-    ? 'flex items-center gap-2 flex-1'
-    : 'flex items-center gap-2 w-full';
+  const leftClasses = isDesktop ? 'flex items-center gap-2 flex-1' : 'w-full flex flex-col gap-2';
 
   const hasActionsMobile =
     !isDesktop &&
@@ -396,9 +428,10 @@ const ControlBar = <T,>({
   const showClearMobile =
     !isDesktop && (hasSearch || hasSort || hasFilters) && clearMenuItems.length > 0;
 
-  // unified classes for Search max width
-  const searchClasses = isDesktop ? 'w-full max-w-[360px]' : 'flex-1 min-w-0 w-full';
+  const searchClasses = isDesktop ? 'w-full max-w-[360px]' : 'w-full';
   const compactClasses = isDesktop ? '' : 'w-full';
+
+  const hasFilterOrSort = filterGroups.length > 0 || sortOptions.length > 0;
 
   return (
     <div className={rootClasses}>
@@ -431,7 +464,8 @@ const ControlBar = <T,>({
           />
         )}
 
-        {viewMode === 'grid' || listMode ? (
+        {isDesktop ? (
+          // Desktop: always show Filters button if filters/sort exist (table, grid, or list)
           <Space.Compact className={compactClasses}>
             <Search
               placeholder={searchPlaceholder}
@@ -441,32 +475,48 @@ const ControlBar = <T,>({
               className={searchClasses}
               data-testid="entity-search"
             />
-            {(filterGroups.length > 0 || sortOptions.length > 0) && FiltersButton}
+            {hasFilterOrSort && <FiltersButton />}
           </Space.Compact>
         ) : (
-          <Search
-            placeholder={searchPlaceholder}
-            allowClear
-            onChange={(e) => handleSearch(e.target.value)}
-            value={searchTerm}
-            className={searchClasses}
-            data-testid="entity-search"
-          />
+          // Mobile: stack full-width
+          <div className="w-full flex flex-col gap-2">
+            <Search
+              placeholder={searchPlaceholder}
+              allowClear
+              onChange={(e) => handleSearch(e.target.value)}
+              value={searchTerm}
+              className="w-full"
+              data-testid="entity-search"
+            />
+            {hasFilterOrSort && <FiltersButton block />}
+            <RefreshBtn block />
+          </div>
         )}
 
-        {isDesktop && clearMenuItems.length > 0 && (
-          <Col>
-            {/* Clear on desktop */}
-            {ClearControl}
-          </Col>
-        )}
+        {isDesktop && clearMenuItems.length > 0 && <Col>{ClearControl}</Col>}
       </div>
 
-      {/* RIGHT: desktop actions + column toggle in the SAME row */}
-      {isDesktop && <div className="flex items-center gap-2">{ActionsGroup}</div>}
+      {/* RIGHT: desktop actions + column toggle */}
+      {isDesktop && (
+        <div className="flex items-center gap-2">
+          {ActionsGroup}
+          <Space.Compact>
+            <RefreshBtn />
+            {columnToggleEnabled && columns?.length && !listMode && (
+              <Dropdown
+                menu={{ items: columnsMenuItems }}
+                placement="bottomRight"
+                trigger={['click']}
+              >
+                <Button icon={<MoreOutlined />} />
+              </Dropdown>
+            )}
+          </Space.Compact>
+        </div>
+      )}
 
       {/* MOBILE: actions/clear below */}
-      {(hasActionsMobile || showClearMobile) && (
+      {!isDesktop && (hasActionsMobile || showClearMobile) && (
         <div className="w-full">
           {hasActionsMobile && showClearMobile ? (
             <div className="grid grid-cols-2 gap-2">

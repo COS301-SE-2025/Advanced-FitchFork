@@ -8,3 +8,4 @@
 //! - [`file_loader`]: A module for loading and handling files related to student submissions and memos.
 
 pub mod file_loader;
+pub mod line_normalization;

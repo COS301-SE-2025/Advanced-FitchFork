@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Form, Select, Typography } from 'antd';
+import { Form, Select, Typography, Space } from 'antd';
 import SettingsGroup from '@/components/SettingsGroup';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { useAssignment } from '@/context/AssignmentContext';
@@ -12,17 +12,28 @@ import {
 } from '@/types/modules/assignments/config';
 
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
+import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 export default function AssignmentPage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
   const [form] = Form.useForm<AssignmentProjectConfig>(); // ← use existing type
 
   useEffect(() => {
     setValue(
-      <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
-        Assignment Configuration
-      </Typography.Text>,
+      <Space align="center" size={6} className="flex-wrap">
+        <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
+          Assignment Configuration
+        </Typography.Text>
+        <Tip
+          iconOnly
+          newTab
+          to="/help/assignments/config/project#what"
+          text="Project config help"
+        />
+      </Space>,
     );
   }, [setValue]);
 

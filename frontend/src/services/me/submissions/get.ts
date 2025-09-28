@@ -9,6 +9,7 @@ type MySubmissionsOptions = {
   role?: ModuleRole;
   year?: number;
   is_late?: boolean;
+  module_id?: number;
 } & PaginationRequest;
 
 type MySubmissionItem = {

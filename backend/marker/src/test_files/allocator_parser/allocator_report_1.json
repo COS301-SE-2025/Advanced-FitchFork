@@ -1,16 +1,22 @@
 {
-    "generated_at": "2025-06-20T12:00:00+02:00",
-    "tasks": [
-      {
-        "task1": {
-          "name": "Initialization",
-          "value": 10,
-          "subsections": [
-            { "name": "Constructor",   "value": 6 },
-            { "name": "Setup Globals", "value": 4 }
-          ]
+  "generated_at": "2025-06-20T12:00:00+02:00",
+  "total_value": 10,
+  "tasks": [
+    {
+      "task_number": 1,
+      "name": "Initialization",
+      "value": 10,
+      "code_coverage": false,
+      "subsections": [
+        {
+          "name": "Constructor",
+          "value": 6
+        },
+        {
+          "name": "Setup Globals",
+          "value": 4
         }
-      }
-    ]
-  }
-  
+      ]
+    }
+  ]
+}

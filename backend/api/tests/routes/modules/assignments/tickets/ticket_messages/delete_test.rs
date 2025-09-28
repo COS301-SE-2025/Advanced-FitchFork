@@ -2,7 +2,7 @@
 mod tests {
     use std::convert::Infallible;
 
-    use crate::helpers::make_test_app;
+    use crate::helpers::app::make_test_app_with_storage;
     use api::auth::generate_jwt;
     use axum::{
         body::Body,
@@ -136,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
 
@@ -155,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_not_found_hierarchy() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
 
@@ -174,7 +174,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_message_as_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.user.id, data.user.admin);
 
@@ -193,7 +193,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_message_as_invalid_student() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.invalid_user.id, data.invalid_user.admin);
 
@@ -212,7 +212,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_message_as_unauthorised_user() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.unauthorised_user.id, data.unauthorised_user.admin);
 
@@ -231,7 +231,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_message_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.lecturer.id, data.lecturer.admin);
 
@@ -250,7 +250,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_message_as_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
         let (token, _) = generate_jwt(data.tutor.id, data.tutor.admin);
 

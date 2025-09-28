@@ -1,5 +1,5 @@
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
@@ -21,7 +21,9 @@ pub struct RandomGenomeGenerator {
 
 impl RandomGenomeGenerator {
     pub fn new(seed: u64) -> Self {
-        Self { rng: StdRng::seed_from_u64(seed) }
+        Self {
+            rng: StdRng::seed_from_u64(seed),
+        }
     }
 
     pub fn generate_string(&mut self, configs: &[GeneConfig]) -> String {
@@ -30,10 +32,11 @@ impl RandomGenomeGenerator {
             let v = self.random_gene_value(cfg);
             values.push(v);
         }
-        values.iter()
-              .map(|v| v.to_string())
-              .collect::<Vec<_>>()
-              .join(",")
+        values
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
     }
 
     fn random_gene_value(&mut self, cfg: &GeneConfig) -> i32 {
@@ -52,7 +55,11 @@ mod tests {
 
     fn make_config(min: i32, max: i32, invalid: &[i32]) -> GeneConfig {
         let set: HashSet<i32> = invalid.iter().cloned().collect();
-        GeneConfig { min_value: min, max_value: max, invalid_values: set }
+        GeneConfig {
+            min_value: min,
+            max_value: max,
+            invalid_values: set,
+        }
     }
 
     #[test]
@@ -70,8 +77,7 @@ mod tests {
         let cfg = make_config(1, 5, &[2, 3]);
         let mut generation = RandomGenomeGenerator::new(100);
         for _ in 0..10 {
-            let val: i32 = generation.generate_string(&[cfg.clone()])
-                .parse().unwrap();
+            let val: i32 = generation.generate_string(&[cfg.clone()]).parse().unwrap();
             assert!(val >= 1 && val <= 5);
             assert!(val != 2 && val != 3);
         }
@@ -114,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_single_valid_only() {
-        let cfg = make_config(0, 2, &[0,1]);
+        let cfg = make_config(0, 2, &[0, 1]);
         let mut generation = RandomGenomeGenerator::new(7);
         for _ in 0..5 {
             let val: i32 = generation.generate_string(&[cfg.clone()]).parse().unwrap();
@@ -142,7 +148,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_deterministic_seed() {
         let cfgs = vec![make_config(0, 3, &[]), make_config(5, 7, &[6])];
@@ -151,4 +156,3 @@ mod tests {
         assert_eq!(gen1.generate_string(&cfgs), gen2.generate_string(&cfgs));
     }
 }
-

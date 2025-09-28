@@ -1,23 +1,32 @@
 #[cfg(test)]
 mod tests {
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
-    use tower::ServiceExt;
-    use serde_json::Value;
-    use chrono::{Utc, TimeZone};
+    use chrono::{TimeZone, Utc};
     use db::models::{
-        user::Model as UserModel,
-        module::Model as ModuleModel,
         assignment::Model as AssignmentModel,
-        user_module_role::{Model as UserModuleRoleModel, Role},
+        module::Model as ModuleModel,
         tickets::Model as TicketModel,
+        user::Model as UserModel,
+        user_module_role::{Model as UserModuleRoleModel, Role},
     };
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use serde_json::Value;
+    use tower::ServiceExt;
 
-    async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> (UserModel, UserModel, UserModel, ModuleModel, AssignmentModel, TicketModel) {
+    async fn setup_test_data(
+        db: &sea_orm::DatabaseConnection,
+    ) -> (
+        UserModel,
+        UserModel,
+        UserModel,
+        ModuleModel,
+        AssignmentModel,
+        TicketModel,
+    ) {
         let module = ModuleModel::create(db, "COS133", 2025, Some("Testing Module"), 12)
             .await
             .unwrap();
@@ -68,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -92,10 +101,9 @@ mod tests {
         assert_eq!(res.status(), StatusCode::OK);
     }
 
-
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, lecturer, _, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -114,22 +122,36 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["ticket"]["id"], ticket.id);
-        assert_eq!(json["data"]["user"]["email"].as_str().unwrap().ends_with("@test.com"), true);
+        assert_eq!(
+            json["data"]["user"]["email"]
+                .as_str()
+                .unwrap()
+                .ends_with("@test.com"),
+            true
+        );
     }
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_assistant_lecturer() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
-        let assistant = UserModel::create(app_state.db(), "assistant", "assistant@test.com", "pass", false)
-            .await
-            .unwrap();
+        let assistant = UserModel::create(
+            app_state.db(),
+            "assistant",
+            "assistant@test.com",
+            "pass",
+            false,
+        )
+        .await
+        .unwrap();
 
         UserModuleRoleModel::assign_user_to_module(
             app_state.db(),
@@ -158,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_tutor() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let (_author, _lecturer, _outsider, module, assignment, ticket) =
             setup_test_data(app_state.db()).await;
 
@@ -191,12 +213,10 @@ mod tests {
         assert_eq!(res.status(), StatusCode::OK);
     }
 
-
     #[tokio::test]
     async fn test_get_ticket_with_user_success_as_author() {
-        let (app, app_state) = make_test_app().await;
-        let (author, _, _, module, assignment, ticket) =
-            setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let (author, _, _, module, assignment, ticket) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(author.id, author.admin);
         let uri = format!(
@@ -216,9 +236,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (_, _, outsider, module, assignment, ticket) =
-            setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let (_, _, outsider, module, assignment, ticket) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(outsider.id, outsider.admin);
         let uri = format!(
@@ -238,9 +257,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_not_found() {
-        let (app, app_state) = make_test_app().await;
-        let (_author, lecturer, _, module, assignment, _) =
-            setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let (_author, lecturer, _, module, assignment, _) = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(lecturer.id, lecturer.admin);
         let uri = format!(
@@ -260,34 +278,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_ticket_with_user_unauthorized() {
-        let (app, app_state) = make_test_app().await;
-        let (_, _, _, module, assignment, ticket) =
-            setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let (_, _, _, module, assignment, ticket) = setup_test_data(app_state.db()).await;
 
         let uri = format!(
             "/api/modules/{}/assignments/{}/tickets/{}",
             module.id, assignment.id, ticket.id
         );
 
-        let req = Request::builder()
-            .uri(uri)
-            .body(Body::empty())
-            .unwrap();
+        let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
 
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
     }
 
-        #[tokio::test]
+    #[tokio::test]
     async fn test_get_ticket_with_user_student_not_author_forbidden() {
-        let (app, app_state) = make_test_app().await;
-        let (_, _, _, module, assignment, ticket) =
-            setup_test_data(app_state.db()).await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let (_, _, _, module, assignment, ticket) = setup_test_data(app_state.db()).await;
 
         // Create second student in same module who is NOT the ticket author
-        let another_student = UserModel::create(app_state.db(), "studentB", "sb@test.com", "pass", false)
-            .await
-            .unwrap();
+        let another_student =
+            UserModel::create(app_state.db(), "studentB", "sb@test.com", "pass", false)
+                .await
+                .unwrap();
 
         UserModuleRoleModel::assign_user_to_module(
             app_state.db(),
@@ -313,5 +327,4 @@ mod tests {
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
     }
-
 }

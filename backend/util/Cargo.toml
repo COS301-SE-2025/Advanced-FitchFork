@@ -15,8 +15,16 @@ futures = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = "0.1"
 once_cell = "1"
-migration = { path = "../migration" }
 dotenvy = "0.15"
 sea-orm-migration = "1.1"
 async-trait = "0.1"
 bytes = "1"
+regex = "1.11.2"
+zip = "5.1.1"
+tar = "0.4"
+flate2 = "1.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+sysinfo = { version = "0.37", features = ["multithread"] }
+
+[dev-dependencies]
+serial_test = "3"

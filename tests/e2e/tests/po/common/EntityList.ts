@@ -15,6 +15,10 @@ export class EntityList {
     this.opts = { searchParam: 'query', ...opts } as Required<EntityListOptions>;
   }
 
+  protected matchesFetch(url: string): boolean {
+    return this.opts.fetchRe.test(url.split('?')[0] ?? url);
+  }
+
   // ---------------- navigation ----------------
   async goto() {
     await this.page.goto(this.opts.route);
@@ -28,7 +32,7 @@ export class EntityList {
     let inFlight = 0;
 
     const isListReq = (url: string, method: string) =>
-      method === 'GET' && this.opts.fetchRe.test(url);
+      method === 'GET' && this.matchesFetch(url);
 
     const onReq = (req: any) => {
       if (isListReq(req.url(), req.method())) { inFlight++; lastSeen = Date.now(); }
@@ -56,7 +60,7 @@ export class EntityList {
 
   protected get listFetch(): Promise<Response> {
     return this.page.waitForResponse(
-      r => r.request().method() === 'GET' && this.opts.fetchRe.test(r.url()),
+      r => r.request().method() === 'GET' && this.matchesFetch(r.url()),
     );
   }
 
@@ -143,7 +147,7 @@ export class EntityList {
     const expectQueryResponse = this.page
       .waitForResponse(r => {
         if (r.request().method() !== 'GET') return false;
-        if (!this.opts.fetchRe.test(r.url())) return false;
+        if (!this.matchesFetch(r.url())) return false;
         try {
           const u = new URL(r.url());
           const q = u.searchParams.get(searchParam) ?? '';
@@ -171,6 +175,25 @@ export class EntityList {
   async clickControlDropdownAction(key: string) {
     const scope = this.page.locator('.ant-dropdown:visible').first();
     const item = scope.getByTestId(`control-action-${key}`).first();
+    await expect(item).toBeVisible();
+    await item.click();
+  }
+
+  // ---------------- bulk actions ----------------
+  async clickBulkPrimary(key: string) {
+    const btn = this.page.getByTestId(`bulk-action-${key}`).first();
+    await expect(btn, `Bulk action [bulk-action-${key}] should be visible`).toBeVisible();
+    await btn.click();
+  }
+  async openBulkActionsDropdown() {
+    const trigger = this.page.getByTestId('bulk-action-dropdown').first();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(this.page.locator('.ant-dropdown:visible').first()).toBeVisible();
+  }
+  async clickBulkDropdownAction(key: string) {
+    const scope = this.page.locator('.ant-dropdown:visible').first();
+    const item = scope.getByTestId(`bulk-action-${key}`).first();
     await expect(item).toBeVisible();
     await item.click();
   }
@@ -205,6 +228,31 @@ export class EntityList {
     const item = scope.getByTestId(`entity-action-${actionKey}`).first();
     await expect(item).toBeVisible();
     await item.click();
+  }
+
+  // ---------------- row selection ----------------
+  async setRowSelection(rowText: string | RegExp, selected = true) {
+    const scope = this.entityByText(rowText);
+    const checkbox = scope.getByRole('checkbox').first();
+    await expect(checkbox, 'Row selection checkbox should exist').toBeAttached();
+
+    const isChecked = await checkbox.isChecked().catch(() => false);
+    if (isChecked === selected) return;
+
+    if (selected) {
+      await checkbox.check({ force: true });
+    } else {
+      await checkbox.uncheck({ force: true });
+    }
+  }
+
+  async clearAllSelection() {
+    const checkedBoxes = this.page.getByRole('checkbox', { checked: true });
+    const total = await checkedBoxes.count();
+    for (let i = 0; i < total; i++) {
+      const box = checkedBoxes.nth(i);
+      await box.uncheck({ force: true }).catch(() => {});
+    }
   }
 
   // ---------------- modal helpers ----------------

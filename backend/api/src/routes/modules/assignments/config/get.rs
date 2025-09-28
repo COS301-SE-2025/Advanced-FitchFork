@@ -1,12 +1,15 @@
 use crate::response::ApiResponse;
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use db::models::assignment::{Column as AssignmentColumn, Entity as AssignmentEntity};
-use db::models::assignment_file::{Entity as AssignmentFile, Column as AssignmentFileColumn, FileType, Model as AssignmentFileModel};
+use db::models::assignment_file::{
+    Column as AssignmentFileColumn, Entity as AssignmentFile, FileType,
+    Model as AssignmentFileModel,
+};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::to_value;
 use util::{execution_config::ExecutionConfig, state::AppState};
@@ -45,7 +48,7 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 ///     "marking": {
 ///       "marking_scheme": "exact",
 ///       "feedback_scheme": "auto",
-///       "deliminator": "&-=-&"
+///       "deliminator": "###"
 ///     }
 ///   }
 /// }
@@ -65,7 +68,7 @@ use util::{execution_config::ExecutionConfig, state::AppState};
 /// - **500** – Failed to load configuration from disk
 ///
 /// ### Notes
-/// - Configurations are stored on disk under `ASSIGNMENT_STORAGE_ROOT/module_{id}/assignment_{id}/config/config.json`
+/// - Configurations are stored on disk.
 /// - Config format uses [`ExecutionConfig`] as the schema
 /// - This is an example schema and will evolve over time
 pub async fn get_assignment_config(
@@ -125,7 +128,10 @@ pub async fn get_assignment_config(
                 let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
                 (
                     StatusCode::OK,
-                    Json(ApiResponse::success(json, "Assignment configuration retrieved successfully")),
+                    Json(ApiResponse::success(
+                        json,
+                        "Assignment configuration retrieved successfully",
+                    )),
                 )
                     .into_response()
             }
@@ -141,14 +147,27 @@ pub async fn get_assignment_config(
                     .into_response()
             }
         },
-        None => (
-            StatusCode::OK,
-            Json(ApiResponse::success(
-                serde_json::json!({}),
-                "No configuration set for this assignment",
-            )),
-        )
-            .into_response(),
+        None => match ExecutionConfig::get_execution_config(module_id, assignment_id) {
+            Ok(cfg) => {
+                let json = to_value(cfg).unwrap_or_else(|_| serde_json::json!({}));
+                (
+                    StatusCode::OK,
+                    Json(ApiResponse::success(
+                        json,
+                        "Assignment configuration retrieved successfully",
+                    )),
+                )
+                    .into_response()
+            }
+            Err(_) => (
+                StatusCode::OK,
+                Json(ApiResponse::success(
+                    serde_json::json!({}),
+                    "No configuration set for this assignment",
+                )),
+            )
+                .into_response(),
+        },
     }
 }
 
@@ -174,7 +193,7 @@ pub async fn get_assignment_config(
 //   "marking": {
 //     "marking_scheme": "exact",
 //     "feedback_scheme": "auto",
-//     "deliminator": "&-=-&"
+//     "deliminator": "###"
 //   }
 // }
 

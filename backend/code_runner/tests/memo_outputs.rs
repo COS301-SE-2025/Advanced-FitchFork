@@ -2,7 +2,7 @@ use chrono::Utc;
 use code_runner::create_memo_outputs_for_all_tasks;
 use db::models::assignment::AssignmentType;
 use db::models::assignment::{ActiveModel as AssignmentActiveModel, Entity as AssignmentEntity};
-use db::models::assignment_task::Model as AssignmentTaskModel;
+use db::models::assignment_task::{Model as AssignmentTaskModel, TaskType};
 use db::models::module::{ActiveModel as ModuleActiveModel, Entity as ModuleEntity};
 use db::test_utils::setup_test_db;
 use sea_orm::DatabaseConnection;
@@ -67,9 +67,16 @@ async fn seed_tasks(db: &DatabaseConnection, assignment_id: i64) {
     }
 
     for (task_number, command) in tasks {
-        AssignmentTaskModel::create(db, assignment_id, task_number, "Untitled Task", command)
-            .await
-            .expect("Failed to create assignment task");
+        AssignmentTaskModel::create(
+            db,
+            assignment_id,
+            task_number,
+            "Untitled Task",
+            command,
+            TaskType::Normal,
+        )
+        .await
+        .expect("Failed to create assignment task");
     }
 }
 

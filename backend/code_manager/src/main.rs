@@ -1,11 +1,13 @@
 //main.rs
 use axum::{routing::get, Router};
-use code_manager::api::api::{health, init_manager, run_code};
+use code_manager::api::api::{
+    get_max_concurrent, health, init_manager, run_code, set_max_concurrent, stats,
+};
 use dotenv::dotenv;
-use std::env;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use util::config;
 
 #[tokio::main]
 async fn main() {
@@ -18,20 +20,22 @@ async fn main() {
         .init();
 
     // Initialize the global ContainerManager
-    let max_containers: usize = env::var("MAX_NUM_CONTAINERS")
-        .expect("MAX_NUM_CONTAINERS not set")
-        .parse()
-        .expect("MAX_NUM_CONTAINERS must be a valid usize");
+    let max_containers: usize = config::max_number_containers();
     init_manager(max_containers);
 
     // Build API routes
     let app = Router::new()
         .route("/health", get(health))
-        .route("/run", axum::routing::post(run_code));
+        .route("/run", axum::routing::post(run_code))
+        .route("/stats", get(stats))
+        .route(
+            "/max_concurrent",
+            get(get_max_concurrent).post(set_max_concurrent),
+        );
 
     // Define address to listen on
-    let host = env::var("CODE_MANAGER_HOST").expect("CODE_MANAGER_HOST not set");
-    let port = env::var("CODE_MANAGER_PORT").expect("CODE_MANAGER_PORT not set");
+    let host = config::code_manager_host();
+    let port = config::code_manager_port();
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .expect("Invalid address");

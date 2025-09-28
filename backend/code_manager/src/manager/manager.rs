@@ -31,6 +31,7 @@ impl ContainerManager {
         config: &ExecutionConfig,
         commands: Vec<String>,
         files: Vec<(String, Vec<u8>)>,
+        interpreter: bool,
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync + 'static>> {
         let maybe_notify = {
             let mut queue = self.queue.lock().await;
@@ -44,7 +45,7 @@ impl ContainerManager {
         tracing::info!("Running container with commands: {:?}", commands);
 
         // Actually run the container
-        let result = run_container(config, commands, files).await;
+        let result = run_container(config, commands, files, interpreter).await;
 
         // Release slot after run finishes
         {
@@ -89,5 +90,15 @@ impl ContainerManager {
             "Ran container for language '{}', files: {:?}",
             language, files
         )
+    }
+
+    pub async fn get_stats(&self) -> (usize, usize, usize) {
+        let q = self.queue.lock().await;
+        q.stats()
+    }
+
+    pub async fn set_max_concurrent(&self, new_max: usize) {
+        let mut q = self.queue.lock().await;
+        q.set_max_concurrent(new_max);
     }
 }

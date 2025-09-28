@@ -3,7 +3,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
-use tempfile::tempdir;
+// use tempfile::tempdir;
+use tempdir::TempDir;
 use tokio::process::Command;
 use tokio::time::timeout;
 use util::execution_config::ExecutionConfig;
@@ -14,9 +15,10 @@ pub async fn run_container(
     config: &ExecutionConfig,
     commands: Vec<String>,
     files: Vec<(String, Vec<u8>)>,
+    interpreter: bool,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let temp_code_dir = tempdir()?;
-    let temp_output_dir = tempdir()?;
+    let temp_code_dir = TempDir::new("code")?;
+    let temp_output_dir = TempDir::new("output")?;
 
     let code_path = temp_code_dir.path().to_path_buf();
     let output_path = temp_output_dir.path().to_path_buf();
@@ -47,9 +49,9 @@ pub async fn run_container(
             .arg("run")
             .arg("--rm")
             .arg("--network=none")
-            .arg(memory_arg.clone())
-            .arg(cpus_arg.clone())
-            .arg(pids_arg.clone())
+            .arg(&memory_arg)
+            .arg(&cpus_arg)
+            .arg(&pids_arg)
             .arg("--security-opt=no-new-privileges")
             .arg("-v")
             .arg(format!("{}:/code:rw", code_path.display()))
@@ -63,42 +65,53 @@ pub async fn run_container(
             .stderr(Stdio::piped())
             .spawn()?;
 
-        let output = timeout(
+        let output_result = timeout(
             Duration::from_secs(config.execution.timeout_secs),
             docker_output.wait_with_output(),
         )
-        .await??;
+        .await;
 
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        let retcode = output.status.code().unwrap_or(-1);
+        let combined_output = match output_result {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+                let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+                let retcode = output.status.code().unwrap_or(-1);
 
-        let mut combined_output = String::new();
-
-        if config.output.stdout {
-            combined_output.push_str(&stdout);
-        }
-
-        if config.output.stderr {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
+                if interpreter {
+                    // For interpreters: return raw stdout only
+                    stdout
+                } else {
+                    // For normal execution: include markers
+                    let mut combined = String::new();
+                    combined.push_str(&stdout);
+                    combined.push_str("&FITCHFORK&StandardError\n");
+                    if !combined.is_empty() {
+                        combined.push('\n');
+                    }
+                    combined.push_str(&stderr);
+                    combined.push_str("&FITCHFORK&ReturnCode\n");
+                    if !combined.is_empty() {
+                        combined.push('\n');
+                    }
+                    combined.push_str(&format!("Retcode: {}", retcode));
+                    combined
+                }
             }
-            combined_output.push_str(&stderr);
-        }
-
-        if config.output.retcode {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
+            Ok(Err(e)) => {
+                if interpreter {
+                    format!("Interpreter failed: {}", e)
+                } else {
+                    format!("&FITCHFORK&Error\nCommand failed: {}", e)
+                }
             }
-            combined_output.push_str(&format!("Retcode: {}", retcode));
-        }
-
-        if !output.status.success() {
-            if !combined_output.is_empty() {
-                combined_output.push('\n');
+            Err(_) => {
+                if interpreter {
+                    "Interpreter timed out (possible infinite loop)".to_string()
+                } else {
+                    "&FITCHFORK&Error\nCommand timed out (possible infinite loop)".to_string()
+                }
             }
-            combined_output.push_str(&format!("[ERROR]\n{}", &stderr));
-        }
+        };
 
         outputs.push(combined_output);
     }
@@ -140,6 +153,7 @@ mod tests {
                 "cat /code/output.txt".to_string(),
             ],
             vec![(filename, contents)],
+            false,
         )
         .await
         .expect("run_container failed");
@@ -161,7 +175,7 @@ mod tests {
             "cat /code/output.txt".to_string(),
         ];
 
-        let outputs = run_container(&config, commands, vec![(filename, contents)])
+        let outputs = run_container(&config, commands, vec![(filename, contents)], false)
             .await
             .expect("run_container failed");
 
@@ -178,9 +192,14 @@ mod tests {
 
         let commands = vec!["cat hello.txt".to_string()];
 
-        let outputs = run_container(&config, commands, vec![("test.zip".to_string(), zip_bytes)])
-            .await
-            .expect("run_container failed");
+        let outputs = run_container(
+            &config,
+            commands,
+            vec![("test.zip".to_string(), zip_bytes)],
+            false,
+        )
+        .await
+        .expect("run_container failed");
 
         assert_eq!(outputs.len(), 1);
         assert!(outputs[0].contains("Hello, Zip!"));

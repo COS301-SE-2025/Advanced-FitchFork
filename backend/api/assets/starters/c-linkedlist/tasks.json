@@ -1,0 +1,20 @@
+[
+	{
+		"task_number": 1,
+		"name": "Core list operations",
+		"command": "make task1",
+		"task_type": "valgrind"
+	},
+	{
+		"task_number": 2,
+		"name": "Indexed insert & erase",
+		"command": "make task2",
+		"task_type": "valgrind"
+	},
+	{
+		"task_number": 3,
+		"name": "Copy & move simulation",
+		"command": "make task3",
+		"task_type": "valgrind"
+	}
+]

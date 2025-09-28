@@ -10,12 +10,11 @@ import {
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import PageHeader from '@/components/PageHeader';
 import { EntityList, type EntityListHandle, type EntityListProps } from '@/components/EntityList';
-import CreateModal from '@/components/common/CreateModal';
-import EditModal from '@/components/common/EditModal';
+import FormModal, { type FormModalField } from '@/components/common/FormModal';
 import { message } from '@/utils/message';
 import dayjs from 'dayjs';
 import { useAuth } from '@/context/AuthContext';
-import { Space, Typography } from 'antd';
+import { Typography } from 'antd';
 import {
   AnnouncementListItem,
   AnnouncementsEmptyState,
@@ -25,6 +24,28 @@ import AnnouncementCard from '@/components/announcements/AnnouncementCard';
 import { useModule } from '@/context/ModuleContext';
 import { mdExcerpt } from '@/utils/markdown';
 import { useViewSlot } from '@/context/ViewSlotContext';
+
+const announcementFields: FormModalField[] = [
+  {
+    name: 'title',
+    label: 'Title',
+    type: 'text',
+    constraints: { required: true, length: { min: 3, max: 160 } },
+  },
+  {
+    name: 'body',
+    label: 'Body',
+    type: 'textarea',
+    constraints: { required: true, length: { min: 1, max: 20000 } },
+    // Optional UI tweak:
+    ui: { props: { rows: 6, showCount: true, maxLength: 20000 } },
+  },
+  {
+    name: 'pinned',
+    label: 'Pinned',
+    type: 'boolean',
+  },
+];
 
 const Announcements = () => {
   const { setValue } = useViewSlot();
@@ -168,7 +189,7 @@ const Announcements = () => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4">
-        <Space direction="vertical" size="middle" className="w-full">
+        <div className="flex h-full min-h-0 flex-col gap-4">
           <PageHeader
             title="Announcements"
             description={`All announcements for ${moduleDetails.code} (${moduleDetails.year})`}
@@ -178,6 +199,7 @@ const Announcements = () => {
             ref={listRef}
             name="Announcements"
             fetchItems={fetchAnnouncements}
+            filtersStorageKey={`modules:${moduleId}:announcements:filters:v1`}
             getRowKey={(a) => a.id}
             onRowClick={(a) => navigate(`/modules/${moduleId}/announcements/${a.id}`)}
             renderGridItem={(a, actions) => (
@@ -242,42 +264,37 @@ const Announcements = () => {
               <AnnouncementsEmptyState
                 isLecturerOrAssistant={canManage}
                 onCreate={() => setCreateOpen(true)}
+                onRefresh={() => listRef.current?.refresh()}
               />
             }
           />
-        </Space>
+        </div>
 
-        <CreateModal
+        <FormModal
           open={createOpen}
           onCancel={() => setCreateOpen(false)}
-          onCreate={handleCreate}
-          initialValues={{ title: '', body: '', pinned: false }}
-          fields={[
-            { name: 'title', label: 'Title', type: 'text', required: true },
-            { name: 'body', label: 'Body', type: 'textarea', required: true },
-            { name: 'pinned', label: 'Pinned', type: 'boolean' },
-          ]}
+          onSubmit={handleCreate}
           title="Add Announcement"
+          submitText="Create"
+          initialValues={{ title: '', body: '', pinned: false }}
+          fields={announcementFields}
         />
 
-        <EditModal
+        <FormModal
           open={editOpen}
           onCancel={() => {
             setEditOpen(false);
             setEditingItem(null);
           }}
-          onEdit={handleEdit}
+          onSubmit={handleEdit}
+          title="Edit Announcement"
+          submitText="Save"
           initialValues={{
             title: editingItem?.title ?? '',
             body: editingItem?.body ?? '',
             pinned: editingItem?.pinned ?? false,
           }}
-          fields={[
-            { name: 'title', label: 'Title', type: 'text', required: true },
-            { name: 'body', label: 'Body', type: 'textarea', required: true },
-            { name: 'pinned', label: 'Pinned', type: 'boolean' },
-          ]}
-          title="Edit Announcement"
+          fields={announcementFields}
         />
       </div>
     </div>

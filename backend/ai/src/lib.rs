@@ -19,7 +19,9 @@
 // already returns outputs. However this can be change in the future if we want to run the interpreter in advance
 
 pub mod algorithms {
+    pub mod code_coverage;
     pub mod genetic_algorithm;
+    pub mod rng;
 }
 
 pub mod utils {
@@ -31,14 +33,17 @@ use crate::algorithms::genetic_algorithm::{Chromosome, GeneticAlgorithm};
 use crate::utils::evaluator::{Evaluator, TaskSpec};
 use crate::utils::output::Output;
 use code_runner::run_interpreter;
+use db::models::assignment_submission::Entity as AssignmentSubmission;
+use rand::random;
 use sea_orm::DatabaseConnection;
+use sea_orm::EntityTrait;
 use std::collections::HashMap;
 use util::execution_config::ExecutionConfig;
 
+use crate::algorithms::code_coverage::{coverage_fitness, coverage_percent_for_attempt};
+use crate::algorithms::rng::{GeneConfig as RngGeneConfig, RandomGenomeGenerator as RngGen};
 
-// -----------------------------------------------------------------------------
 // Public entrypoint: build GA + Evaluator + Components, then run the loop
-// -----------------------------------------------------------------------------
 
 /// Runs a genetic algorithm for a given submission using an ExecutionConfig
 ///
@@ -89,7 +94,7 @@ pub async fn run_ga_job(
     let mut derive_props = {
         let evaluator = evaluator;
         let base_spec = base_spec.clone();
-        let delim     = delimiter.clone();
+        let delim = delimiter.clone();
         move |outs: &[(i64, String)], memo: &[(i64, String)]| -> (usize, usize) {
             let specs = vec![base_spec.clone(); outs.len()];
             evaluator.derive_props(&specs, outs, memo, &delim)
@@ -101,7 +106,7 @@ pub async fn run_ga_job(
                             _sid: i64|
      -> Result<Vec<(i64, String)>, String> { Err("unused".into()) };
 
-    // Run the GA ↔ interpreter loop
+    // Run the GA <-> interpreter loop
     run_ga_end_to_end(
         db,
         submission_id,
@@ -115,10 +120,78 @@ pub async fn run_ga_job(
     .await
 }
 
-// -----------------------------------------------------------------------------
-// Core driver: decode -> interpreter -> derive -> evaluate -> evolve
-// -----------------------------------------------------------------------------
+pub async fn run_rng_job(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    config: &ExecutionConfig,
+) -> Result<(), String> {
+    let seed: u64 = random::<u64>();
 
+    //RNG has only one iteration
+    let iterations: usize = 1;
+    let rng_cfgs = exec_to_rng_configs(config);
+    let mut generation = RngGen::new(seed);
+
+    // check if its there
+    let _submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+    for _i in 0..iterations {
+        let payload = generation.generate_string(&rng_cfgs);
+        run_interpreter(db, submission_id, &payload).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn run_coverage_ga_job(
+    db: &DatabaseConnection,
+    submission_id: i64,
+    config: &ExecutionConfig,
+    module_id: i64,
+    assignment_id: i64,
+) -> Result<(), String> {
+    let mut ga = GeneticAlgorithm::from_execution_config(&config.clone());
+    let bits_per_gene = ga.bits_per_gene();
+
+    let submission = AssignmentSubmission::find_by_id(submission_id)
+        .one(db)
+        .await
+        .map_err(|e| format!("Failed to fetch submission: {}", e))?
+        .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+    let user_id = submission.user_id;
+    let attempt_number = submission.attempt;
+
+    let gens = ga.config().number_of_generations;
+
+    for _generation in 0..gens {
+        let mut fitness_scores = Vec::with_capacity(ga.population().len());
+
+        for chrom in ga.population().iter() {
+            let decoded = decode_genes(chrom.genes(), bits_per_gene);
+            let payload = decoded
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            run_interpreter(db, submission_id, &payload).await?;
+            let percent =
+                coverage_percent_for_attempt(db, module_id, assignment_id, user_id, attempt_number)
+                    .await?;
+            let score = coverage_fitness(percent);
+            fitness_scores.push(score);
+        }
+
+        ga.step_with_fitness(&fitness_scores);
+    }
+
+    Ok(())
+}
+
+// Core driver: decode -> interpreter -> derive -> evaluate -> evolve
 /// Generic driver used by `run_ga_job`.
 ///
 /// For each generation:
@@ -150,7 +223,7 @@ where
     // Same as mentioned earlier, not used
     F: FnMut(&DatabaseConnection, i64) -> Result<Vec<(i64, String)>, String>,
 {
-    let _ = &mut fetch_outputs; // suppress unused
+    let _ = &mut fetch_outputs;
 
     let gens = ga.config().number_of_generations;
     let bits_per_gene = ga.bits_per_gene();
@@ -169,12 +242,33 @@ where
                 .collect::<Vec<_>>()
                 .join(",");
 
+            // Load submission to get user_id and attempt_number
+            let submission = AssignmentSubmission::find_by_id(submission_id)
+                .one(db)
+                .await
+                .map_err(|e| format!("Failed to fetch submission: {}", e))?
+                .ok_or_else(|| format!("Submission {} not found", submission_id))?;
+
+            let user_id = submission.user_id;
+            let attempt_number = submission.attempt;
+
             // Run interpreter: executes code for this chromosome, writes artifacts
             //    to DB, and returns per-task outputs for *this* submission.
             //    The interpreter is the source of truth for stdout/stderr/exit codes.
-            let task_outputs: Vec<(i64, String)> = run_interpreter(db, submission_id, &generated_string).await?;
-        
-            let memo_task_outputs: Vec<(i64, String)> = Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
+            run_interpreter(db, submission_id, &generated_string).await?;
+
+            let task_outputs: Vec<(i64, String)> = Output::get_submission_output_no_coverage(
+                db,
+                module_id,
+                assignment_id,
+                user_id,
+                attempt_number,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let memo_task_outputs: Vec<(i64, String)> =
+                Output::get_memo_output(module_id, assignment_id).map_err(|e| e.to_string())?;
 
             // Derive counts the Components need:
             //    - `n_ltl_props`: total number of violated properties across tasks
@@ -185,14 +279,6 @@ where
             // Compute fitness for this chromosome in this generation.
             //    `Components` combines sub-scores via omega weights and returns a scalar.
             let score = comps.evaluate(chrom, generation, ltl_milli, fail_milli);
-
-            println!("ltl_milli = {}, fail_milli = {}", ltl_milli, fail_milli);
-            println!(
-                "[DEBUG] generation {} fitness = {}",
-                generation,
-                score
-            );
-
             fitness_scores.push(score);
         }
 
@@ -202,6 +288,19 @@ where
 
     Ok(())
 }
+
+fn exec_to_rng_configs(cfg: &ExecutionConfig) -> Vec<RngGeneConfig> {
+    cfg.gatlam
+        .genes
+        .iter()
+        .map(|g| RngGeneConfig {
+            min_value: g.min_value,
+            max_value: g.max_value,
+            invalid_values: std::collections::HashSet::new(),
+        })
+        .collect()
+}
+
 // Fitness Components
 pub struct Components {
     omega1: f64,
@@ -416,8 +515,187 @@ mod component_unit_tests {
     fn components_weights_invalid_sum_panics() {
         let _ = Components::new(0.5, 0.5, 0.5, 4);
     }
-}
 
+    mod rng_generator {
+        use crate::algorithms::rng::{
+            GeneConfig as RngGeneConfig, RandomGenomeGenerator as RngGen,
+        };
+        use std::collections::HashSet;
+
+        fn gc(min: i32, max: i32, invalid: &[i32]) -> RngGeneConfig {
+            RngGeneConfig {
+                min_value: min,
+                max_value: max,
+                invalid_values: invalid.iter().cloned().collect::<HashSet<_>>(),
+            }
+        }
+
+        #[test]
+        fn deterministic_same_seed_same_output() {
+            let cfgs = vec![gc(0, 3, &[]), gc(10, 12, &[11])];
+            let mut g1 = RngGen::new(12345);
+            let mut g2 = RngGen::new(12345);
+            for _ in 0..16 {
+                let s1 = g1.generate_string(&cfgs);
+                let s2 = g2.generate_string(&cfgs);
+                assert_eq!(s1, s2, "same seed must produce same sequence");
+            }
+        }
+
+        #[test]
+        fn different_seed_yields_different_sequence() {
+            // Use two genes and compare a sequence of draws to avoid flakiness.
+            let cfgs = vec![gc(-5, 5, &[]), gc(100, 110, &[105])];
+            let mut g1 = RngGen::new(42);
+            let mut g2 = RngGen::new(43);
+            let seq1: Vec<String> = (0..32).map(|_| g1.generate_string(&cfgs)).collect();
+            let seq2: Vec<String> = (0..32).map(|_| g2.generate_string(&cfgs)).collect();
+            assert_ne!(
+                seq1, seq2,
+                "unlikely collision for distinct seeds across 32 draws"
+            );
+        }
+
+        #[test]
+        fn respects_range_and_invalids() {
+            let cfg = gc(1, 5, &[2, 4]);
+            let mut generation = RngGen::new(9001);
+            for _ in 0..200 {
+                let s = generation.generate_string(&[cfg.clone()]);
+                let v: i32 = s.parse().unwrap();
+                assert!((1..=5).contains(&v));
+                assert_ne!(v, 2);
+                assert_ne!(v, 4);
+            }
+        }
+
+        #[test]
+        fn multiple_genes_string_format_and_values() {
+            let cfgs = vec![gc(-1, 1, &[]), gc(10, 12, &[11])];
+            let mut generation = RngGen::new(7);
+            for _ in 0..10 {
+                let s = generation.generate_string(&cfgs);
+                let parts: Vec<&str> = s.split(',').collect();
+                assert_eq!(parts.len(), 2, "must contain a comma between two genes");
+                let v1: i32 = parts[0].parse().unwrap();
+                let v2: i32 = parts[1].parse().unwrap();
+                assert!((-1..=1).contains(&v1));
+                assert!((10..=12).contains(&v2) && v2 != 11);
+            }
+        }
+
+        #[test]
+        fn empty_configs_produces_empty_string() {
+            let mut generation = RngGen::new(1);
+            assert_eq!(generation.generate_string(&[]), "");
+        }
+
+        #[test]
+        fn zero_range_is_constant() {
+            let cfg = gc(5, 5, &[]);
+            let mut generation = RngGen::new(99);
+            for _ in 0..10 {
+                let v: i32 = generation.generate_string(&[cfg.clone()]).parse().unwrap();
+                assert_eq!(v, 5);
+            }
+        }
+
+        #[test]
+        fn all_but_one_invalid_yields_that_one() {
+            let cfg = gc(0, 3, &[0, 1, 2]);
+            let mut generation = RngGen::new(2024);
+            for _ in 0..20 {
+                let v: i32 = generation.generate_string(&[cfg.clone()]).parse().unwrap();
+                assert_eq!(v, 3);
+            }
+        }
+
+        #[test]
+        fn negative_only_range() {
+            let cfg = gc(-5, -3, &[]);
+            let mut generation = RngGen::new(321);
+            for _ in 0..20 {
+                let v: i32 = generation.generate_string(&[cfg.clone()]).parse().unwrap();
+                assert!((-5..=-3).contains(&v));
+            }
+        }
+
+        #[test]
+        fn bits_calculation_sign_magnitude() {
+            assert_eq!(gc(0, 7, &[]).bits(), 4); // ceil(log2(7))=3 + sign
+            assert_eq!(gc(-8, -1, &[]).bits(), 4); // ceil(log2(8))=3 + sign
+            assert_eq!(gc(-9, 9, &[]).bits(), 5); // ceil(log2(9))=4 + sign
+        }
+    }
+
+    mod code_coverage_tests {
+        use crate::algorithms::code_coverage::{coverage_fitness, coverage_percent_from_json};
+
+        #[test]
+        fn fitness_bounds_and_scale() {
+            assert_eq!(coverage_fitness(0.0), 0.0);
+            assert_eq!(coverage_fitness(50.0), 0.5);
+            assert_eq!(coverage_fitness(100.0), 1.0);
+            // clamp
+            assert_eq!(coverage_fitness(-10.0), 0.0);
+            assert_eq!(coverage_fitness(150.0), 1.0);
+        }
+
+        #[test]
+        fn parse_json_numeric_percent() {
+            let json = r#"{ "summary": { "coverage_percent": 73.25 } }"#;
+            let v = coverage_percent_from_json(json).unwrap();
+            assert!((v - 73.25).abs() < 1e-9);
+        }
+
+        #[test]
+        fn parse_json_string_percent() {
+            let json = r#"{ "summary": { "coverage_percent": "88.5" } }"#;
+            let v = coverage_percent_from_json(json).unwrap();
+            assert!((v - 88.5).abs() < 1e-9);
+        }
+
+        #[test]
+        fn parse_json_int_percent() {
+            let json = r#"{ "summary": { "coverage_percent": 100 } }"#;
+            let v = coverage_percent_from_json(json).unwrap();
+            assert!((v - 100.0).abs() < 1e-9);
+        }
+
+        #[test]
+        fn parse_json_missing_returns_zero() {
+            let json1 = r#"{}"#;
+            let json2 = r#"{ "summary": {} }"#;
+            let json3 = r#"{ "summary": { "coverage_percent": null } }"#;
+            assert_eq!(coverage_percent_from_json(json1).unwrap(), 0.0);
+            assert_eq!(coverage_percent_from_json(json2).unwrap(), 0.0);
+            assert_eq!(coverage_percent_from_json(json3).unwrap(), 0.0);
+        }
+
+        #[test]
+        fn parse_json_wrong_type_returns_zero() {
+            let json = r#"{ "summary": { "coverage_percent": ["not","a","number"] } }"#;
+            let v = coverage_percent_from_json(json).unwrap();
+            assert_eq!(v, 0.0);
+        }
+
+        #[test]
+        fn parse_json_garbage_errors() {
+            let bad = "not-json at all";
+            let err = coverage_percent_from_json(bad).unwrap_err();
+            assert!(err.contains("Failed to parse coverage JSON"));
+        }
+
+        #[test]
+        fn parse_json_over_and_under_bounds_pass_through() {
+            // The parser returns the raw number; clamping happens in the caller if desired.
+            let over = r#"{ "summary": { "coverage_percent": 150.0 } }"#;
+            let under = r#"{ "summary": { "coverage_percent": -5.0 } }"#;
+            assert_eq!(coverage_percent_from_json(over).unwrap(), 150.0);
+            assert_eq!(coverage_percent_from_json(under).unwrap(), -5.0);
+        }
+    }
+}
 
 // #[cfg(test)]
 // mod tests {

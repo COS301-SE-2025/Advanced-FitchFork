@@ -1,16 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use db::{
-        models::user::Model as UserModel,
-    };
+    use crate::helpers::app::make_test_app_with_storage;
+    use api::auth::generate_jwt;
     use axum::{
         body::Body as AxumBody,
         http::{Request, StatusCode, header::CONTENT_TYPE},
     };
-    use tower::ServiceExt;
+    use db::models::user::Model as UserModel;
     use serde_json::{Value, json};
-    use api::auth::generate_jwt;
-    use crate::helpers::app::make_test_app;
+    use tower::ServiceExt;
 
     struct TestData {
         admin_user: UserModel,
@@ -21,9 +19,23 @@ mod tests {
     async fn setup_test_data(db: &sea_orm::DatabaseConnection) -> TestData {
         dotenvy::dotenv().expect("Failed to load .env");
 
-        let admin_user = UserModel::create(db, "put_admin", "put_admin@test.com", "adminpass", true).await.expect("Failed to create admin user for PUT tests");
-        let non_admin_user = UserModel::create(db, "put_regular", "put_regular@test.com", "userpass", false).await.expect("Failed to create regular user for PUT tests");
-        let user_to_update = UserModel::create(db, "target_for_update", "target_original@test.com", "originalpass", false).await.expect("Failed to create target user for update");
+        let admin_user =
+            UserModel::create(db, "put_admin", "put_admin@test.com", "adminpass", true)
+                .await
+                .expect("Failed to create admin user for PUT tests");
+        let non_admin_user =
+            UserModel::create(db, "put_regular", "put_regular@test.com", "userpass", false)
+                .await
+                .expect("Failed to create regular user for PUT tests");
+        let user_to_update = UserModel::create(
+            db,
+            "target_for_update",
+            "target_original@test.com",
+            "originalpass",
+            false,
+        )
+        .await
+        .expect("Failed to create target user for update");
 
         TestData {
             admin_user,
@@ -33,7 +45,9 @@ mod tests {
     }
 
     async fn get_json_body(response: axum::response::Response) -> Value {
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&body).unwrap()
     }
 
@@ -42,11 +56,12 @@ mod tests {
     /// Test Case: Successful Update of User (Username and Email) as Admin
     #[tokio::test]
     async fn test_update_user_success_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
-        let payload = json!({ "username": "updated_username_put", "email": "updated_put@test.com" });
+        let payload =
+            json!({ "username": "updated_username_put", "email": "updated_put@test.com" });
         let uri = format!("/api/users/{}", data.user_to_update.id);
         let req = Request::builder()
             .method("PUT")
@@ -70,13 +85,16 @@ mod tests {
         assert_eq!(updated_user_data["admin"], data.user_to_update.admin);
         assert!(updated_user_data["created_at"].as_str().is_some());
         assert!(updated_user_data["updated_at"].as_str().is_some());
-        assert!(updated_user_data["updated_at"].as_str().unwrap() >= updated_user_data["created_at"].as_str().unwrap());
+        assert!(
+            updated_user_data["updated_at"].as_str().unwrap()
+                >= updated_user_data["created_at"].as_str().unwrap()
+        );
     }
 
     /// Test Case: Successful Update of User Admin Status as Admin
     #[tokio::test]
     async fn test_update_user_admin_status_as_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -96,13 +114,12 @@ mod tests {
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
         assert_eq!(json["message"], "Changing admin status is not allowed");
-
     }
 
     /// Test Case: Update User without Admin Role
     #[tokio::test]
     async fn test_update_user_forbidden_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -120,10 +137,10 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
-     /// Test Case: Update Own User Info as Non-Admin
+    /// Test Case: Update Own User Info as Non-Admin
     #[tokio::test]
     async fn test_update_user_forbidden_update_self_as_non_admin() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.non_admin_user.id, data.non_admin_user.admin);
@@ -144,7 +161,7 @@ mod tests {
     /// Test Case: Update Non-Existent User
     #[tokio::test]
     async fn test_update_user_not_found() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -169,7 +186,7 @@ mod tests {
     /// Test Case: Update User with Invalid Data (e.g., Duplicate Email)
     #[tokio::test]
     async fn test_update_user_invalid_data_duplicate_email() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -194,7 +211,7 @@ mod tests {
     /// Test Case: Update User with Invalid Data (e.g., Duplicate Username)
     #[tokio::test]
     async fn test_update_user_invalid_data_duplicate_username() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let (token, _) = generate_jwt(data.admin_user.id, data.admin_user.admin);
@@ -213,13 +230,16 @@ mod tests {
 
         let json = get_json_body(response).await;
         assert_eq!(json["success"], false);
-        assert_eq!(json["message"], "A user with this student number already exists");
+        assert_eq!(
+            json["message"],
+            "A user with this student number already exists"
+        );
     }
 
     /// Test Case: Update User without Authentication Header
     #[tokio::test]
     async fn test_update_user_missing_auth_header() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = json!({ "username": "no_auth_update_attempt" });
@@ -238,7 +258,7 @@ mod tests {
     /// Test Case: Update User with Invalid JWT Token
     #[tokio::test]
     async fn test_update_user_invalid_token() {
-        let (app, app_state) = make_test_app().await;
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
 
         let payload = json!({ "username": "invalid_token_update" });

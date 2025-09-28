@@ -16,7 +16,13 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Alias::new("assignments"))
                     .if_not_exists()
-                    .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+                    .col(
+                        ColumnDef::new(Alias::new("id"))
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
                     .col(ColumnDef::new(Alias::new("module_id")).integer().not_null())
                     .col(ColumnDef::new(Alias::new("name")).string().not_null())
                     .col(ColumnDef::new(Alias::new("description")).string().null())
@@ -24,10 +30,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(Alias::new("assignment_type"))
                             .enumeration(
                                 Alias::new("assignment_type_enum"),
-                                vec![
-                                    Alias::new("assignment"),
-                                    Alias::new("practical"),
-                                ],
+                                vec![Alias::new("assignment"), Alias::new("practical")],
                             )
                             .not_null(),
                     )
@@ -46,9 +49,16 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default("setup"),
                     )
-                    .col(ColumnDef::new(Alias::new("available_from")).timestamp().not_null())
-                    .col(ColumnDef::new(Alias::new("due_date")).timestamp().not_null())
-                    .col(ColumnDef::new(Alias::new("config")).json().null())
+                    .col(
+                        ColumnDef::new(Alias::new("available_from"))
+                            .timestamp()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("due_date"))
+                            .timestamp()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()

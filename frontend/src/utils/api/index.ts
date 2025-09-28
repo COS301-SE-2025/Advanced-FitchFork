@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/config/api";
 import type { ApiResponse } from "@/types/common";
+import { getAssignmentPin, clearAssignmentPin } from "@/utils/assignmentAccess";
 
 /**
  * Serializes a flat or semi-structured object into a query string.
@@ -21,36 +22,135 @@ export const buildQuery = (params: Record<string, any>): string => {
         )
         .join(",");
       if (sortString) query.append("sort", sortString);
-    }
-
-    // Everything else: normal flat values
-    else {
+    } else {
       query.append(key, value.toString());
     }
   }
 
   return query.toString();
 };
+
+/** Extract /modules/:mid/assignments/:aid from a (possibly absolute) URL. */
+const matchAssignmentIds = (fullUrl: string): { moduleId: number; assignmentId: number } | null => {
+  try {
+    // Strip origin if present
+    const u = fullUrl.startsWith("http") ? new URL(fullUrl).pathname : fullUrl;
+    const m = u.match(/\/modules\/(\d+)\/assignments\/(\d+)/);
+    if (!m) return null;
+    return { moduleId: Number(m[1]), assignmentId: Number(m[2]) };
+  } catch {
+    return null;
+  }
+};
+
+/** Adds auth + ngrok header + (if applicable) x-assignment-pin. */
+const buildHeaders = (base: HeadersInit | undefined, url: string, token: string | null): Record<string, string> => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
+    ...(base as Record<string, string>),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const ids = matchAssignmentIds(url);
+  if (ids) {
+    const pin = getAssignmentPin(ids.moduleId, ids.assignmentId);
+    if (pin) headers["x-assignment-pin"] = pin;
+  }
+  return headers;
+};
+
+/** Redacts sensitive headers for logging. */
+const redactHeadersForLog = (headers: Record<string, any>) => {
+  const redacted: Record<string, any> = { ...headers };
+  if (redacted["x-assignment-pin"]) redacted["x-assignment-pin"] = "***";
+  if (redacted["Authorization"]) redacted["Authorization"] = "Bearer ***";
+  return redacted;
+};
+
+/** Should we log sensitive fields (full headers/body) without redaction? */
+const shouldLogSensitive = (): boolean => {
+  try {
+    // Enable with: localStorage.LOG_SENSITIVE = "1" or window.__LOG_SENSITIVE__ = true
+    // @ts-ignore
+    if (typeof window !== "undefined" && (window.__LOG_SENSITIVE__ === true)) return true;
+    if (typeof window !== "undefined" && localStorage.getItem("LOG_SENSITIVE") === "1") return true;
+  } catch { /* noop */ }
+  return false;
+};
+
+/** Make a plain object from Headers (Response headers). */
+const headersToObject = (h: Headers): Record<string, string> => {
+  const obj: Record<string, string> = {};
+  try {
+    h.forEach((v, k) => { obj[k] = v; });
+  } catch { /* noop */ }
+  return obj;
+};
+
+/** Ensure request body is printable. */
+const bodyPreviewForLog = (body: unknown) => {
+  try {
+    if (typeof body === "string") {
+      return body.length > 10000 ? `${body.slice(0, 10000)}… [truncated]` : body;
+    }
+    if (body instanceof URLSearchParams) return body.toString();
+    if (body instanceof FormData) {
+      const entries: Record<string, any> = {};
+      (body as FormData).forEach((v, k) => {
+        entries[k] = v instanceof Blob ? `[Blob ${v.type} ${v.size}B]` : v;
+      });
+      return entries;
+    }
+    if (body instanceof Blob) return `[Blob ${body.type} ${body.size}B]`;
+    if (body instanceof ArrayBuffer) return `[ArrayBuffer ${body.byteLength}B]`;
+    if (typeof body === "object" && body !== null) return JSON.stringify(body);
+  } catch { /* noop */ }
+  return body as any;
+};
+
+/** If server says the PIN is invalid, clear it so the user gets re-prompted. */
+const maybeClearPinOnForbidden = async (res: Response, url: string) => {
+  if (res.status !== 403) return;
+  let msg = "";
+  try {
+    const clone = res.clone();
+    const ct = clone.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const j = await clone.json().catch(() => null);
+      msg = j?.message || "";
+    } else {
+      msg = await clone.text().catch(() => "");
+    }
+  } catch { /* noop */ }
+
+  // Backend messages to watch for
+  const looksLikePinIssue =
+    /password required|invalid pin|invalid password|assignment password/i.test(msg);
+
+  if (looksLikePinIssue) {
+    const ids = matchAssignmentIds(url);
+    if (ids) clearAssignmentPin(ids.moduleId, ids.assignmentId);
+  }
+};
+
 /**
  * A wrapper around `fetch` for JSON-based API requests.
  *
  * - Automatically injects the auth token from `localStorage`.
  * - Handles token expiration.
+ * - Injects `x-assignment-pin` for assignment endpoints (if present in sessionStorage).
  * - Parses and returns the API response as `ApiResponse<T>`.
- *
- * @template T - The expected shape of `data` in the response.
- * @param endpoint - API path or full URL.
- * @param options - `fetch` options like method, headers, body.
+ * - Logs the full request & full response (redacted by default; see shouldLogSensitive()).
  */
 export async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  // Construct full URL if only path is provided
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-  // Load token and expiry from localStorage
-  const stored = localStorage.getItem('auth');
+  // Load token
+  const stored = localStorage.getItem("auth");
   let token: string | null = null;
   let expires_at: string | null = null;
 
@@ -64,84 +164,166 @@ export async function apiFetch<T>(
     }
   }
 
-  // If token is expired, clear it and return early
   if (expires_at && new Date(expires_at) < new Date()) {
-    localStorage.removeItem('auth');
+    localStorage.removeItem("auth");
   }
 
-  // Prepare headers including optional Authorization
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  const headers = buildHeaders(options.headers, url, token);
 
   const finalOptions: RequestInit = {
     ...options,
     headers,
+    credentials: options.credentials ?? "include",
   };
 
-  // Log outgoing request
-  console.log('[apiFetch] →', {
+  // Print full REQUEST
+  const reqLog = {
     url,
-    method: finalOptions.method || 'GET',
-    headers: finalOptions.headers,
-    body: finalOptions.body,
-  });
+    method: finalOptions.method || "GET",
+    credentials: finalOptions.credentials,
+    headers: shouldLogSensitive()
+      ? (finalOptions.headers as Record<string, any>)
+      : redactHeadersForLog(finalOptions.headers as Record<string, any>),
+    body: bodyPreviewForLog(finalOptions.body),
+  };
+  console.log("[apiFetch] → REQUEST", reqLog);
 
-  // Perform fetch request
+  // Do fetch
   const res = await fetch(url, finalOptions);
-  const contentType = res.headers.get('content-type');
-  let data: ApiResponse<T>;
+  await maybeClearPinOnForbidden(res, url);
 
-  try {
-    if (contentType && contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      const text = await res.text();
-      data = {
-        success: false,
-        data: {} as T,
-        message: text || 'Unknown error',
-      };
-    }
-  } catch (err) {
-    console.error('[apiFetch] Failed to parse response', err);
-    data = {
+  // Clone to read body for logs without consuming stream
+  const resClone = res.clone();
+  const contentType = res.headers.get("content-type") || "";
+  const respHeadersObj = headersToObject(res.headers);
+
+  // Print full RESPONSE (non-JSON)
+  if (!contentType.includes("application/json")) {
+    const text = await resClone.text().catch(() => "");
+    const looksLikeNgrokInterstitial =
+      text.includes("cdn.ngrok.com/static/js/error.js") ||
+      text.includes("ERR_NGROK_6024") ||
+      text.includes("You are about to visit") ||
+      text.includes("data-payload");
+
+    const message = looksLikeNgrokInterstitial
+      ? 'Request blocked by ngrok interstitial. Ensure header "ngrok-skip-browser-warning" is sent (added automatically).'
+      : (text || "Unknown non-JSON response");
+
+    const data: ApiResponse<T> = {
       success: false,
       data: {} as T,
-      message: 'Failed to parse response from server.',
+      message,
     };
+
+    console.log("[apiFetch] ← RESPONSE (non-JSON)", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: text,
+    });
+
+    return data;
   }
 
-  // Log incoming response
-  console.log('[apiFetch] ←', {
-    status: res.status,
-    ok: res.ok,
-    data,
+  // JSON path
+  try {
+    // Read the clone to log full JSON body
+    const bodyText = await resClone.text();
+    let parsedForLog: any = bodyText;
+    try {
+      parsedForLog = JSON.parse(bodyText);
+    } catch { /* keep as text if not valid JSON */ }
+
+    console.log("[apiFetch] ← RESPONSE", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: parsedForLog,
+    });
+
+    // Now parse the actual response to return
+    const data = (await res.json()) as ApiResponse<T>;
+    return data;
+  } catch (err) {
+    console.error("[apiFetch] Failed to parse JSON", err);
+    return {
+      success: false,
+      data: {} as T,
+      message: "Failed to parse response from server.",
+    };
+  }
+}
+
+// Returns the raw Blob without forcing a browser download.
+// Keeps auth behavior consistent with apiFetch/apiDownload.
+export async function apiFetchBlob(endpoint: string): Promise<Blob> {
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
+
+  const stored = localStorage.getItem("auth");
+  let token: string | null = null;
+  if (stored) {
+    try { token = JSON.parse(stored)?.token || null; } catch { token = null; }
+  }
+
+  const headers = buildHeaders({} as any, url, token);
+
+  console.log("[apiFetchBlob] → REQUEST", {
+    url,
+    method: "GET",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers),
   });
 
-  return data;
+  const res = await fetch(url, { method: "GET", headers, credentials: "include" });
+  await maybeClearPinOnForbidden(res, url);
+
+  const respHeadersObj = headersToObject(res.headers);
+
+  if (!res.ok) {
+    // Try to extract API error details
+    try {
+      const j = await res.clone().json();
+      console.log("[apiFetchBlob] ← RESPONSE (error JSON)", {
+        status: res.status,
+        ok: res.ok,
+        headers: respHeadersObj,
+        body: j,
+      });
+      throw new Error(j?.message || res.statusText);
+    } catch {
+      const t = await res.clone().text().catch(() => "");
+      console.log("[apiFetchBlob] ← RESPONSE (error text)", {
+        status: res.status,
+        ok: res.ok,
+        headers: respHeadersObj,
+        body: t,
+      });
+      throw new Error(t || res.statusText || "Download failed");
+    }
+  }
+
+  const blob = await res.clone().blob();
+  console.log("[apiFetchBlob] ← RESPONSE (blob)", {
+    status: res.status,
+    ok: res.ok,
+    headers: respHeadersObj,
+    size: blob.size,
+    type: blob.type,
+  });
+
+  return res.blob();
 }
 
 /**
  * Upload files using a FormData payload.
- *
- * @template T - The expected shape of `data` in the response.
- * @param endpoint - Upload endpoint (e.g. `/modules/:id/files`).
- * @param form - FormData containing files and/or fields.
- * @returns Parsed `ApiResponse<T>` or throws if invalid.
  */
 export async function apiUpload<T>(
   endpoint: string,
   form: FormData
 ): Promise<ApiResponse<T>> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-  const stored = localStorage.getItem('auth');
+  const stored = localStorage.getItem("auth");
   let token: string | null = null;
 
   if (stored) {
@@ -153,36 +335,69 @@ export async function apiUpload<T>(
     }
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`,
-        }
-      : undefined,
-    body: form,
-  });
-
-  let data: ApiResponse<T>;
-
-  try {
-    data = await res.json();
-  } catch {
-    throw new Error('Failed to parse response from file upload.');
+  // NOTE: Do not set Content-Type for FormData; browser sets boundaries.
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  // Also attach PIN if applicable
+  const ids = matchAssignmentIds(url);
+  if (ids) {
+    const pin = getAssignmentPin(ids.moduleId, ids.assignmentId);
+    if (pin) (headers as any)["x-assignment-pin"] = pin;
   }
 
+  // Log request with a readable FormData preview
+  const formPreview: Record<string, any> = {};
+  try {
+    form.forEach((v, k) => {
+      formPreview[k] = v instanceof Blob ? `[Blob ${v.type} ${v.size}B]` : v;
+    });
+  } catch { /* noop */ }
+
+  console.log("[apiUpload] → REQUEST", {
+    url,
+    method: "POST",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers as any),
+    form: formPreview,
+  });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: form,
+    credentials: "include",
+  });
+
+  await maybeClearPinOnForbidden(res, url);
+
+  const respHeadersObj = headersToObject(res.headers);
+
+  let data: ApiResponse<T>;
+  try {
+    const text = await res.clone().text();
+    let parsed: any = text;
+    try { parsed = JSON.parse(text); } catch { /* keep text */ }
+
+    console.log("[apiUpload] ← RESPONSE", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: parsed,
+    });
+
+    data = await res.json();
+  } catch {
+    console.error("[apiUpload] Failed to parse response from file upload.");
+    throw new Error("Failed to parse response from file upload.");
+  }
   return data;
 }
 
 /**
  * Download a file as a blob and prompt the user to save it.
- *
- * @param endpoint - Download URL (e.g. `/modules/:id/files/:fileId`).
  */
 export async function apiDownload(endpoint: string): Promise<void> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-  const stored = localStorage.getItem('auth');
+  const stored = localStorage.getItem("auth");
   let token: string | null = null;
 
   if (stored) {
@@ -195,24 +410,53 @@ export async function apiDownload(endpoint: string): Promise<void> {
   }
 
   const headers: HeadersInit = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(url, { method: 'GET', headers });
-
-  if (!res.ok) {
-    const fallback = await res.text();
-    console.error('[apiDownload] Error:', fallback);
-    throw new Error('Download failed');
+  // attach PIN if applicable
+  const ids = matchAssignmentIds(url);
+  if (ids) {
+    const pin = getAssignmentPin(ids.moduleId, ids.assignmentId);
+    if (pin) (headers as any)["x-assignment-pin"] = pin;
   }
 
-  const blob = await res.blob();
+  console.log("[apiDownload] → REQUEST", {
+    url,
+    method: "GET",
+    headers: shouldLogSensitive() ? headers : redactHeadersForLog(headers as any),
+  });
 
-  const disposition = res.headers.get('Content-Disposition') || '';
+  const res = await fetch(url, { method: "GET", headers, credentials: "include" });
+  await maybeClearPinOnForbidden(res, url);
+
+  const respHeadersObj = headersToObject(res.headers);
+
+  if (!res.ok) {
+    const fallback = await res.clone().text();
+    console.log("[apiDownload] ← RESPONSE (error)", {
+      status: res.status,
+      ok: res.ok,
+      headers: respHeadersObj,
+      body: fallback,
+    });
+    throw new Error("Download failed");
+  }
+
+  const blob = await res.clone().blob();
+
+  console.log("[apiDownload] ← RESPONSE (blob)", {
+    status: res.status,
+    ok: res.ok,
+    headers: respHeadersObj,
+    size: blob.size,
+    type: blob.type,
+  });
+
+  const disposition = res.headers.get("Content-Disposition") || "";
   const filenameMatch = disposition.match(/filename="(.+?)"/);
-  const rawFilename = filenameMatch?.[1] || 'downloaded_file';
+  const rawFilename = filenameMatch?.[1] || "downloaded_file";
   const decodedFilename = decodeURIComponent(rawFilename);
 
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = decodedFilename;
   document.body.appendChild(link);
@@ -220,7 +464,6 @@ export async function apiDownload(endpoint: string): Promise<void> {
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
-
 
 // ─────────────────────────────────────────────────────────────
 // Lightweight HTTP verb helpers
@@ -232,21 +475,18 @@ const withQuery = (endpoint: string, params?: QueryParams) => {
   if (!params || Object.keys(params).length === 0) return endpoint;
   const qs = buildQuery(params);
   if (!qs) return endpoint;
-  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${qs}`;
+  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${qs}`;
 };
 
 export const api = {
-  /** Escape hatch for any verb */
   request<T>(method: string, endpoint: string, opts: RequestOptions = {}) {
     const { params, data, ...init } = opts;
     const url = withQuery(endpoint, params);
     const options: RequestInit = { ...init, method };
 
-    // Only set a body if caller didn't provide one via init.body
     if (data !== undefined && options.body === undefined) {
-      // Allow passing raw bodies; otherwise JSON-stringify
       options.body =
-        typeof data === 'string' ||
+        typeof data === "string" ||
         data instanceof Blob ||
         data instanceof ArrayBuffer ||
         data instanceof FormData ||
@@ -259,34 +499,33 @@ export const api = {
   },
 
   get<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
-    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'GET' });
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: "GET" });
   },
 
   head<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
-    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'HEAD' });
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: "HEAD" });
   },
 
   options<T>(endpoint: string, params?: QueryParams, init: RequestInit = {}) {
-    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: 'OPTIONS' });
+    return apiFetch<T>(withQuery(endpoint, params), { ...init, method: "OPTIONS" });
   },
 
   post<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
-    return this.request<T>('POST', endpoint, { ...init, data });
+    return this.request<T>("POST", endpoint, { ...init, data });
   },
 
   put<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
-    return this.request<T>('PUT', endpoint, { ...init, data });
+    return this.request<T>("PUT", endpoint, { ...init, data });
   },
 
   patch<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
-    return this.request<T>('PATCH', endpoint, { ...init, data });
+    return this.request<T>("PATCH", endpoint, { ...init, data });
   },
 
   delete<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
-    return this.request<T>('DELETE', endpoint, { ...init, data });
+    return this.request<T>("DELETE", endpoint, { ...init, data });
   },
 
-  // optional alias
   del<T>(endpoint: string, data?: unknown, init: RequestInit = {}) {
     return this.delete<T>(endpoint, data, init);
   },

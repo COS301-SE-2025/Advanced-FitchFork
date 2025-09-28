@@ -3,19 +3,14 @@ use axum::{
     http::{Request, Response},
 };
 use std::convert::Infallible;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{client::IntoClientRequest},
-    MaybeTlsStream,
-    WebSocketStream
+    MaybeTlsStream, WebSocketStream, connect_async, tungstenite::client::IntoClientRequest,
 };
-use tower::util::BoxCloneService;
 use tower::make::Shared;
+use tower::util::BoxCloneService;
 use url::Url;
-use tokio::net::TcpStream;
 
-/// Spawns the Axum app on a random local port
 pub async fn spawn_server(
     app: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
 ) -> std::net::SocketAddr {
@@ -27,15 +22,17 @@ pub async fn spawn_server(
         axum::serve(listener, service).await.unwrap();
     });
 
+    // small settle delay
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     addr
 }
 
-/// Connects to a WebSocket route at `/{topic_path}?token=...`
+/// Connect to the multiplexed WS entrypoint at `/ws`
+/// Auth is via HTTP guard, so pass `Authorization: Bearer <token>` header.
+/// (No per-topic path; you subscribe after connecting.)
 pub async fn connect_ws(
     addr: &str,
-    topic: &str,
-    token: &str,
+    token: Option<&str>,
 ) -> Result<
     (
         WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -43,12 +40,16 @@ pub async fn connect_ws(
     ),
     tokio_tungstenite::tungstenite::Error,
 > {
-    let url = Url::parse(&format!(
-        "ws://{}/ws/{}?token={}",
-        addr, topic, token
-    ))
-    .unwrap();
+    let url = Url::parse(&format!("ws://{}/ws", addr)).unwrap();
 
-    let req = url.to_string().into_client_request().unwrap();
+    // Build the upgrade request and inject Authorization if provided
+    let mut req = url.to_string().into_client_request().unwrap();
+
+    if let Some(tok) = token {
+        use tokio_tungstenite::tungstenite::http::header::{AUTHORIZATION, HeaderValue};
+        let hv = HeaderValue::from_str(&format!("Bearer {}", tok)).unwrap();
+        req.headers_mut().insert(AUTHORIZATION, hv);
+    }
+
     connect_async(req).await
 }

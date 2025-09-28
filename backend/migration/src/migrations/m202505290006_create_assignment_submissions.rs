@@ -33,9 +33,39 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Alias::new("filename")).string().not_null())
                     .col(ColumnDef::new(Alias::new("file_hash")).string().not_null())
                     .col(ColumnDef::new(Alias::new("path")).string().not_null())
-                    .col(ColumnDef::new(Alias::new("is_practice")).boolean().not_null())
-                    .col(ColumnDef::new(Alias::new("earned")).integer().not_null())
-                    .col(ColumnDef::new(Alias::new("total")).integer().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("is_practice"))
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(Alias::new("earned")).float().not_null())
+                    .col(ColumnDef::new(Alias::new("total")).float().not_null())
+                    .col(
+                        ColumnDef::new(Alias::new("ignored"))
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("status"))
+                            .enumeration(
+                                Alias::new("submission_status_enum"),
+                                vec![
+                                    Alias::new("queued"),
+                                    Alias::new("running"),
+                                    Alias::new("grading"),
+                                    Alias::new("graded"),
+                                    Alias::new("failed_upload"),
+                                    Alias::new("failed_compile"),
+                                    Alias::new("failed_execution"),
+                                    Alias::new("failed_grading"),
+                                    Alias::new("failed_internal"),
+                                    Alias::new("failed_disallowed_code"),
+                                ],
+                            )
+                            .not_null()
+                            .default("queued"),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("created_at"))
                             .timestamp()

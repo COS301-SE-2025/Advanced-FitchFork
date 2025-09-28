@@ -1,38 +1,31 @@
+// util/src/ws/mod.rs
 pub mod manager;
-pub mod handler;
-pub mod runtime;
-pub mod handler_trait;
-pub mod serve;
-pub mod axum_adapter;
-pub mod default;
+pub use manager::WebSocketManager;
 
 use chrono::Utc;
 use serde::Serialize;
 
-pub use manager::WebSocketManager;
-pub use handler::default_websocket_handler;
-
 /// Standard event envelope sent over WebSocket topics.
 #[derive(Serialize)]
 pub struct EventEnvelope<'a, T> {
-    /// Semantic event name, e.g. "message_created"
+    #[serde(rename = "type")]
+    pub r#type: &'static str,
     pub event: &'a str,
-    /// The topic this envelope is published on (useful for muxing & client routing)
     pub topic: &'a str,
-    /// The domain payload (e.g., MessageResponse)
     pub payload: T,
-    /// ISO-8601 timestamp (UTC)
     pub ts: String,
 }
 
 /// Broadcast a JSON-serialized `EventEnvelope` on `topic`.
 pub async fn emit<T: Serialize>(ws: &WebSocketManager, topic: &str, event: &str, payload: &T) {
     let env = EventEnvelope {
+        r#type: "event",
         event,
         topic,
         payload,
         ts: Utc::now().to_rfc3339(),
     };
-    let json = serde_json::to_string(&env).expect("serialize event");
-    ws.broadcast(topic, json).await;
+    if let Ok(json) = serde_json::to_string(&env) {
+        ws.broadcast(topic, json).await;
+    }
 }

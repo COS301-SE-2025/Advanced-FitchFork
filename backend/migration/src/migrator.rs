@@ -19,11 +19,14 @@ impl MigratorTrait for Migrator {
             Box::new(migrations::m202505290009_create_memo_outputs::Migration),
             Box::new(migrations::m202505290010_create_submission_outputs::Migration),
             Box::new(migrations::m202505290011_create_overwrite_files::Migration),
-            Box::new(migrations::m202506080012_create_plagiarism_cases::Migration),
             Box::new(migrations::m202508020001_create_tickets::Migration),
             Box::new(migrations::m202508020002_create_ticket_messages::Migration),
             Box::new(migrations::m202508060001_create_announcements::Migration),
             Box::new(migrations::m202508020003_create_interpreter::Migration),
+            Box::new(migrations::m202509080001_create_attendance::Migration),
+            Box::new(migrations::m202509120001_create_moss_reports::Migration),
+            Box::new(migrations::m202509120002_create_plagiarism_cases::Migration),
+            Box::new(migrations::m202509150003_create_system_metrics::Migration),
         ]
     }
 }

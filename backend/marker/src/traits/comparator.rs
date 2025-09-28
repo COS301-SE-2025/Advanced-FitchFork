@@ -1,4 +1,5 @@
-use crate::types::{TaskResult, Subsection};
+use crate::types::TaskResult;
+use util::mark_allocator;
 
 /// OutputComparator is a strategy trait for comparing outputs.
 /// Each implementation provides a specific logic for comparing a single subsection
@@ -6,15 +7,13 @@ use crate::types::{TaskResult, Subsection};
 pub trait OutputComparator: Send + Sync {
     /// Compare one subsection (pattern) of a task, producing a full TaskResult.
     ///
-    /// - `section`: contains `name`, `value`.
+    /// - `section`: util allocator subsection (name, value, regex?).
     /// - `memo_lines`: the string/regex for this subsection.
-    /// - `student_lines`: text to search.
-    ///
-    /// Returns the result as a `TaskResult`
+    /// - `student_lines`: text to compare.
     fn compare(
         &self,
-        section: &Subsection,
+        section: &mark_allocator::Subsection,
         memo_lines: &[String],
-        student_lines: &[String]
+        student_lines: &[String],
     ) -> TaskResult;
-} 
+}

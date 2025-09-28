@@ -1,3 +1,4 @@
+use crate::auth::claims::AuthUser;
 use axum::{
     body::Body,
     extract::{ConnectInfo, FromRequestParts},
@@ -9,7 +10,6 @@ use axum_extra::extract::TypedHeader;
 use headers::{Origin, UserAgent};
 use std::net::SocketAddr;
 use tracing::info;
-use crate::auth::claims::AuthUser;
 
 /// Logs method, path, IP address, user ID (if authenticated), origin, and user-agent
 /// for each incoming HTTP request. Automatically skips CORS preflight `OPTIONS` requests.
