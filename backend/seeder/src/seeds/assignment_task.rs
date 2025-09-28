@@ -148,26 +148,26 @@ impl Seeder for AssignmentTaskSeeder {
                 ),
             }
 
-            let special_tasks3 = vec![(1, "make task1")];
+            // let special_tasks3 = vec![(1, "make task1")];
 
-            for (task_number, command) in special_tasks3 {
-                match db::models::assignment_task::Model::create(
-                    db,
-                    10004,
-                    task_number,
-                    "Task to run code",
-                    command,
-                    TaskType::Normal,
-                )
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => eprintln!(
-                        "Failed to create special assignment task {}: {}",
-                        task_number, e
-                    ),
-                }
-            }
+            // for (task_number, command) in special_tasks3 {
+            //     match db::models::assignment_task::Model::create(
+            //         db,
+            //         10004,
+            //         task_number,
+            //         "Task to run code",
+            //         command,
+            //         TaskType::Normal,
+            //     )
+            //     .await
+            //     {
+            //         Ok(_) => {}
+            //         Err(e) => eprintln!(
+            //             "Failed to create special assignment task {}: {}",
+            //             task_number, e
+            //         ),
+            //     }
+            // }
         }
     }
 }

@@ -73,11 +73,11 @@ impl Seeder for ModuleSeeder {
 
         let special_module2 = module::ActiveModel {
             id: Set(9998),
-            code: Set("CPP9998".to_string()),
+            code: Set("EMT001".to_string()),
             year: Set(2025),
             credits: Set(16),
             description: Set(Some(
-                "Special test module for integration testing".to_string(),
+                "This module is for people to mess around with. Have fun :)".to_string(),
             )),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
@@ -88,10 +88,10 @@ impl Seeder for ModuleSeeder {
 
         let dem_003 = module::ActiveModel {
             id: Set(10003),
-            code: Set("DEM003".to_string()),
+            code: Set("DEM004".to_string()),
             year: Set(2025),
             credits: Set(16),
-            description: Set(Some("Module for Demo 3".to_string())),
+            description: Set(Some("Module for Demo 4".to_string())),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()

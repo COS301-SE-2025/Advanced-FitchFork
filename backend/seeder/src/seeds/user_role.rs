@@ -60,6 +60,15 @@ impl Seeder for UserRoleSeeder {
                 "student" => {
                     assign_all_as(db, &modules, u.id, Role::Student).await;
                 }
+                "demo" => {
+                    let _ = user_module_role::ActiveModel {
+                        user_id: Set(u.id),
+                        module_id: Set(9998),
+                        role: Set(Role::Lecturer),
+                    }
+                    .insert(db)
+                    .await;
+                }
 
                 // student_tutor => split half Student, half Tutor
                 "student_tutor" => {

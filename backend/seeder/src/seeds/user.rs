@@ -9,10 +9,10 @@ pub struct UserSeeder;
 impl Seeder for UserSeeder {
     async fn seed(&self, db: &DatabaseConnection) {
         // Fixed Admin User
-        let _ = Model::create(db, "admin", "admin@example.com", "1", true).await;
+        let _ = Model::create(db, "admin", "admin@example.com", "owca", true).await;
 
         // Fixed Lecturer User
-        let _ = Model::create(db, "lecturer", "lecturer@example.com", "1", false).await;
+        let _ = Model::create(db, "lecturer", "lecturer@example.com", "owca", false).await;
 
         // Fixed Assistant Lecturer User
         let _ = Model::create(
@@ -25,25 +25,35 @@ impl Seeder for UserSeeder {
         .await;
 
         // Fixed Tutor User
-        let _ = Model::create(db, "tutor", "tutor@example.com", "1", false).await;
+        let _ = Model::create(db, "tutor", "tutor@example.com", "owca", false).await;
 
         // Fixed Student User
-        let _ = Model::create(db, "student", "student@example.com", "1", false).await;
+        let _ = Model::create(db, "student", "student@example.com", "owca", false).await;
 
         // Composite-role users
-        let _ = Model::create(db, "student_tutor", "student_tutor@example.com", "1", false).await;
-        let _ = Model::create(db, "all_staff", "all_staff@example.com", "1", false).await;
+        let _ = Model::create(
+            db,
+            "student_tutor",
+            "student_tutor@example.com",
+            "owca",
+            false,
+        )
+        .await;
+        let _ = Model::create(db, "all_staff", "all_staff@example.com", "owca", false).await;
         let _ = Model::create(
             db,
             "lecturer_assistant",
             "lecturer_assistant@example.com",
-            "1",
+            "owca",
             false,
         )
         .await;
 
         // User with every role (distributed across modules)
-        let _ = Model::create(db, "all", "all@example.com", "1", false).await;
+        let _ = Model::create(db, "all", "all@example.com", "owca", false).await;
+
+        // Fixed Demo User
+        let _ = Model::create(db, "demo", "demo@example.com", "demo123", false).await;
 
         // Random Users
         for _ in 0..100 {
