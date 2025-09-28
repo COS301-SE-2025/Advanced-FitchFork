@@ -17,9 +17,14 @@
 //!
 //! - Includes a test that mocks two tasks: one with missed patterns and one with all patterns matched, verifying the feedback generation logic.
 //!
+//! ## Error Handling
+//!
+//! - API failures are gracefully handled by logging errors to stderr and returning "AI feedback unavailable, please try again later." messages
+//! - Feedback failures will not cause the marking process to fail
+//!
 //! ## Note
 //!
-//! This is a stub implementation. In a production system, error handling, rate limiting, and prompt engineering should be more robust.
+//! This is a stub implementation. In a production system, rate limiting and prompt engineering should be more robust.
 
 use crate::error::MarkerError;
 use crate::traits::feedback::{Feedback, FeedbackEntry};
@@ -107,6 +112,7 @@ impl Feedback for AiFeedback {
     /// For each task:
     /// - If all patterns are matched, returns a congratulatory message.
     /// - If there are missed patterns, sends a prompt to the Gemini API to generate a hint.
+    /// - If API calls fail, logs the error and returns "AI feedback unavailable, please try again later." instead of failing.
     ///
     /// # Arguments
     ///
@@ -114,7 +120,8 @@ impl Feedback for AiFeedback {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a vector of [`FeedbackEntry`]s or a [`MarkerError`].
+    /// A `Result` containing a vector of [`FeedbackEntry`]s. This method should not fail
+    /// due to API errors - it will return fallback messages instead.
     async fn assemble_feedback(
         &self,
         results: &[TaskResult],
@@ -170,7 +177,7 @@ impl Feedback for AiFeedback {
                         }),
                     };
 
-                    let response = client
+                    match client
                         .post(format!(
                             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
                             api_key
@@ -178,28 +185,38 @@ impl Feedback for AiFeedback {
                         .json(&request_body)
                         .send()
                         .await
-                        .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-
-                    let response_text = response
-                        .text()
-                        .await
-                        .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                    let response =
-                        serde_json::from_str::<GeminiResponse>(&response_text).map_err(|e| {
-                            MarkerError::InputMismatch(format!(
-                                "error decoding response body: {}. Full response: {}",
-                                e, response_text
-                            ))
-                        })?;
-
-                    if let Some(candidate) = response.candidates.get(0) {
-                        if let Some(part) = candidate.content.parts.get(0) {
-                            part.text.clone()
-                        } else {
-                            "Your output contains extra unwanted lines.".to_string()
+                    {
+                        Ok(response) => {
+                            match response.text().await {
+                                Ok(response_text) => {
+                                    match serde_json::from_str::<GeminiResponse>(&response_text) {
+                                        Ok(response) => {
+                                            if let Some(candidate) = response.candidates.get(0) {
+                                                if let Some(part) = candidate.content.parts.get(0) {
+                                                    part.text.clone()
+                                                } else {
+                                                    "AI feedback unavailable, please try again later.".to_string()
+                                                }
+                                            } else {
+                                                "AI feedback unavailable, please try again later.".to_string()
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Error parsing AI response: {}. Full response: {}", e, response_text);
+                                            "AI feedback unavailable, please try again later.".to_string()
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Error reading AI response: {}", e);
+                                    "AI feedback unavailable, please try again later.".to_string()
+                                }
+                            }
                         }
-                    } else {
-                        "Your output contains extra unwanted lines.".to_string()
+                        Err(e) => {
+                            eprintln!("Error calling AI API: {}", e);
+                            "AI feedback unavailable, please try again later.".to_string()
+                        }
                     }
                 } else {
                     "All patterns matched".to_string()
@@ -214,7 +231,7 @@ impl Feedback for AiFeedback {
                     }),
                 };
 
-                let response = client
+                match client
                     .post(format!(
                         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
                         api_key
@@ -222,28 +239,38 @@ impl Feedback for AiFeedback {
                     .json(&request_body)
                     .send()
                     .await
-                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-
-                let response_text = response
-                    .text()
-                    .await
-                    .map_err(|e| MarkerError::InputMismatch(e.to_string()))?;
-                let response =
-                    serde_json::from_str::<GeminiResponse>(&response_text).map_err(|e| {
-                        MarkerError::InputMismatch(format!(
-                            "error decoding response body: {}. Full response: {}",
-                            e, response_text
-                        ))
-                    })?;
-
-                if let Some(candidate) = response.candidates.get(0) {
-                    if let Some(part) = candidate.content.parts.get(0) {
-                        part.text.clone()
-                    } else {
-                        "Could not generate AI feedback.".to_string()
+                {
+                    Ok(response) => {
+                        match response.text().await {
+                            Ok(response_text) => {
+                                match serde_json::from_str::<GeminiResponse>(&response_text) {
+                                    Ok(response) => {
+                                        if let Some(candidate) = response.candidates.get(0) {
+                                            if let Some(part) = candidate.content.parts.get(0) {
+                                                part.text.clone()
+                                            } else {
+                                                "AI feedback unavailable, please try again later.".to_string()
+                                            }
+                                        } else {
+                                            "AI feedback unavailable, please try again later.".to_string()
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Error parsing AI response: {}. Full response: {}", e, response_text);
+                                        "AI feedback unavailable, please try again later.".to_string()
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error reading AI response: {}", e);
+                                "AI feedback unavailable, please try again later.".to_string()
+                            }
+                        }
                     }
-                } else {
-                    "Could not generate AI feedback.".to_string()
+                    Err(e) => {
+                        eprintln!("Error calling AI API: {}", e);
+                        "AI feedback unavailable, please try again later.".to_string()
+                    }
                 }
             };
 
@@ -313,7 +340,7 @@ mod tests {
         assert!(
             !factorial_feedback
                 .message
-                .contains("Could not generate AI feedback.")
+                .contains("AI feedback unavailable, please try again later.")
         );
         println!("Factorial AI Feedback: {}", factorial_feedback.message);
 
