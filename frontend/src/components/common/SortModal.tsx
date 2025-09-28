@@ -111,11 +111,20 @@ const SortModal: React.FC<SortModalProps> = ({
   const maxReached = draft.length >= fieldOptions.length;
 
   return (
-    <Modal open={open} title="Sort" onCancel={onClose} footer={null} centered destroyOnClose>
+    <Modal
+      open={open}
+      title="Sort"
+      onCancel={onClose}
+      footer={null}
+      centered
+      destroyOnHidden
+      data-testid="sort-modal"
+    >
       <div className="space-y-3">
-        {/* Empty state */}
         {draft.length === 0 && (
-          <div className="text-gray-500 text-center py-4">No sort levels added yet.</div>
+          <div className="text-gray-500 text-center py-4" data-testid="sort-empty">
+            No sort levels added yet.
+          </div>
         )}
 
         {draft.map((row, idx) => {
@@ -129,8 +138,7 @@ const SortModal: React.FC<SortModalProps> = ({
           }));
 
           return (
-            <div key={idx} className="flex items-stretch gap-3">
-              {/* Inline controls like desktop */}
+            <div key={idx} className="flex items-stretch gap-3" data-testid={`sort-row-${idx}`}>
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <Select
                   size={controlSize}
@@ -140,16 +148,18 @@ const SortModal: React.FC<SortModalProps> = ({
                   className="min-w-0 flex-1"
                   optionLabelProp="label"
                   popupMatchSelectWidth={false}
+                  getPopupContainer={(trigger) => trigger.parentElement as HTMLElement}
+                  data-testid={`sort-field-${idx}`}
                 />
                 <Segmented
                   size={controlSize as any}
                   value={row.order}
                   onChange={(v) => updateItem(idx, { order: v as Order })}
                   options={orderOptions}
+                  data-testid={`sort-order-${idx}`}
                 />
               </div>
 
-              {/* Actions */}
               <Space.Compact>
                 <Tooltip title="Move up">
                   <Button
@@ -157,6 +167,7 @@ const SortModal: React.FC<SortModalProps> = ({
                     icon={<ArrowUpOutlined />}
                     onClick={() => move(idx, -1)}
                     disabled={isFirst}
+                    data-testid={`sort-move-up-${idx}`}
                   />
                 </Tooltip>
                 <Tooltip title="Move down">
@@ -165,6 +176,7 @@ const SortModal: React.FC<SortModalProps> = ({
                     icon={<ArrowDownOutlined />}
                     onClick={() => move(idx, +1)}
                     disabled={isLast}
+                    data-testid={`sort-move-down-${idx}`}
                   />
                 </Tooltip>
                 <Tooltip title="Remove">
@@ -173,6 +185,7 @@ const SortModal: React.FC<SortModalProps> = ({
                     icon={<DeleteOutlined />}
                     danger
                     onClick={() => removeLevel(idx)}
+                    data-testid={`sort-remove-${idx}`}
                   />
                 </Tooltip>
               </Space.Compact>
@@ -181,7 +194,6 @@ const SortModal: React.FC<SortModalProps> = ({
         })}
       </div>
 
-      {/* Add level below the list with helpful tooltip when disabled */}
       <div className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
         <Tooltip
           title={
@@ -198,16 +210,28 @@ const SortModal: React.FC<SortModalProps> = ({
             onClick={addLevel}
             className="w-full sm:w-auto"
             disabled={fieldOptions.length === 0 || maxReached}
+            data-testid="sort-add-level"
           >
             Add level
           </Button>
         </Tooltip>
 
         <div className="flex gap-2">
-          <Button size={controlSize} onClick={onClose} className="w-full sm:w-auto">
+          <Button
+            size={controlSize}
+            onClick={onClose}
+            className="w-full sm:w-auto"
+            data-testid="sort-close"
+          >
             Close
           </Button>
-          <Button size={controlSize} type="primary" onClick={apply} className="w-full sm:w-auto">
+          <Button
+            size={controlSize}
+            type="primary"
+            onClick={apply}
+            className="w-full sm:w-auto"
+            data-testid="sort-apply"
+          >
             Apply
           </Button>
         </div>

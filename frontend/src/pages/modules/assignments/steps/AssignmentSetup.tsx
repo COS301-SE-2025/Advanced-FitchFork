@@ -38,6 +38,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
   const [assignment, setAssignment] = useState<AssignmentDetails | null>(null);
   const [readiness, setReadiness] = useState<AssignmentReadiness | null>(null);
   const [config, setConfig] = useState<AssignmentConfig | null>(null);
+  const [atFinal, setAtFinal] = useState(false);
 
   const [stepSaveHandlers, setStepSaveHandlers] = useState<Record<number, () => Promise<boolean>>>(
     {},
@@ -140,6 +141,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
         // - 4 if outputs exist
         // - NEVER 1 (Config) by default
         setCurrent(decideStartStep(r));
+        setAtFinal(false); // ensure we start in non-final view each open
       })();
     } else if (!open) {
       setCurrent(0);
@@ -147,6 +149,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
       setReadiness(null);
       setConfig(null);
       setStepSaveHandlers({});
+      setAtFinal(false);
     }
   }, [open, assignmentId, module.id]);
 
@@ -165,7 +168,8 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
 
   /** gating (only when not final) */
   const isCurrentStepComplete = (): boolean => {
-    if (showFinal) return true;
+    // Do not force-complete the current step just because the backend is "ready".
+    // Completion gating remains per-step; entering the final screen is explicit.
     if (current === 0) return true; // Welcome
     if (current === 1) return true; // Config never blocks
 
@@ -246,8 +250,8 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
     >
       <AssignmentSetupProvider value={providerValue}>
         <div className="!space-y-10 p-8">
-          {/* Hide the stepper on the final screen */}
-          {!showFinal && (
+          {/* Hide the stepper only when explicitly on the final screen */}
+          {!atFinal && (
             <Steps current={current}>
               {STEPS_DYNAMIC.map((s) => (
                 <Step key={s.title} title={s.title} />
@@ -256,7 +260,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
           )}
 
           <div className="min-h-[250px] bg-transparent border-gray-300 dark:border-gray-700 rounded-lg mb-6">
-            {showFinal ? (
+            {atFinal ? (
               <StepFinal />
             ) : current === 0 ? (
               <StepWelcome onManual={() => setCurrent(1)} />
@@ -266,7 +270,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
           </div>
 
           <div className="flex justify-center gap-x-4 pt-4">
-            {showFinal ? (
+            {atFinal ? (
               <Button
                 size="large"
                 type="primary"
@@ -297,14 +301,33 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
                 <Button
                   size="large"
                   htmlType="button"
-                  type={current === STEPS_DYNAMIC.length - 1 ? 'default' : 'primary'}
-                  onClick={current === STEPS_DYNAMIC.length - 1 ? fireDoneThenClose : next}
-                  disabled={current !== STEPS_DYNAMIC.length - 1 && !isCurrentStepComplete()}
-                  icon={
-                    current === STEPS_DYNAMIC.length - 1 ? <CheckOutlined /> : <RightOutlined />
-                  }
+                  type="primary"
+                  onClick={async () => {
+                    // run step save, refresh, and navigate
+                    const save = stepSaveHandlers[current];
+                    if (save) {
+                      const ok = await save();
+                      if (!ok) return;
+                    }
+                    await refreshLocal(assignment?.assignment.id ?? assignmentId);
+                    // If we're on the last setup step and the assignment is "ready",
+                    // go to the explicit final screen instead of closing.
+                    if (current === STEPS_DYNAMIC.length - 1) {
+                      if (showFinal) {
+                        setAtFinal(true);
+                      } else {
+                        // stay on last step if not ready yet (rare), or allow user to proceed anyway
+                        // you could also disable this via isCurrentStepComplete if desired
+                        setAtFinal(true);
+                      }
+                    } else {
+                      setCurrent((p) => Math.min(p + 1, STEPS_DYNAMIC.length - 1));
+                    }
+                  }}
+                  disabled={!isCurrentStepComplete()}
+                  icon={<RightOutlined />}
                 >
-                  {current === STEPS_DYNAMIC.length - 1 ? 'Finish & Close' : 'Next'}
+                  {current === STEPS_DYNAMIC.length - 1 ? 'Review' : 'Next'}
                 </Button>
               </>
             )}

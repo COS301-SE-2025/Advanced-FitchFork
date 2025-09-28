@@ -222,7 +222,7 @@ export default function HashScanModal({ open, onClose, moduleId, assignmentId, o
       okText={result ? 'Run Again' : 'Run Scan'}
       onOk={onSubmit}
       okButtonProps={{ loading }}
-      destroyOnClose
+      destroyOnHidden
       width={900}
     >
       {/* Scoped scrollbar CSS (no external deps) */}

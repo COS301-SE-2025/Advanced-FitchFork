@@ -7,8 +7,10 @@ import { message } from '@/utils/message';
 import type { AssignmentOutputConfig } from '@/types/modules/assignments/config';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 export default function OutputPage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
   const [form] = Form.useForm<AssignmentOutputConfig>();
@@ -19,12 +21,7 @@ export default function OutputPage() {
         <Typography.Text className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">
           Output Settings
         </Typography.Text>
-        <Tip
-          iconOnly
-          newTab
-          to="/help/assignments/config/output#what"
-          text="Output help"
-        />
+        <Tip iconOnly newTab to="/help/assignments/config/output#what" text="Output help" />
       </Space>,
     );
   }, [setValue]);

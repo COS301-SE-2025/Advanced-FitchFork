@@ -11,6 +11,7 @@ import Tip from '@/components/common/Tip';
 
 // 🆕 network helpers (you said you added these)
 import { getCurrentIpAsCidr, asSingleHostCIDR, isIPv4, isIPv6 } from '@/utils/network';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 type FormShape = {
   password_enabled: boolean;
@@ -40,6 +41,7 @@ const generatePin = (len = PIN_LENGTH) =>
   ).join('');
 
 export default function SecurityPage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
   const [form] = Form.useForm<FormShape>();

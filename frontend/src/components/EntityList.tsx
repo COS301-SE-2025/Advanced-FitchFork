@@ -794,7 +794,12 @@ const EntityList = forwardRef(function <T>(
 
                         const actionButtons = [InlineButton, DropdownButton].filter(Boolean);
                         return (
-                          <div key={getRowKey(item)}>{renderGridItem(item, actionButtons)}</div>
+                          <div
+                            key={getRowKey(item)}
+                            data-testid="entity-card"
+                          >
+                            {renderGridItem(item, actionButtons)}
+                          </div>
                         );
                       })}
                     </div>
@@ -836,6 +841,7 @@ const EntityList = forwardRef(function <T>(
                           ? 'bg-green-50 transition-colors duration-700 rounded-xl'
                           : ''
                       }
+                      data-testid="entity-list-item"
                     >
                       {renderListItem!(item)}
                     </div>

@@ -1,3 +1,4 @@
+// ModuleModals.ts
 import { BaseModal } from '@po/common/BaseModal';
 
 export class CreateModuleModal extends BaseModal {
@@ -7,13 +8,23 @@ export class CreateModuleModal extends BaseModal {
     if (data.description !== undefined) await this.fillByLabel(/description/i, data.description);
     if (data.credits !== undefined)     await this.fillByLabel(/credits/i, String(data.credits));
   }
-  async submit() { await super.submit('create-modal-submit', /^create$/i); }
+
+  // 🔧 Validation path: resolve when modal closes OR any inline error appears
+  async submit() {
+    await this.waitReady();
+    const btn = this.root.getByTestId('create-modal-submit').first()
+      .or(this.root.getByRole('button', { name: /^create$/i }).first());
+    await btn.click();
+    await Promise.race([
+      this.waitClosed(),
+      this.waitAnyErrorVisible(4_000),
+    ]);
+  }
+
   async cancel() { await super.cancel('create-modal-cancel'); }
 
   codeError() { return this.errorUnder(/module code/i); }
   yearError() { return this.errorUnder(/year/i); }
-
-  // Convenience if you want it in tests:
   async waitForCodeError() { await this.waitForFieldError(/module code/i); }
 }
 
@@ -24,6 +35,17 @@ export class EditModuleModal extends BaseModal {
     if (update.description !== undefined) await this.fillByLabel(/description/i, update.description);
     if (update.credits !== undefined)     await this.fillByLabel(/credits/i, String(update.credits));
   }
-  async save()   { await super.submit('edit-modal-submit',  /^save$/i); }
+
+  async save() {
+    await this.waitReady();
+    const btn = this.root.getByTestId('edit-modal-submit').first()
+      .or(this.root.getByRole('button', { name: /^save$/i }).first());
+    await btn.click();
+    await Promise.race([
+      this.waitClosed(),
+      this.waitAnyErrorVisible(4_000),
+    ]);
+  }
+
   async cancel() { await super.cancel('edit-modal-cancel'); }
 }

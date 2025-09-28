@@ -13,8 +13,10 @@ import {
 
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 export default function AssignmentPage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();
   const [form] = Form.useForm<AssignmentProjectConfig>(); // ← use existing type

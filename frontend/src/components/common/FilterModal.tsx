@@ -102,7 +102,15 @@ const FilterModal: React.FC<FilterModalProps> = ({
   }
 
   return (
-    <Modal open={open} title="Filters" onCancel={onClose} footer={null} centered destroyOnClose>
+    <Modal
+      open={open}
+      title="Filters"
+      onCancel={onClose}
+      footer={null}
+      centered
+      destroyOnHidden
+      data-testid="filters-modal"
+    >
       <Collapse
         bordered={false}
         items={filterGroups.map((g) => {
@@ -112,7 +120,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
           return {
             key: g.key,
             label: (
-              <div className="flex items-center justify-between w-full">
+              <div
+                className="flex items-center justify-between w-full"
+                data-testid={`filter-group-${g.key}-label`}
+              >
                 <span>{g.label}</span>
                 {showClear && (
                   <Space.Compact>
@@ -120,6 +131,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
                       <Button
                         size="small"
                         icon={<ClearOutlined />}
+                        data-testid={`filter-${g.key}-clear`}
                         onClick={(e) => {
                           e.stopPropagation();
                           clearGroup(g.key);
@@ -131,7 +143,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
               </div>
             ),
             children: (
-              <div className={isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}>
+              <div
+                className={isMobile ? 'flex flex-col gap-2' : 'flex items-center gap-2'}
+                data-testid={`filter-group-${g.key}-content`}
+              >
                 {g.type === 'select' && g.options && (
                   <Select
                     size={controlSize}
@@ -141,6 +156,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
                     options={g.options}
                     allowClear
                     onChange={(v) => setGroupValues(g.key, v ?? '')}
+                    // testability + popup stability
+                    data-testid={`filter-${g.key}-select`}
+                    popupMatchSelectWidth={false}
+                    getPopupContainer={(trigger) => trigger.parentElement as HTMLElement}
                   />
                 )}
 
@@ -155,6 +174,9 @@ const FilterModal: React.FC<FilterModalProps> = ({
                     onChange={(vals) => setGroupValues(g.key, vals)}
                     allowClear
                     maxTagCount={isMobile ? 'responsive' : undefined}
+                    data-testid={`filter-${g.key}-multi-select`}
+                    popupMatchSelectWidth={false}
+                    getPopupContainer={(trigger) => trigger.parentElement as HTMLElement}
                   />
                 )}
 
@@ -166,6 +188,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
                     onChange={(e) => setGroupValues(g.key, e.target.value)}
                     allowClear
                     className={isMobile ? 'w-full' : 'min-w-0 flex-1'}
+                    data-testid={`filter-${g.key}-text`}
                   />
                 )}
 
@@ -178,6 +201,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
                     onChange={(e) => setGroupValues(g.key, e.target.value)}
                     allowClear
                     className={isMobile ? 'w-full' : 'min-w-0 flex-1'}
+                    data-testid={`filter-${g.key}-number`}
                   />
                 )}
               </div>
@@ -188,10 +212,21 @@ const FilterModal: React.FC<FilterModalProps> = ({
 
       <div className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
         <div className="flex gap-2">
-          <Button size={controlSize} onClick={onClose} className="w-full sm:w-auto">
+          <Button
+            size={controlSize}
+            onClick={onClose}
+            className="w-full sm:w-auto"
+            data-testid="filter-close"
+          >
             Close
           </Button>
-          <Button size={controlSize} type="primary" onClick={apply} className="w-full sm:w-auto">
+          <Button
+            size={controlSize}
+            type="primary"
+            onClick={apply}
+            className="w-full sm:w-auto"
+            data-testid="filter-apply"
+          >
             Apply
           </Button>
         </div>

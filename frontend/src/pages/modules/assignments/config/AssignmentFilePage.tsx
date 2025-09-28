@@ -28,6 +28,7 @@ import {
   createTasksFromMakefileTargets,
 } from '@/utils/makefile_tasks';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 const { Text, Paragraph, Title } = Typography;
 
@@ -132,6 +133,7 @@ function hasAllowedExtension(filename: string, acceptList: string) {
 }
 
 export default function AssignmentFilePage() {
+  useConfigBackTo();
   const { fileType } = useParams<{ fileType: string }>();
   const type = (fileType ?? '').toLowerCase() as AssignmentFileType;
 

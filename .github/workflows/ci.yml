@@ -11,108 +11,112 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # e2e:
-  #   name: E2E (Playwright)
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 45
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-  #     # --- Toolchains ---
-  #     - name: Set up Rust
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         override: true
+      - name: Free disk space
+        run: |
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet || true
+          df -h
 
-  #     - name: Set up Node 20
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #         cache: "npm"
-  #         cache-dependency-path: |
-  #           frontend/package-lock.json
-  #           tests/package-lock.json
+      # --- Toolchains ---
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-  #     # --- Cache Rust build ---
-  #     - name: Cache Cargo registry + git + target
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: |
-  #           ~/.cargo/registry
-  #           ~/.cargo/git
-  #           backend/target
-  #         key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-cargo-
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            frontend/package-lock.json
+            tests/e2e/package-lock.json
 
-  #     # --- Copy envs ---
-  #     - name: Copy backend .env
-  #       run: cp .env.example .env
-  #       working-directory: backend
-  #     - name: Copy frontend .env
-  #       run: cp .env.example .env
-  #       working-directory: frontend
+      # --- Cache Rust build ---
+      - name: Cache Cargo registry + git + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-  #     - name: Install frontend deps
-  #       run: npm ci
-  #       working-directory: frontend
+      # --- Copy envs ---
+      - name: Copy backend .env
+        run: cp .env.example .env
+        working-directory: backend
+      - name: Copy frontend .env
+        run: cp .env.example .env
+        working-directory: frontend
 
-  #     - name: Install test deps
-  #       run: npm ci
-  #       working-directory: tests
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
 
-  #     # cache Playwright browsers
-  #     - name: Cache Playwright browsers
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: ~/.cache/ms-playwright
-  #         key: ${{ runner.os }}-ms-playwright-${{ hashFiles('tests/package-lock.json') }}
+      - name: Install e2e deps
+        run: npm ci
+        working-directory: tests/e2e
 
-  #     - name: Install Playwright browsers & deps
-  #       run: npx playwright install --with-deps
-  #       working-directory: tests
+      # cache Playwright browsers
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-ms-playwright-${{ hashFiles('tests/e2e/package-lock.json') }}
 
-  #     # --- Build, migrate, seed & start servers ---
-  #     - name: Build, migrate, seed & start servers
-  #       uses: ./.github/actions/start-servers
-  #       with:
-  #         start-api: "true"
-  #         start-code: "true"
-  #         start-frontend: "true"
-  #         build-api: "true"
-  #         build-code: "true"
-  #         build-migration: "true"
-  #         build-seeder: "true"
-  #         run-migration: "true"
-  #         run-seeder: "true"
-  #         api-url: "http://localhost:3000/api/health"
-  #         code-url: "http://localhost:5000/health"
-  #         frontend-url: "http://localhost:5173"
+      - name: Install Playwright browsers & deps
+        run: npx playwright install --with-deps
+        working-directory: tests/e2e
 
-  #     - name: Run Playwright
-  #       env:
-  #         CI: "1"
-  #       # If your config lives at tests/e2e/playwright.config.ts, add:  -c e2e/playwright.config.ts
-  #       run: npx playwright test
-  #       working-directory: tests
+      # --- Build, migrate, seed & start servers ---
+      - name: Build, migrate, seed & start servers
+        uses: ./.github/actions/start-servers
+        with:
+          start-api: "true"
+          start-code: "true"
+          start-frontend: "true"
+          build-api: "true"
+          build-code: "true"
+          build-migration: "true"
+          build-seeder: "true"
+          run-migration: "true"
+          run-seeder: "true"
+          api-url: "http://localhost:3000/api/health"
+          code-url: "http://localhost:5000/health"
+          frontend-url: "http://localhost:5173"
 
-  #     - name: Upload Playwright artifacts on failure
-  #       if: failure()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: playwright-artifacts
-  #         path: |
-  #           tests/playwright-report
-  #           tests/.playwright
-  #           tests/test-results
-  #           tests/blob-report
-  #         if-no-files-found: ignore
+      - name: Run Playwright
+        env:
+          CI: "1"
+        run: npx playwright test
+        working-directory: tests/e2e
 
-  #     - name: Stop servers
-  #       if: always()
-  #       run: bash /tmp/stop_servers.sh
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/.playwright
+            tests/e2e/test-results
+            tests/e2e/blob-report
+          if-no-files-found: ignore
+
+      - name: Stop servers
+        if: always()
+        run: bash /tmp/stop_servers.sh
   lint:
     name: Lint (rustfmt only)
     runs-on: ubuntu-latest
@@ -152,7 +156,7 @@ jobs:
       #   run: cargo clippy --all-targets --all-features -- -D warnings
 
   integration:
-    name: Integration Tests (Rust)
+    name: Integration and Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
