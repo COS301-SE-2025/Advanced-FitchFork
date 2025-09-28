@@ -175,6 +175,25 @@ export class EntityList {
     await item.click();
   }
 
+  // ---------------- bulk actions ----------------
+  async clickBulkPrimary(key: string) {
+    const btn = this.page.getByTestId(`bulk-action-${key}`).first();
+    await expect(btn, `Bulk action [bulk-action-${key}] should be visible`).toBeVisible();
+    await btn.click();
+  }
+  async openBulkActionsDropdown() {
+    const trigger = this.page.getByTestId('bulk-action-dropdown').first();
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(this.page.locator('.ant-dropdown:visible').first()).toBeVisible();
+  }
+  async clickBulkDropdownAction(key: string) {
+    const scope = this.page.locator('.ant-dropdown:visible').first();
+    const item = scope.getByTestId(`bulk-action-${key}`).first();
+    await expect(item).toBeVisible();
+    await item.click();
+  }
+
   // ---------------- per-entity actions (text-scoped) ----------------
   async clickRowPrimaryAction(rowText: string | RegExp, actionKey: string) {
     const scope = this.entityByText(rowText);
@@ -205,6 +224,31 @@ export class EntityList {
     const item = scope.getByTestId(`entity-action-${actionKey}`).first();
     await expect(item).toBeVisible();
     await item.click();
+  }
+
+  // ---------------- row selection ----------------
+  async setRowSelection(rowText: string | RegExp, selected = true) {
+    const scope = this.entityByText(rowText);
+    const checkbox = scope.getByRole('checkbox').first();
+    await expect(checkbox, 'Row selection checkbox should exist').toBeAttached();
+
+    const isChecked = await checkbox.isChecked().catch(() => false);
+    if (isChecked === selected) return;
+
+    if (selected) {
+      await checkbox.check({ force: true });
+    } else {
+      await checkbox.uncheck({ force: true });
+    }
+  }
+
+  async clearAllSelection() {
+    const checkedBoxes = this.page.getByRole('checkbox', { checked: true });
+    const total = await checkedBoxes.count();
+    for (let i = 0; i < total; i++) {
+      const box = checkedBoxes.nth(i);
+      await box.uncheck({ force: true }).catch(() => {});
+    }
   }
 
   // ---------------- modal helpers ----------------

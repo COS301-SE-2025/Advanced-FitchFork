@@ -39,7 +39,14 @@ const moduleFields: FormModalField[] = [
     type: 'number',
     constraints: {
       required: true,
-      number: { min: 2000, max: currentYear + 1, integer: true, step: 1, precision: 0 },
+      number: {
+        min: currentYear,
+        max: currentYear + 1,
+        integer: true,
+        step: 1,
+        precision: 0,
+        messageMin: 'Current year or later', // ⟵ aligns with test fallback
+      },
     },
   },
   {

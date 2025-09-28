@@ -6,12 +6,17 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useUI } from '@/context/UIContext';
 import { useNavigate } from 'react-router-dom';
 import { getMyGrades, type MyGradeItem } from '@/services/me/grades/get';
-import ScoreTag from './ScoreTag';
+import { PercentageTag } from '../common';
 
 dayjs.extend(relativeTime);
 
+type GradesPanelProps = {
+  moduleId?: number;
+  perPage?: number;
+};
+
 const { Text, Title } = Typography;
-const GradesPanel = () => {
+const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => {
   const { isSm } = useUI();
   const navigate = useNavigate();
 
@@ -23,7 +28,7 @@ const GradesPanel = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getMyGrades({ page: 1, per_page: 50 });
+      const res = await getMyGrades({ page: 1, per_page: perPage, module_id: moduleId });
       if (!res.success) throw new Error(res.message || 'Failed to load grades');
 
       const rows = Array.isArray(res.data?.grades) ? res.data?.grades : [];
@@ -34,7 +39,7 @@ const GradesPanel = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [moduleId, perPage]);
 
   useEffect(() => {
     void fetchGrades();
@@ -87,20 +92,24 @@ const GradesPanel = () => {
         }}
         dataSource={visible}
         renderItem={(g) => {
-          const moduleId = g.module?.id;
+          const gradeModuleId = g.module?.id;
           const assignmentId = g.assignment?.id;
-          const moduleCode = g.module?.code ?? (moduleId ? `M-${moduleId}` : '—');
+          const moduleCode = g.module?.code ?? (gradeModuleId ? `M-${gradeModuleId}` : '—');
           const when = dayjs(g.updated_at || g.created_at);
           const percentage = typeof g.percentage === 'number' ? g.percentage : 0;
           const roundedPercentage = Math.round(percentage * 10) / 10;
           const earned = g.score?.earned;
           const total = g.score?.total;
-          const canNavigate = moduleId != null && assignmentId != null;
+          const canNavigate = gradeModuleId != null && assignmentId != null;
 
           return (
             <List.Item
               className="!px-3 cursor-pointer"
-              onClick={canNavigate ? () => navigate(`/modules/${moduleId}/assignments/${assignmentId}`) : undefined}
+              onClick={
+                canNavigate
+                  ? () => navigate(`/modules/${gradeModuleId}/assignments/${assignmentId}`)
+                  : undefined
+              }
             >
               <div className="flex flex-col gap-1.5 w-full">
                 {/* Title + score */}
@@ -108,7 +117,7 @@ const GradesPanel = () => {
                   <Text strong className="truncate">
                     {g.assignment?.title ?? 'Unknown assignment'}
                   </Text>
-                  <ScoreTag score={roundedPercentage} />
+                  <PercentageTag value={roundedPercentage} />
                 </div>
 
                 {/* Meta */}

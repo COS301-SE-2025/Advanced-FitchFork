@@ -32,10 +32,12 @@ import {
 } from '@/services/modules/assignments/interpreter';
 import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 const { Text } = Typography;
 
 export default function InterpreterPage() {
+  useConfigBackTo();
   const { message, modal } = App.useApp();
   const { setValue } = useViewSlot();
   const { id: moduleId } = useModule();

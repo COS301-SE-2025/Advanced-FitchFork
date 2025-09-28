@@ -62,8 +62,7 @@ Please refer to our detailed [Functional and Non-Functional Requirements](#addit
 | Vite        | ![Vite](./frontend/public/stack/vite.png)             | Fast frontend bundler and dev server              |
 | SQLite      | ![SQLite](./frontend/public/stack/sqlite.png)         | Lightweight database for storing application data |
 | Docker      | ![Docker](./frontend/public/stack/docker.png)         | Containerized code execution and deployment       |
-| Jest        | ![Jest](./frontend/public/stack/jest.png)             | Unit testing for frontend logic                   |
-| Cypress     | ![Cypress](./frontend/public/stack/cypress.png)       | End-to-end testing of frontend                    |
+| Playwright  | ![Cypress](./frontend/public/stack/playwright.png)    | End-to-end testing of frontend                    |
 | React       | ![React](./frontend/public/stack/atom.png)            | Frontend component-based UI framework             |
 
 ---
@@ -167,20 +166,24 @@ cargo test
 
 ## Additional Resources
 
-| Resource                                                                          | Demo 1                                             | Demo 2                                             | Demo 3                                             |
-| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  | —
-| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              | [View](./docs/demo3/domain_model.png)
-| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              | [View](./docs/demo3/user_stories.pdf)
-| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 | [View](./docs/demo3/use_cases.pdf)
-| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       | [View](./docs/demo3/srs.pdf)
-| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) | [View](./docs/demo3/requirement_specification.pdf)
-| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               | [View](./docs/demo3/user_manual.pdf)
-| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            | [View](./docs/demo3/code_standards.pdf)
-| **Technical Installation Manual**                                                 | —                                                  | —                                                  | [View](./docs/demo3/installation_manual.pdf)
-| **Architectural Document**                                                        | —                                                  | —                                                  | [View](./docs/demo3/architectural_document.pdf)
-| **Deployment Model**                                                              | —                                                  | —                                                  | [View](./docs/demo3/deployment_model.pdf)
-| **Service Contracts**                                                             | —                                                  | —                                                  | [View](https://fitchfork.co.za/docs/api/routes/)
+---
+
+| Resource                                                                          | Demo 1                                             | Demo 2                                             | Demo 3                                             | Demo 4                                              |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
+| **[Project Board (GitHub)](https://github.com/orgs/COS301-SE-2025/projects/199)** | —                                                  | —                                                  | —                                                  | —                                                   |
+| **Domain Model Diagram**                                                          | [View](./docs/demo1/domain_model.png)              | [View](./docs/demo2/domain_model.png)              | [View](./docs/demo3/domain_model.png)              | [View](./docs/demo4/domain_model.png)               |
+| **User Stories**                                                                  | [View](./docs/demo1/user_stories.pdf)              | [View](./docs/demo2/user_stories.pdf)              | [View](./docs/demo3/user_stories.pdf)              | [View](./docs/demo4/user_stories.pdf)               |
+| **Use Cases**                                                                     | [View](./docs/demo1/use_cases.pdf)                 | [View](./docs/demo2/use_cases.pdf)                 | [View](./docs/demo3/use_cases.pdf)                 | [View](./docs/demo4/use_cases.pdf)                  |
+| **Software Requirements Specification (SRS)**                                     | [View](./docs/demo1/srs.pdf)                       | [View](./docs/demo2/srs.pdf)                       | [View](./docs/demo3/srs.pdf)                       | [View](./docs/demo4/srs.pdf)                        |
+| **Functional and Non-Functional Requirements Summary**                            | [View](./docs/demo1/requirement_specification.pdf) | [View](./docs/demo2/requirement_specification.pdf) | [View](./docs/demo3/requirement_specification.pdf) | [View](./docs/demo4/requirement_specification.pdf)  |
+| **Testing Policy and Non-Functional Requirements Testing Document**               | —                                                  | —                                                  | —                                                  | [View](./docs/demo4/testing_policy_nfr_testing.pdf) |
+| **User Manual**                                                                   | —                                                  | [View](./docs/demo2/user_manual.pdf)               | [View](./docs/demo3/user_manual.pdf)               | [View](./docs/demo4/user_manual.pdf)                |
+| **Code Standards**                                                                | —                                                  | [View](./docs/demo2/code_standards.pdf)            | [View](./docs/demo3/code_standards.pdf)            | [View](./docs/demo4/code_standards.pdf)             |
+| **Technical Installation Manual**                                                 | —                                                  | —                                                  | [View](./docs/demo3/installation_manual.pdf)       | [View](./docs/demo4/installation_manual.pdf)        |
+| **Architectural Document**                                                        | —                                                  | —                                                  | [View](./docs/demo3/architectural_document.pdf)    | [View](./docs/demo4/architectural_document.pdf)     |
+| **Deployment Model**                                                              | —                                                  | —                                                  | [View](./docs/demo3/deployment_model.pdf)          | [View](./docs/demo4/deployment_model.pdf)           |
+| **Service Contracts**                                                             | —                                                  | —                                                  | [View](https://fitchfork.co.za/docs/api/routes/)   | [View](https://fitchfork.co.za/docs/api/routes/)    |
+| **Non Functional Requirements Testing Document**                                  | —                                                  | —                                                  | -                                                  | [View](./docs/demo4/non_functional_testing.pdf)     |
 
 ---
 

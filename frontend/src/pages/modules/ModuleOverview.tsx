@@ -30,9 +30,8 @@ const ModuleOverview = () => {
             {/* Left Column */}
             <Col xs={24} lg={16}>
               <Space direction="vertical" size="middle" className="w-full">
-                <AnnouncementsPanel />
-                <AssignmentsPanel />
-                <GradesPanel />
+                <AnnouncementsPanel moduleId={module.id} />
+                <AssignmentsPanel moduleId={module.id} />
               </Space>
             </Col>
 
@@ -40,6 +39,7 @@ const ModuleOverview = () => {
             <Col xs={24} lg={8}>
               <Space direction="vertical" size="middle" className="w-full">
                 <ModuleStaffPanel />
+                <GradesPanel moduleId={module.id} />
               </Space>
             </Col>
           </Row>

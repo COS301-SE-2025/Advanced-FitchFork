@@ -28,11 +28,13 @@ import {
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import { useUI } from '@/context/UIContext';
 import Tip from '@/components/common/Tip';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export default function GatlamPage() {
+  useConfigBackTo();
   const { isSm } = useUI();
   const { setValue } = useViewSlot();
   const { config, updateConfig } = useAssignment();

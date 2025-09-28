@@ -26,6 +26,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
       title={<span>{title}</span>}
       okText={okText}
       cancelText={cancelText}
+      okButtonProps={{ 'data-testid': 'confirm-yes' }}
+      cancelButtonProps={{ 'data-testid': 'confirm-no' }}
       onOk={onOk}
       onCancel={onCancel}
     >

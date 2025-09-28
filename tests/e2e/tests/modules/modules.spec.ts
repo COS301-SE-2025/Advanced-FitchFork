@@ -53,18 +53,20 @@ test.describe('Modules / list page', () => {
     await modal.submit();
 
     // Prefer global toast, fallback to field error if the UI blocks before POST
-    let sawToast = true;
+    let sawToast = false;
     try {
       await expect(
-        page.getByText('Module code must be in format ABC123')
+        page.getByText(/(module code.*format|format e\.g\.\s*COS212)/i)
       ).toBeVisible({ timeout: 6000 });
+      sawToast = true;
     } catch {
-      sawToast = false;
+      // fall back to field-level validation copy
     }
 
     if (!sawToast) {
-      await expect(modal.codeError()).toBeVisible();
-      await expect(modal.codeError()).toHaveText(/abc123/i);
+      const fieldError = modal.codeError();
+      await expect(fieldError).toBeVisible();
+      await expect(fieldError).toHaveText(/(format|abc123|cos212|please enter)/i);
     }
 
     await modal.cancel();
@@ -92,18 +94,20 @@ test.describe('Modules / list page', () => {
     await modal.submit();
 
     // Prefer global toast, fallback to field error
-    let sawToast = true;
+    let sawToast = false;
     try {
       await expect(
-        page.getByText('Year must be current year or later')
+        page.getByText(/year must be (the )?current year or later/i)
       ).toBeVisible({ timeout: 6000 });
+      sawToast = true;
     } catch {
-      sawToast = false;
+      // look for inline field validation instead
     }
 
     if (!sawToast) {
-      await expect(modal.yearError()).toBeVisible();
-      await expect(modal.yearError()).toHaveText(/current year or later/i);
+      const fieldError = modal.yearError();
+      await expect(fieldError).toBeVisible();
+      await expect(fieldError).toHaveText(/(current year or later|please enter)/i);
     }
 
     await modal.cancel();

@@ -8,6 +8,7 @@ import type { AssignmentConfig } from '@/types/modules/assignments/config';
 import AssignmentConfigActions from '@/components/assignments/AssignmentConfigActions';
 import Tip from '@/components/common/Tip';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
+import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 type FormShape = {
   code_coverage_weight: number;
@@ -15,6 +16,7 @@ type FormShape = {
 };
 
 export default function CodeCoveragePage() {
+  useConfigBackTo();
   const { setValue } = useViewSlot();
   const { config, updateConfig, assignment } = useAssignment();
   const { setBreadcrumbLabel } = useBreadcrumbContext();
