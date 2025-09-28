@@ -1097,7 +1097,7 @@ mod tests {
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["filename"], "large.zip");
     }
-    
+
     #[tokio::test]
     #[serial]
     async fn test_large_file_submission_rejected() {
@@ -1117,7 +1117,10 @@ mod tests {
             .method("POST")
             .uri(&uri)
             .header(AUTHORIZATION, format!("Bearer {}", token))
-            .header(CONTENT_TYPE, format!("multipart/form-data; boundary={}", boundary))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
             .body(Body::from(body))
             .unwrap();
 
@@ -1129,13 +1132,24 @@ mod tests {
             .await
             .unwrap_or_default();
 
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "expected 500, got {}", status);
+        assert_eq!(
+            status,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "expected 500, got {}",
+            status
+        );
 
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
 
-        assert_eq!(json["success"], false, "expected success = false on oversized upload");
+        assert_eq!(
+            json["success"], false,
+            "expected success = false on oversized upload"
+        );
 
-        let msg = json.get("message").and_then(|v| v.as_str()).unwrap_or_default();
+        let msg = json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
         assert!(
             msg.eq_ignore_ascii_case("Failed to run code for submission")
                 || msg.to_ascii_lowercase().contains("failed")
@@ -1143,7 +1157,10 @@ mod tests {
             "unexpected error message: {msg}"
         );
 
-        assert!(!json.get("data").is_some(), "did not expect data on failure");
+        assert!(
+            !json.get("data").is_some(),
+            "did not expect data on failure"
+        );
     }
 
     #[tokio::test]
