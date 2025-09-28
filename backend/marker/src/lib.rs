@@ -242,7 +242,7 @@ impl<'a> MarkingJob<'a> {
 
             if let Some(task_output) = submission_task {
                 for (sub_index, subsection) in task_entry.subsections.iter().enumerate() {
-                    let student_lines = task_output
+                    let mut student_lines = task_output
                         .student_output
                         .subtasks
                         .get(sub_index)
@@ -267,6 +267,16 @@ impl<'a> MarkingJob<'a> {
                             .map(|s| s.lines.clone())
                             .unwrap_or_default(),
                     };
+
+                    if self.config.marking.reorder_by_memo
+                        && !matches!(self.config.marking.marking_scheme, MarkingScheme::Regex)
+                    {
+                        student_lines =
+                            crate::utilities::line_normalization::reorder_student_by_memo(
+                                student_lines,
+                                &memo_or_regex_lines,
+                            );
+                    }
 
                     let has_error = task_output
                         .return_code
@@ -909,5 +919,117 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_reorder_by_memo_on_aligns_lines() {
+        use std::{fs, io::Write};
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path();
+
+        // Files: same lines, different order
+        let memo = "A\nB\nC\n";
+        let student = "C\nA\nB\n";
+
+        // Write memo/student
+        let memo1 = dir.join("memo1.txt");
+        let mut f = fs::File::create(&memo1).unwrap();
+        f.write_all(memo.as_bytes()).unwrap();
+
+        let student1 = dir.join("student1.txt");
+        let mut f = fs::File::create(&student1).unwrap();
+        f.write_all(student.as_bytes()).unwrap();
+
+        let allocator_json = serde_json::json!({
+            "generated_at": "2025-01-01T00:00:00Z",
+            "total_value": 10.0,
+            "tasks": [{
+                "task_number": 1,
+                "name": "OrderInsensitive",
+                "value": 10.0,
+                "code_coverage": false,
+                "valgrind": false,
+                "subsections": [{
+                    "name": "All lines match",
+                    "value": 10.0
+                }]
+            }]
+        });
+        let alloc_path = dir.join("allocator.json");
+        fs::write(
+            &alloc_path,
+            serde_json::to_string_pretty(&allocator_json).unwrap(),
+        )
+        .unwrap();
+
+        let allocator = {
+            let s = fs::read_to_string(&alloc_path).unwrap();
+            serde_json::from_str::<mark_allocator::MarkAllocator>(&s).unwrap()
+        };
+        let mut cfg = ExecutionConfig::default_config();
+        cfg.marking.reorder_by_memo = true;
+        cfg.marking.marking_scheme = MarkingScheme::Exact;
+
+        let job = MarkingJob::new(vec![memo1], vec![student1], allocator, cfg);
+
+        let result = job.mark().await.expect("mark should succeed");
+        let report = result.data;
+
+        // Because we re-ordered the student lines to match the memo, we should award full marks
+        assert_eq!(report.mark.total, 10.0);
+        assert_eq!(
+            report.mark.earned, 10.0,
+            "reorder_by_memo should align lines and award full marks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_regex_scheme_ignores_reorder_flag() {
+        let dir = "src/test_files/marker/case3"; // any valid fixture where content exists
+        let memo_outputs = vec![
+            PathBuf::from(dir).join("memo1.txt"),
+            PathBuf::from(dir).join("memo2.txt"),
+        ];
+        let student_outputs = vec![
+            PathBuf::from(dir).join("student1.txt"),
+            PathBuf::from(dir).join("student2.txt"),
+        ];
+
+        // Load allocator and inject regex patterns into one subsection so Regex path is exercised
+        let mut allocator = {
+            let s = std::fs::read_to_string(PathBuf::from(dir).join("allocator.json")).unwrap();
+            serde_json::from_str::<mark_allocator::MarkAllocator>(&s).unwrap()
+        };
+        if let Some(task) = allocator.tasks.get_mut(0) {
+            if let Some(sub) = task.subsections.get_mut(0) {
+                sub.regex = Some(vec![r"^fizz$".into(), r"^buzz$".into()]);
+            }
+        }
+
+        // Case 1: reorder_by_memo = false
+        let mut cfg1 = ExecutionConfig::default_config();
+        cfg1.marking.reorder_by_memo = false;
+        cfg1.marking.marking_scheme = MarkingScheme::Regex;
+
+        let job1 = MarkingJob::new(
+            memo_outputs.clone(),
+            student_outputs.clone(),
+            allocator.clone(),
+            cfg1,
+        );
+        let r1 = job1.mark().await.expect("mark should succeed").data;
+
+        let mut cfg2 = ExecutionConfig::default_config();
+        cfg2.marking.reorder_by_memo = true;
+        cfg2.marking.marking_scheme = MarkingScheme::Regex;
+
+        let job2 = MarkingJob::new(memo_outputs, student_outputs, allocator, cfg2);
+        let r2 = job2.mark().await.expect("mark should succeed").data;
+
+        // Assert total identical
+        assert_eq!(
+            r1.mark.earned, r2.mark.earned,
+            "Regex scheme should ignore reordering"
+        );
     }
 }

@@ -456,6 +456,7 @@ mod bulk_delete_plagiarism_tests {
     }
 
     // TODO Freaky random test
+    // I have no idea what this means
     #[ignore]
     #[tokio::test]
     async fn test_bulk_delete_empty_list() {

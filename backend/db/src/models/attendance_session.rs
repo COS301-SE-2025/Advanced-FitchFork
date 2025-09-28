@@ -1,5 +1,10 @@
+use super::{
+    attendance_record,
+    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as UmrRole},
+};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
+use ipnet::IpNet;
 use sea_orm::FromQueryResult;
 use sea_orm::entity::prelude::*;
 use sea_orm::{
@@ -9,11 +14,7 @@ use sea_orm::{
 };
 use sha2::Sha256;
 use std::collections::HashMap;
-
-use super::{
-    attendance_record,
-    user_module_role::{Column as UmrCol, Entity as UmrEntity, Role as UmrRole},
-};
+use std::net::IpAddr;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -160,8 +161,14 @@ impl Model {
         if let Some(exact) = &self.created_from_ip {
             return ip == exact;
         }
-        if let Some(_cidr) = &self.allowed_ip_cidr {
-            return true; // TODO: implement CIDR match
+        if let Some(cidr_list) = &self.allowed_ip_cidr {
+            return cidr_list
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .filter(|s| !s.is_empty())
+                .any(|cidr| match (cidr.parse::<IpNet>(), ip.parse::<IpAddr>()) {
+                    (Ok(net), Ok(addr)) => net.contains(&addr),
+                    _ => false,
+                });
         }
         false
     }

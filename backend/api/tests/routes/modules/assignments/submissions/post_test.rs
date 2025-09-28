@@ -1063,7 +1063,6 @@ mod tests {
         assert_eq!(json["data"]["is_late"], false);
     }
 
-    //TODO - Reece this test passes but it should be a negative test
     #[tokio::test]
     #[serial]
     async fn test_large_file_submission() {
@@ -1097,6 +1096,71 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["filename"], "large.zip");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_large_file_submission_rejected() {
+        let (app, app_state, _tmp) = make_test_app_with_storage().await;
+        let data = setup_test_data(app_state.db()).await;
+
+        let file = create_large_zip_file(200 * 1024 * 1024); // 200 MB
+
+        let (boundary, body) = multipart_body("too_big.zip", &file, None, Some("true"));
+        let (token, _) = generate_jwt(data.student_user.id, data.student_user.admin);
+        let uri = format!(
+            "/api/modules/{}/assignments/{}/submissions",
+            data.module.id, data.assignment.id
+        );
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(&uri)
+            .header(AUTHORIZATION, format!("Bearer {}", token))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data; boundary={}", boundary),
+            )
+            .body(Body::from(body))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_default();
+
+        assert_eq!(
+            status,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "expected 500, got {}",
+            status
+        );
+
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        assert_eq!(
+            json["success"], false,
+            "expected success = false on oversized upload"
+        );
+
+        let msg = json
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        assert!(
+            msg.eq_ignore_ascii_case("Failed to run code for submission")
+                || msg.to_ascii_lowercase().contains("failed")
+                || msg.to_ascii_lowercase().contains("code"),
+            "unexpected error message: {msg}"
+        );
+
+        assert!(
+            !json.get("data").is_some(),
+            "did not expect data on failure"
+        );
     }
 
     #[tokio::test]

@@ -123,8 +123,6 @@ impl Model {
     }
 }
 
-// TODO : FIX THIS TEST FAILLING ON GITHUB
-
 // #[cfg(test)]
 // mod tests {
 //     use super::*;

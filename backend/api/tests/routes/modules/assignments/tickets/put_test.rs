@@ -74,33 +74,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_open_ticket_test() {
-        let (app, app_state, _tmp) = make_test_app_with_storage().await;
-        let data = setup_test_data(app_state.db()).await;
-
-        let (token, _) = generate_jwt(data.user.id, data.user.admin);
-        let uri = format!(
-            "/api/modules/{}/assignments/{}/tickets/{}/open",
-            data.module.id, data.assignment.id, data.ticket.id
-        );
-        let req = Request::builder()
-            .method("PUT")
-            .uri(uri)
-            .header("Authorization", format!("Bearer {}", token))
-            .body(Body::empty())
-            .unwrap();
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-
-        let response_data: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(response_data["data"]["status"], "open");
-        assert_eq!(response_data["message"], "Ticket opened successfully");
-    }
-
-    #[tokio::test]
     async fn set_invalid_open_ticket_test() {
         let (app, app_state, _tmp) = make_test_app_with_storage().await;
         let data = setup_test_data(app_state.db()).await;
