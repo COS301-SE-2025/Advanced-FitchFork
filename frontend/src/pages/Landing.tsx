@@ -23,47 +23,47 @@ import TiltScreenshot from '@/components/TiltScreenshot';
 const { Title, Paragraph, Text } = Typography;
 
 const lightImages = [
-  '/screenshots/light/student_dashboard.png',
-  '/screenshots/light/lecturer_dashboard.png',
-  '/screenshots/light/submissions.png',
-  '/screenshots/light/tasks.png',
-  '/screenshots/light/config.png',
-  '/screenshots/light/moss.png',
-  '/screenshots/light/submit_result.png',
-  '/screenshots/light/tickets.png',
-  '/screenshots/light/session.png',
-  '/screenshots/light/diffs.png',
-  '/screenshots/light/graph_control.png',
-  '/screenshots/light/staff.png',
+  '/screenshots/light/student_dashboard.webp',
+  '/screenshots/light/lecturer_dashboard.webp',
+  '/screenshots/light/submissions.webp',
+  '/screenshots/light/tasks.webp',
+  '/screenshots/light/config.webp',
+  '/screenshots/light/moss.webp',
+  '/screenshots/light/submit_result.webp',
+  '/screenshots/light/tickets.webp',
+  '/screenshots/light/session.webp',
+  '/screenshots/light/diffs.webp',
+  '/screenshots/light/graph_control.webp',
+  '/screenshots/light/staff.webp',
 ];
 
 const darkImages = [
-  '/screenshots/dark/student_dashboard.png',
-  '/screenshots/dark/lecturer_dashboard.png',
-  '/screenshots/dark/submissions.png',
-  '/screenshots/dark/tasks.png',
-  '/screenshots/dark/config.png',
-  '/screenshots/dark/moss.png',
-  '/screenshots/dark/submit_result.png',
-  '/screenshots/dark/tickets.png',
-  '/screenshots/dark/session.png',
-  '/screenshots/dark/diffs.png',
-  '/screenshots/dark/graph_control.png',
-  '/screenshots/dark/staff.png',
+  '/screenshots/dark/student_dashboard.webp',
+  '/screenshots/dark/lecturer_dashboard.webp',
+  '/screenshots/dark/submissions.webp',
+  '/screenshots/dark/tasks.webp',
+  '/screenshots/dark/config.webp',
+  '/screenshots/dark/moss.webp',
+  '/screenshots/dark/submit_result.webp',
+  '/screenshots/dark/tickets.webp',
+  '/screenshots/dark/session.webp',
+  '/screenshots/dark/diffs.webp',
+  '/screenshots/dark/graph_control.webp',
+  '/screenshots/dark/staff.webp',
 ];
 
 const sectionImages: Record<string, { light: string; dark: string }> = {
   containers: {
-    light: '/screenshots/light/execution_controls.png',
-    dark: '/screenshots/dark/execution_controls.png',
+    light: '/screenshots/light/execution_controls.webp',
+    dark: '/screenshots/dark/execution_controls.webp',
   },
   plagiarism: {
-    light: '/screenshots/light/graph.png',
-    dark: '/screenshots/dark/graph.png',
+    light: '/screenshots/light/graph.webp',
+    dark: '/screenshots/dark/graph.webp',
   },
   analytics: {
-    light: '/screenshots/light/stats.png',
-    dark: '/screenshots/dark/stats.png',
+    light: '/screenshots/light/stats.webp',
+    dark: '/screenshots/dark/stats.webp',
   },
 };
 

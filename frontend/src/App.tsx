@@ -42,7 +42,6 @@ import MainFile from './pages/help/assignments/files/MainFile';
 import MemoFiles from './pages/help/assignments/files/MemoFiles';
 import Specification from './pages/help/assignments/files/Specification';
 import ExecutionHelp from './pages/help/assignments/config/ExecutionHelp';
-import OutputHelp from './pages/help/assignments/config/OutputHelp';
 import MarkingHelp from './pages/help/assignments/config/MarkingHelp';
 import ProjectHelp from './pages/help/assignments/config/ProjectHelp';
 import SecurityHelp from './pages/help/assignments/config/SecurityHelp';
@@ -78,7 +77,6 @@ import ExecutionPage from './pages/modules/assignments/config/ExecutionPage';
 import GatlamPage from './pages/modules/assignments/config/GatlamPage';
 import InterpreterPage from './pages/modules/assignments/config/InterpreterPage';
 import MarkingPage from './pages/modules/assignments/config/MarkingPage';
-import OutputPage from './pages/modules/assignments/config/OutputPage';
 import SecurityPage from './pages/modules/assignments/config/SecurityPage';
 import MemoOutput from './pages/modules/assignments/MemoOutput';
 import PlagiarismCases from './pages/modules/assignments/PlagiarismCases';
@@ -239,7 +237,6 @@ export default function App() {
                       <Route path="assignment" element={<AssignmentPage />} />
                       <Route path="execution" element={<ExecutionPage />} />
                       <Route path="marking" element={<MarkingPage />} />
-                      <Route path="output" element={<OutputPage />} />
                       <Route path="security" element={<SecurityPage />} />
                       <Route path="code-coverage" element={<CodeCoveragePage />} />
                       <Route path="gatlam" element={<GatlamPage />} />
@@ -370,7 +367,6 @@ export default function App() {
             <Route path="assignments/config/overview" element={<ConfigOverviewHelp />} />
             <Route path="assignments/config/project" element={<ProjectHelp />} />
             <Route path="assignments/config/execution" element={<ExecutionHelp />} />
-            <Route path="assignments/config/output" element={<OutputHelp />} />
             <Route path="assignments/config/marking" element={<MarkingHelp />} />
             <Route path="assignments/config/security" element={<SecurityHelp />} />
             <Route path="assignments/config/gatlam" element={<GATLAMHelp />} />

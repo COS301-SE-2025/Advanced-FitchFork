@@ -38,7 +38,6 @@ export const HELP_MENU_ITEMS: HelpMenuItem[] = [
           { key: 'assignments/config/overview', label: 'Overview' },
           { key: 'assignments/config/project', label: 'Language & Mode' },
           { key: 'assignments/config/execution', label: 'Execution' },
-          { key: 'assignments/config/output', label: 'Output' },
           { key: 'assignments/config/marking', label: 'Marking' },
           { key: 'assignments/config/security', label: 'Security' },
           { key: 'assignments/config/gatlam', label: 'GATLAM' },

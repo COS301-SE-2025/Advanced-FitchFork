@@ -465,10 +465,7 @@ export default function ConceptGATLAM() {
           Configure GA parameters in{' '}
           <a href="/help/assignments/config/gatlam">Assignment Config → GATLAM</a>.
         </li>
-        <li>
-          Ensure outputs you care about are captured in{' '}
-          <a href="/help/assignments/config/output">Assignment Config → Output</a>.
-        </li>
+        <li>Ensure the values you care about are printed to stdout; that stream is always saved.</li>
         <li>
           Delimiter and memo labeling: <a href="/help/assignments/files/main-files">Main File</a>{' '}
           and <a href="/help/assignments/memo-output">Memo Output</a>.

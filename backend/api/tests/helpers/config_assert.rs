@@ -35,11 +35,6 @@ pub fn assert_default_config(d: &Value) {
     assert_eq!(d["project"]["language"], "cpp"); // serde rename_all = "lowercase"
     assert_eq!(d["project"]["submission_mode"], "manual");
 
-    // ---------- output ----------
-    assert_eq!(d["output"]["stdout"], true);
-    assert_eq!(d["output"]["stderr"], false);
-    assert_eq!(d["output"]["retcode"], false);
-
     // ---------- gatlam ----------
     assert_eq!(d["gatlam"]["population_size"], 2);
     assert_eq!(d["gatlam"]["number_of_generations"], 2);

@@ -356,10 +356,7 @@ export default function TasksHelp() {
                 <li>
                   Trim extra logs; keep output deterministic and consistent with line endings.
                 </li>
-                <li>
-                  Confirm <a href="/help/assignments/config/output">Output capture</a> options
-                  include the streams you compare (stdout/stderr/retcode).
-                </li>
+                <li>Ensure the values you compare are printed to stdout; avoid extra noise.</li>
               </ul>
             ),
           },

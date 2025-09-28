@@ -110,6 +110,10 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
 
   const prev = useCallback(() => setCurrent((p) => Math.max(p - 1, 0)), []);
 
+  const refreshAssignment = useCallback(async () => {
+    await refreshLocal(assignment?.assignment.id ?? assignmentId);
+  }, [assignment?.assignment.id, assignmentId, refreshLocal]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') void next();
@@ -216,9 +220,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
       setAssignment,
       setConfig,
       setStepSaveHandler,
-      refreshAssignment: async () => {
-        await refreshLocal(assignment?.assignment.id ?? assignmentId);
-      },
+      refreshAssignment,
       next,
       prev,
     }),
@@ -229,13 +231,15 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
       readiness,
       config,
       setStepSaveHandler,
-      refreshLocal,
+      refreshAssignment,
       next,
       prev,
     ],
   );
 
   const CurrentComp = STEPS_DYNAMIC[current].Component;
+  const isLastStep = current === STEPS_DYNAMIC.length - 1;
+  const nextLabel = isLastStep ? 'Review' : current === 1 ? 'Save & Continue' : 'Next';
 
   return (
     <Modal
@@ -327,7 +331,7 @@ const AssignmentSetup = ({ open, onClose, assignmentId, module, onDone }: Props)
                   disabled={!isCurrentStepComplete()}
                   icon={<RightOutlined />}
                 >
-                  {current === STEPS_DYNAMIC.length - 1 ? 'Review' : 'Next'}
+                  {nextLabel}
                 </Button>
               </>
             )}

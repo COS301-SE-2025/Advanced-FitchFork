@@ -36,12 +36,6 @@ const sectionsRows = [
     link: <a href="/help/assignments/config/execution">Open Execution →</a>,
   },
   {
-    key: 'output',
-    area: 'Output',
-    what: 'What gets recorded for marking: stdout, stderr, and/or return code.',
-    link: <a href="/help/assignments/config/output">Open Output →</a>,
-  },
-  {
     key: 'marking',
     area: 'Marking',
     what: 'Marking scheme, feedback style, pass mark, attempt limits, delimiter, disallowed code.',
@@ -95,8 +89,8 @@ export default function ConfigOverviewHelp() {
             Edit everything in <Text code>Assignments → Config</Text>.
           </li>
           <li>
-            Changes apply to new runs. If you change <b>Output</b> or the <b>delimiter</b>,
-            regenerate <b>Memo Output</b>.
+            Changes apply to new runs. If you change the <b>delimiter</b>, regenerate <b>Memo
+            Output</b>.
           </li>
           <li>Safe defaults are provided; raise limits only when needed.</li>
         </ul>
@@ -118,7 +112,6 @@ export default function ConfigOverviewHelp() {
         split into:
         <Tag className="ml-2">Language & Mode</Tag>
         <Tag>Execution</Tag>
-        <Tag>Output</Tag>
         <Tag>Marking</Tag>
         <Tag>Security</Tag>
         <Tag>GATLAM</Tag>
@@ -166,14 +159,11 @@ export default function ConfigOverviewHelp() {
       <Title level={3}>Common workflows</Title>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="New assignment (fast)">
-          Pick your <b>Language & Mode</b> → keep <b>Execution</b> defaults → capture only{' '}
-          <b>stdout</b> → keep <b>Marking</b> as Exact (pass mark 50%).
+          Pick your <b>Language & Mode</b> → keep <b>Execution</b> defaults → keep <b>Marking</b>
+          as Exact (pass mark 50%).
         </Descriptions.Item>
         <Descriptions.Item label="Time- or memory-heavy tasks">
           Increase <b>Time limit</b> and/or <b>Memory</b> gradually to keep the queue healthy.
-        </Descriptions.Item>
-        <Descriptions.Item label="Grade on exit status">
-          Enable <b>Return code</b> under <b>Output</b> and set marks accordingly in <b>Marking</b>.
         </Descriptions.Item>
         <Descriptions.Item label="Restrict access">
           Use <b>Security</b> (PIN, cookie binding, IP allowlist) for labs or invigilated sessions.
@@ -189,16 +179,13 @@ export default function ConfigOverviewHelp() {
       <Paragraph className="mb-0">
         In <Text code>Assignments → Config</Text> you can <b>Export</b> the current settings and{' '}
         <b>Import</b> them into another assignment. Importing replaces the existing config. After
-        import, regenerate <b>Memo Output</b> if you changed Output or the delimiter.
+        import, regenerate <b>Memo Output</b> if you changed delimiters or mark allocation.
       </Paragraph>
 
       <section id="best" className="scroll-mt-24" />
       <Title level={3}>Best practices</Title>
       <ul className="list-disc pl-5">
         <li>Keep outputs deterministic and minimal to simplify marking.</li>
-        <li>
-          Only enable <b>stderr</b> capture if you grade on it.
-        </li>
         <li>
           Use <b>Disallowed code</b> in Marking to block banned libs/patterns.
         </li>
@@ -213,7 +200,7 @@ export default function ConfigOverviewHelp() {
           showIcon
           type="warning"
           message="“My changes didn’t affect marks”"
-          description="If you changed Output or the delimiter, regenerate Memo Output so comparisons use the new settings."
+          description="If you changed delimiters or mark allocation, regenerate Memo Output so comparisons use the new settings."
         />
         <Alert
           showIcon

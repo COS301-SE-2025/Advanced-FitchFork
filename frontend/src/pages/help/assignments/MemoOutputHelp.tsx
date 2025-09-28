@@ -192,12 +192,12 @@ export default function MemoOutputHelp() {
       <Title level={3}>How it’s produced</Title>
       <Descriptions bordered size="middle" column={1} className="mt-2">
         <Descriptions.Item label="Run inputs">
-          <Tag>Main</Tag> + <Tag>Memo</Tag> + <Tag>Makefile</Tag> under your current{' '}
-          <Tag>Execution</Tag> and <Tag>Output</Tag> settings.
+          <Tag>Main</Tag> + <Tag>Memo</Tag> + <Tag>Makefile</Tag> under your current <Tag>Execution</Tag>
+          settings.
         </Descriptions.Item>
         <Descriptions.Item label="What’s recorded">
-          Whatever you enabled in <a href="/help/assignments/config/output">Output</a> (usually
-          stdout; optionally stderr and return code).
+          Stdout from each task run. Keep it deterministic and labelled with your delimiter (default
+          <Text code>###</Text>).
         </Descriptions.Item>
         <Descriptions.Item label="Storage">
           <b>One text file per task.</b> Each task’s reference output is saved to its own{' '}

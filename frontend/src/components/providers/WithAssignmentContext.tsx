@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, Outlet, useNavigate } from 'react-router-dom';
-import { Spin } from 'antd';
+
+import AssignmentLoadingPlaceholder from '@/components/providers/AssignmentLoadingPlaceholder';
 
 import { useModule } from '@/context/ModuleContext';
 import { AssignmentProvider } from '@/context/AssignmentContext';
@@ -42,7 +43,6 @@ const mergeConfig = (
   execution: { ...base.execution, ...(patch.execution ?? {}) },
   marking: { ...base.marking, ...(patch.marking ?? {}) },
   project: { ...base.project, ...(patch.project ?? {}) },
-  output: { ...base.output, ...(patch.output ?? {}) },
   gatlam: { ...base.gatlam, ...(patch.gatlam ?? {}) },
 });
 
@@ -273,7 +273,7 @@ export default function WithAssignmentContext() {
     ],
   );
 
-  if (loading || !assignment) return <Spin className="p-6" tip="Loading assignment..." />;
+  if (loading || !assignment) return <AssignmentLoadingPlaceholder />;
 
   return (
     <AssignmentProvider value={value}>

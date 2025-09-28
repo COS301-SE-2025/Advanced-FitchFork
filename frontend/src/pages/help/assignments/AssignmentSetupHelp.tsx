@@ -442,10 +442,7 @@ export default function AssignmentSetupHelp() {
           Start with default execution limits; only raise CPU/time/memory if a task consistently
           needs it.
         </li>
-        <li>
-          Capture only the streams you compare in{' '}
-          <a href="/help/assignments/config/output">Output settings</a> to keep diffs tidy.
-        </li>
+        <li>Keep stdout focused on the values you grade; noisy logs make diffs harder to read.</li>
         <li>
           Pick a marking comparator (
           <a href="/help/assignments/config/marking">Exact, Percentage, Regex</a>) that matches your

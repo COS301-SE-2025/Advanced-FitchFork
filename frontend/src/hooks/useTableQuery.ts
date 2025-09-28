@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { SortOption } from '@/types/common';
 import type { TablePaginationConfig } from 'antd';
 
@@ -44,20 +44,20 @@ export function useTableQuery(): UseTableQueryResult {
     },
   });
 
-  const setPagination = (patch: Partial<PaginationState>) => {
+  const setPagination = useCallback((patch: Partial<PaginationState>) => {
     setPaginationState((prev) => ({ ...prev, ...patch }));
-  };
+  }, []);
 
-  const clearSearch = () => setSearchTerm('');
-  const clearSorters = () => setSorterState([]);
-  const clearFilters = () => setFilterState({});
+  const clearSearch = useCallback(() => setSearchTerm(''), []);
+  const clearSorters = useCallback(() => setSorterState([]), []);
+  const clearFilters = useCallback(() => setFilterState({}), []);
 
-  const clearAll = () => {
-    clearSearch();
-    clearSorters();
-    clearFilters();
-    setPagination({ current: 1 });
-  };
+  const clearAll = useCallback(() => {
+    setSearchTerm('');
+    setSorterState([]);
+    setFilterState({});
+    setPaginationState((prev) => ({ ...prev, current: 1 }));
+  }, []);
   
   return {
     searchTerm,

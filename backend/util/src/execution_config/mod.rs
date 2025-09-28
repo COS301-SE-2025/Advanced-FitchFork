@@ -168,26 +168,6 @@ impl Default for ProjectSetup {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExecutionOutputOptions {
-    #[serde(default = "default_stdout")]
-    pub stdout: bool,
-    #[serde(default)]
-    pub stderr: bool,
-    #[serde(default)]
-    pub retcode: bool,
-}
-
-impl Default for ExecutionOutputOptions {
-    fn default() -> Self {
-        Self {
-            stdout: true,
-            stderr: false,
-            retcode: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CodeCoverage {
     #[serde(default = "default_code_coverage_weight")]
     pub code_coverage_weight: f32,
@@ -380,9 +360,6 @@ pub struct ExecutionConfig {
     pub project: ProjectSetup,
 
     #[serde(default)]
-    pub output: ExecutionOutputOptions,
-
-    #[serde(default)]
     pub gatlam: GATLAM,
 
     #[serde(default)]
@@ -412,7 +389,6 @@ impl ExecutionConfig {
             execution: ExecutionLimits::default(),
             marking: MarkingOptions::default(),
             project: ProjectSetup::default(),
-            output: ExecutionOutputOptions::default(),
             gatlam: GATLAM::default(),
             security: SecurityOptions::default(),
             code_coverage: CodeCoverage::default(),
@@ -532,10 +508,6 @@ fn default_allow_practice_submissions() -> bool {
 
 fn default_language() -> Language {
     Language::Cpp
-}
-
-fn default_stdout() -> bool {
-    true
 }
 
 fn default_population_size() -> usize {

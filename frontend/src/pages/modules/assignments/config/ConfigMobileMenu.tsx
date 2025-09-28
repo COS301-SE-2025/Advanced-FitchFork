@@ -69,7 +69,6 @@ const ConfigMobileMenu = () => {
           path: 'marking',
           icon: <CheckSquareOutlined className="text-lg" />,
         },
-        { label: 'Output', path: 'output', icon: <CodeOutlined className="text-lg" /> },
         { label: 'Security', path: 'security', icon: <LockOutlined className="text-lg" /> },
       ],
     };
