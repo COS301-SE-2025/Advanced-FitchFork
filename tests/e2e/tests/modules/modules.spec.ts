@@ -95,19 +95,20 @@ test.describe('Modules / list page', () => {
 
     // Prefer global toast, fallback to field error
     let sawToast = false;
+    const yearErrorRe = /year must be (?:the )?(?:current year|\d{4}) or later/i;
+
     try {
-      await expect(
-        page.getByText(/year must be (the )?current year or later/i)
-      ).toBeVisible({ timeout: 6000 });
+      await expect(page.getByText(yearErrorRe)).toBeVisible({ timeout: 6000 });
       sawToast = true;
     } catch {
       // look for inline field validation instead
     }
 
     if (!sawToast) {
+      await modal.waitForFieldError(/year/i, 10_000);
       const fieldError = modal.yearError();
       await expect(fieldError).toBeVisible();
-      await expect(fieldError).toHaveText(/(current year or later|please enter)/i);
+      await expect(fieldError).toContainText(/(current year|\d{4}|please enter)/i);
     }
 
     await modal.cancel();

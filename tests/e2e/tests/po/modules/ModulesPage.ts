@@ -76,9 +76,10 @@ export class ModulesPage extends EntityList {
       credits: input.credits ?? 16,
     });
 
-    const respP: Promise<Response> = this.page.waitForResponse(
-      r => r.request().method() === 'POST' && /\/api\/modules(?:\b|\/)?$/.test(r.url()),
-    );
+    const respP: Promise<Response> = this.page.waitForResponse(r => {
+      if (r.request().method() !== 'POST') return false;
+      return this.matchesFetch(r.url());
+    });
 
     await modal.submit();
     const resp = await respP;

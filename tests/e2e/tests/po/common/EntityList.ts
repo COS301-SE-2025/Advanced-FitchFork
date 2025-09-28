@@ -15,6 +15,10 @@ export class EntityList {
     this.opts = { searchParam: 'query', ...opts } as Required<EntityListOptions>;
   }
 
+  protected matchesFetch(url: string): boolean {
+    return this.opts.fetchRe.test(url.split('?')[0] ?? url);
+  }
+
   // ---------------- navigation ----------------
   async goto() {
     await this.page.goto(this.opts.route);
@@ -28,7 +32,7 @@ export class EntityList {
     let inFlight = 0;
 
     const isListReq = (url: string, method: string) =>
-      method === 'GET' && this.opts.fetchRe.test(url);
+      method === 'GET' && this.matchesFetch(url);
 
     const onReq = (req: any) => {
       if (isListReq(req.url(), req.method())) { inFlight++; lastSeen = Date.now(); }
@@ -56,7 +60,7 @@ export class EntityList {
 
   protected get listFetch(): Promise<Response> {
     return this.page.waitForResponse(
-      r => r.request().method() === 'GET' && this.opts.fetchRe.test(r.url()),
+      r => r.request().method() === 'GET' && this.matchesFetch(r.url()),
     );
   }
 
@@ -143,7 +147,7 @@ export class EntityList {
     const expectQueryResponse = this.page
       .waitForResponse(r => {
         if (r.request().method() !== 'GET') return false;
-        if (!this.opts.fetchRe.test(r.url())) return false;
+        if (!this.matchesFetch(r.url())) return false;
         try {
           const u = new URL(r.url());
           const q = u.searchParams.get(searchParam) ?? '';
