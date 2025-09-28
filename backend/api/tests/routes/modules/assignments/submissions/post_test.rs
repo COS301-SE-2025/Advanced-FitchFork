@@ -1127,7 +1127,6 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
 
         let status = response.status();
-        let headers = response.headers().clone();
         let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_default();
