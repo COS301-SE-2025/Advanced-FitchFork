@@ -1,8 +1,10 @@
 use crate::seed::Seeder;
+use db::models::assignment_submission::SubmissionStatus;
 use db::models::{assignment, assignment_submission::Model as AssignmentSubmissionModel, user};
 use rand::seq::SliceRandom;
 use rand::{Rng, distributions::Alphanumeric};
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::ActiveModelTrait;
+use sea_orm::{DatabaseConnection, EntityTrait, IntoActiveModel, Set};
 use std::io::{Cursor, Write};
 use zip::write::SimpleFileOptions;
 
@@ -32,7 +34,7 @@ impl Seeder for AssignmentSubmissionSeeder {
             let filename = format!("studentSubmission_user{}.zip", user.id);
             let content = create_student_submission_plagiarism(user.id);
 
-            match AssignmentSubmissionModel::save_file(
+            let plag_file = match AssignmentSubmissionModel::save_file(
                 db,
                 assignment_id,
                 user.id,
@@ -46,14 +48,19 @@ impl Seeder for AssignmentSubmissionSeeder {
             )
             .await
             {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!(
-                        "Failed to seed plagiarism submission for assignment {} user {}: {}",
-                        assignment_id, user.id, e
-                    );
-                }
-            }
+                Ok(plag_file) => plag_file,
+                Err(e) => panic!(
+                    "Failed to seed assignment {} user {}: {}",
+                    assignment_id, user.id, e
+                ),
+            };
+
+            let mut am = plag_file.into_active_model();
+            am.status = Set(SubmissionStatus::Graded);
+            let _updated_file = am.update(db).await.expect(&format!(
+                "Failed to update submission {} for user {}",
+                assignment_id, user.id
+            ));
         }
 
         users.truncate(2);
@@ -327,7 +334,7 @@ int main() {
         let filename_java = "submission_memo_clone.zip";
         let content_java = create_memo_zip_as_submission_java();
 
-        match AssignmentSubmissionModel::save_file(
+        let file1 = match AssignmentSubmissionModel::save_file(
             db,
             assignment_id_java,
             user_id,
@@ -341,20 +348,25 @@ int main() {
         )
         .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!(
-                    "Failed to seed hardcoded submission for assignment {} user {}: {}",
-                    assignment_id_java, user_id, e
-                );
-            }
-        }
+            Ok(file1) => file1,
+            Err(e) => panic!(
+                "Failed to seed assignment {} user {}: {}",
+                assignment_id_java, user_id, e
+            ),
+        };
+
+        let mut am = file1.into_active_model();
+        am.status = Set(SubmissionStatus::Graded);
+        let _updated_file = am.update(db).await.expect(&format!(
+            "Failed to update submission {} for user {}",
+            assignment_id_java, user_id
+        ));
 
         let assignment_id_cpp = 9998;
         let filename_cpp = "submission_cpp_clone.zip";
         let content_cpp = create_cpp_submission_zip();
 
-        match AssignmentSubmissionModel::save_file(
+        let file = match AssignmentSubmissionModel::save_file(
             db,
             assignment_id_cpp,
             user_id,
@@ -368,14 +380,19 @@ int main() {
         )
         .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!(
-                    "Failed to seed hardcoded C++ submission for assignment {} user {}: {}",
-                    assignment_id_cpp, user_id, e
-                );
-            }
-        }
+            Ok(file) => file,
+            Err(e) => panic!(
+                "Failed to seed assignment {} user {}: {}",
+                assignment_id_cpp, user_id, e
+            ),
+        };
+
+        let mut am = file.into_active_model();
+        am.status = Set(SubmissionStatus::Graded);
+        let _updated_file = am.update(db).await.expect(&format!(
+            "Failed to update submission {} for user {}",
+            assignment_id_cpp, user_id
+        ));
 
         // Plagiarism Submissions
 

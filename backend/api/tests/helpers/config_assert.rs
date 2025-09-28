@@ -41,8 +41,8 @@ pub fn assert_default_config(d: &Value) {
     assert_eq!(d["output"]["retcode"], false);
 
     // ---------- gatlam ----------
-    assert_eq!(d["gatlam"]["population_size"], 100);
-    assert_eq!(d["gatlam"]["number_of_generations"], 50);
+    assert_eq!(d["gatlam"]["population_size"], 2);
+    assert_eq!(d["gatlam"]["number_of_generations"], 2);
     assert_eq!(d["gatlam"]["selection_size"], 20);
 
     approx(

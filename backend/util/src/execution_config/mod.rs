@@ -539,11 +539,11 @@ fn default_stdout() -> bool {
 }
 
 fn default_population_size() -> usize {
-    100
+    2
 }
 
 fn default_number_of_generations() -> usize {
-    50
+    2
 }
 
 fn default_selection_size() -> usize {
