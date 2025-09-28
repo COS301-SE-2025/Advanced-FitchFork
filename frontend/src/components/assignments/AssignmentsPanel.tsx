@@ -23,6 +23,8 @@ type Props = {
     upcoming: string;
   };
   moduleId?: number;
+  limit?: number;
+  minimal?: boolean;
 };
 
 type DisplayAssignment = {
@@ -65,7 +67,7 @@ function progressColor(pct: number): string {
   return '#ff4d4f';
 }
 
-const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
+const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId, limit, minimal = false }) => {
   const [view, setView] = useState<'due' | 'upcoming'>('due');
   const [items, setItems] = useState<DisplayAssignment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,13 +75,14 @@ const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
   const { isStudent, isStaff, isTutor, isAssistantLecturer, isLecturer } = useAuth();
 
   const labels = viewLabels ?? { due: 'Due', upcoming: 'Upcoming' };
+  const pageSize = limit ?? 50;
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await getMyAssignments({ role, module_id: moduleId, page: 1, per_page: 50 });
+        const res = await getMyAssignments({ role, module_id: moduleId, page: 1, per_page: pageSize });
         if (!res?.data) throw new Error('Empty response');
         if (!res.success) throw new Error(res.message || 'Request failed');
 
@@ -122,22 +125,24 @@ const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
     return () => {
       cancelled = true;
     };
-  }, [role, moduleId]);
+  }, [role, moduleId, pageSize]);
 
   const filtered = useMemo(() => {
     const n = now();
     if (view === 'due') {
-      return items
+      const dueList = items
         .filter((a) => a.status !== 'archived')
         .filter((a) => !dayjs(a.available_from).isAfter(n))
         .filter((a) => dayjs(a.due_date).isAfter(n))
         .sort((a, b) => dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf());
+      return limit ? dueList.slice(0, limit) : dueList;
     }
-    return items
+    const upcomingList = items
       .filter((a) => a.status !== 'archived')
       .filter((a) => dayjs(a.available_from).isAfter(n))
       .sort((a, b) => dayjs(a.available_from).valueOf() - dayjs(b.available_from).valueOf());
-  }, [items, view]);
+    return limit ? upcomingList.slice(0, limit) : upcomingList;
+  }, [items, view, limit]);
 
   return (
     <div className="h-full min-h-0 flex flex-col w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
@@ -197,36 +202,30 @@ const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
               isTutor(a.module.id) ||
               isStaff(a.module.id));
 
-          const timing =
-            view === 'upcoming' ? (
-              <div className="flex items-center gap-2">
-                <Text type="secondary">{a.module.code}</Text>
-                <Text type="secondary" className="!text-[12px]">
-                  •
-                </Text>
-                <Text type="secondary" className="inline-flex items-center !text-[12px]">
-                  opens {opens.fromNow()}
-                  <Tooltip title={opens.format('YYYY-MM-DD HH:mm')}>
-                    <ClockCircleOutlined className="ml-1" />
-                  </Tooltip>
-                </Text>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Text type="secondary" className="!text-[12px]">
-                  {a.module.code}
-                </Text>
-                <Text type="secondary" className="!text-[12px]">
-                  •
-                </Text>
-                <Text type="secondary" className="inline-flex items-center !text-[12px]">
-                  due {due.fromNow()}
-                  <Tooltip title={due.format('YYYY-MM-DD HH:mm')}>
-                    <ClockCircleOutlined className="ml-1" />
-                  </Tooltip>
-                </Text>
-              </div>
-            );
+          const targetMoment = view === 'upcoming' ? opens : due;
+          const targetLabel = view === 'upcoming' ? 'opens' : 'due';
+          const dateDisplay = (
+            <Text type="secondary" className="inline-flex items-center !text-[12px]">
+              {targetLabel} {targetMoment.fromNow()}
+              <Tooltip title={targetMoment.format('YYYY-MM-DD HH:mm')}>
+                <ClockCircleOutlined className="ml-1" />
+              </Tooltip>
+            </Text>
+          );
+
+          const timing = minimal
+            ? null
+            : (
+                <div className="flex items-center gap-2">
+                  <Text type="secondary" className="!text-[12px]">
+                    {a.module.code}
+                  </Text>
+                  <Text type="secondary" className="!text-[12px]">
+                    •
+                  </Text>
+                  {dateDisplay}
+                </div>
+              );
 
           return (
             <List.Item
@@ -239,17 +238,20 @@ const AssignmentsPanel: React.FC<Props> = ({ role, viewLabels, moduleId }) => {
                   <Text strong className="truncate">
                     {a.name}
                   </Text>
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    {showGrade && <PercentageTag value={gradePercentage!} />}
-                    {showSubmissions && a.submissionSummary && (
-                      <Tag color="blue" className="!m-0">
-                        {a.submissionSummary.submitted}/{a.submissionSummary.totalStudents}{' '}
-                        submitted
-                      </Tag>
-                    )}
-                  </div>
+                  {(minimal || showGrade || (showSubmissions && a.submissionSummary)) && (
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      {minimal && <span>{dateDisplay}</span>}
+                      {showGrade && <PercentageTag value={gradePercentage!} />}
+                      {showSubmissions && a.submissionSummary && (
+                        <Tag color="blue" className="!m-0">
+                          {a.submissionSummary.submitted}/{a.submissionSummary.totalStudents}{' '}
+                          submitted
+                        </Tag>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-0.5">{timing}</div>
+                {timing && <div className="flex flex-col gap-0.5">{timing}</div>}
                 {typeof pct === 'number' && (
                   <div className="pt-1">
                     <Progress

@@ -14,7 +14,6 @@ type MenuKey =
   | 'assignment'
   | 'execution'
   | 'marking'
-  | 'output'
   | 'coverage'
   | 'security'
   | 'gatlam'
@@ -37,7 +36,6 @@ const ConfigLayout = () => {
   const selectedKey: MenuKey = useMemo(() => {
     if (path.endsWith('/marking')) return 'marking';
     if (path.endsWith('/execution')) return 'execution';
-    if (path.endsWith('/output')) return 'output';
     if (path.endsWith('/code-coverage')) return 'coverage';
     if (path.endsWith('/security')) return 'security';
     if (path.endsWith('/gatlam')) return 'gatlam';
@@ -69,7 +67,6 @@ const ConfigLayout = () => {
       { key: 'assignment', label: <Link to="assignment">Assignment</Link> },
       { key: 'execution', label: <Link to="execution">Execution Limits</Link> },
       { key: 'marking', label: <Link to="marking">Marking & Feedback</Link> },
-      { key: 'output', label: <Link to="output">Output</Link> },
       { key: 'coverage', label: <Link to="code-coverage">Code Coverage</Link> },
       { key: 'security', label: <Link to="security">Security</Link> },
     ],

@@ -27,8 +27,10 @@ const AnnouncementsPanel: React.FC<{
   role?: ModuleRole;
   year?: number;
   perPage?: number;
+  limit?: number;
   moduleId?: number;
-}> = ({ role, year, perPage = 20, moduleId }) => {
+  minimal?: boolean;
+}> = ({ role, year, perPage = 20, limit, moduleId, minimal = false }) => {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'pinned'>('all');
   const [items, setItems] = useState<MyAnnouncementItem[]>([]);
@@ -39,13 +41,15 @@ const AnnouncementsPanel: React.FC<{
   const [page, setPage] = useState(1);
   const [, setTotal] = useState(0);
 
+  const pageSize = limit ?? perPage;
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await getMyAnnouncements({
         page,
-        per_page: perPage,
+        per_page: pageSize,
         sort: DEFAULT_SORT,
         role,
         year,
@@ -71,7 +75,7 @@ const AnnouncementsPanel: React.FC<{
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, role, year, moduleId, filter]);
+  }, [page, pageSize, role, year, moduleId, filter]);
 
   useEffect(() => {
     // reset to page 1 when filter changes
@@ -90,6 +94,8 @@ const AnnouncementsPanel: React.FC<{
     });
     return sorted;
   }, [items]);
+
+  const visible = useMemo(() => (limit ? ordered.slice(0, limit) : ordered), [limit, ordered]);
 
   const filterOptions = [
     { label: 'All', value: 'all' },
@@ -137,11 +143,19 @@ const AnnouncementsPanel: React.FC<{
             />
           ),
         }}
-        dataSource={ordered}
+        dataSource={visible}
         renderItem={(a) => {
           const author = a.user?.username ?? `User ${a.user?.id ?? a.user_id}`;
           const moduleCode = a.module?.code ?? `M-${a.module_id}`;
           const created = dayjs(a.created_at);
+          const dateDisplay = (
+            <Text type="secondary" className="inline-flex items-center !text-[12px]">
+              <Tooltip title={created.format('YYYY-MM-DD HH:mm')}>
+                <ClockCircleOutlined className="mr-1" />
+              </Tooltip>
+              {created.fromNow()}
+            </Text>
+          );
 
           return (
             <List.Item
@@ -154,30 +168,31 @@ const AnnouncementsPanel: React.FC<{
                   <Text strong className="truncate">
                     {a.title}
                   </Text>
-                  {a.pinned && <PinnedTag />}
+                  {(minimal || a.pinned) && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {a.pinned && <PinnedTag />}
+                      {minimal && dateDisplay}
+                    </div>
+                  )}
                 </div>
 
-                {/* Meta */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Text type="secondary" className="!text-[12px]">
-                    {moduleCode}
-                  </Text>
-                  <Text type="secondary" className="!text-[12px]">
-                    •
-                  </Text>
-                  <Text type="secondary" className="!text-[12px]">
-                    {author}
-                  </Text>
-                  <Text type="secondary" className="!text-[12px]">
-                    •
-                  </Text>
-                  <Text type="secondary" className="inline-flex items-center !text-[12px]">
-                    <Tooltip title={created.format('YYYY-MM-DD HH:mm')}>
-                      <ClockCircleOutlined className="mr-1" />
-                    </Tooltip>
-                    {created.fromNow()}
-                  </Text>
-                </div>
+                {!minimal && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Text type="secondary" className="!text-[12px]">
+                      {moduleCode}
+                    </Text>
+                    <Text type="secondary" className="!text-[12px]">
+                      •
+                    </Text>
+                    <Text type="secondary" className="!text-[12px]">
+                      {author}
+                    </Text>
+                    <Text type="secondary" className="!text-[12px]">
+                      •
+                    </Text>
+                    {dateDisplay}
+                  </div>
+                )}
               </div>
             </List.Item>
           );

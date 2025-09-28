@@ -60,7 +60,6 @@ mod tests {
                 "pass_mark": pass_mark
             },
             "project": {"language": "cpp", "submission_mode": "manual"},
-            "output": {"stdout": true, "stderr": false},
             "gatlam": {}
         });
 

@@ -13,10 +13,12 @@ dayjs.extend(relativeTime);
 type GradesPanelProps = {
   moduleId?: number;
   perPage?: number;
+  limit?: number;
+  minimal?: boolean;
 };
 
 const { Text, Title } = Typography;
-const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => {
+const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50, limit, minimal = false }) => {
   const { isSm } = useUI();
   const navigate = useNavigate();
 
@@ -24,11 +26,13 @@ const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const pageSize = limit ?? perPage;
+
   const fetchGrades = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getMyGrades({ page: 1, per_page: perPage, module_id: moduleId });
+      const res = await getMyGrades({ page: 1, per_page: pageSize, module_id: moduleId });
       if (!res.success) throw new Error(res.message || 'Failed to load grades');
 
       const rows = Array.isArray(res.data?.grades) ? res.data?.grades : [];
@@ -39,7 +43,7 @@ const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => 
     } finally {
       setLoading(false);
     }
-  }, [moduleId, perPage]);
+  }, [moduleId, pageSize]);
 
   useEffect(() => {
     void fetchGrades();
@@ -48,7 +52,7 @@ const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => 
   // Show grades from the last 30 days only
   const visible = useMemo(() => {
     const cutoff = dayjs().subtract(30, 'day');
-    return grades
+    const recent = grades
       .filter((g) => {
         const ts = dayjs(g.updated_at || g.created_at);
         return ts.isValid() && ts.isAfter(cutoff);
@@ -58,7 +62,8 @@ const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => 
           dayjs(b.updated_at || b.created_at).valueOf() -
           dayjs(a.updated_at || a.created_at).valueOf(),
       );
-  }, [grades]);
+    return limit ? recent.slice(0, limit) : recent;
+  }, [grades, limit]);
 
   return (
     <div className="h-full min-h-0 flex flex-col w-full bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
@@ -120,31 +125,32 @@ const GradesPanel: React.FC<GradesPanelProps> = ({ moduleId, perPage = 50 }) => 
                   <PercentageTag value={roundedPercentage} />
                 </div>
 
-                {/* Meta */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Text type="secondary" className="!text-[12px]">
-                    {moduleCode}
-                  </Text>
-                  {Number.isFinite(earned) && Number.isFinite(total) && (
-                    <>
-                      <Text type="secondary" className="!text-[12px]">
-                        •
-                      </Text>
-                      <Text type="secondary" className="!text-[12px]">
-                        {earned}/{total} marks
-                      </Text>
-                    </>
-                  )}
-                  <Text type="secondary" className="!text-[12px]">
-                    •
-                  </Text>
-                  <Text type="secondary" className="inline-flex items-center !text-[12px]">
-                    <Tooltip title={when.format('YYYY-MM-DD HH:mm')}>
-                      <ClockCircleOutlined className="mr-1" />
-                    </Tooltip>
-                    graded {when.fromNow()}
-                  </Text>
-                </div>
+                {!minimal && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Text type="secondary" className="!text-[12px]">
+                      {moduleCode}
+                    </Text>
+                    {Number.isFinite(earned) && Number.isFinite(total) && (
+                      <>
+                        <Text type="secondary" className="!text-[12px]">
+                          •
+                        </Text>
+                        <Text type="secondary" className="!text-[12px]">
+                          {earned}/{total} marks
+                        </Text>
+                      </>
+                    )}
+                    <Text type="secondary" className="!text-[12px]">
+                      •
+                    </Text>
+                    <Text type="secondary" className="inline-flex items-center !text-[12px]">
+                      <Tooltip title={when.format('YYYY-MM-DD HH:mm')}>
+                        <ClockCircleOutlined className="mr-1" />
+                      </Tooltip>
+                      graded {when.fromNow()}
+                    </Text>
+                  </div>
+                )}
               </div>
             </List.Item>
           );

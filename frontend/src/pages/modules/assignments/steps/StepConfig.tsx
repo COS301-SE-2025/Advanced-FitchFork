@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Collapse,
   type CollapseProps,
@@ -32,7 +32,7 @@ const { Title, Paragraph, Text } = Typography;
 
 const StepConfig = () => {
   const module = useModule();
-  const { assignmentId, config, setConfig, refreshAssignment, setStepSaveHandler, next } =
+  const { assignmentId, config, setConfig, refreshAssignment, setStepSaveHandler } =
     useAssignmentSetup();
 
   const [form] = Form.useForm();
@@ -86,10 +86,6 @@ const StepConfig = () => {
       allow_late_submissions: c.marking.late?.allow_late_submissions ?? false,
       late_window_minutes: c.marking.late?.late_window_minutes ?? 0,
       late_max_percent: c.marking.late?.late_max_percent ?? 100,
-      // Output
-      stdout: c.output.stdout,
-      stderr: c.output.stderr,
-      retcode: c.output.retcode,
       // Security
       password_enabled: c.security.password_enabled,
       password_pin: c.security.password_pin ?? '',
@@ -116,10 +112,6 @@ const StepConfig = () => {
     });
   }, [config, form]);
 
-  useEffect(() => {
-    setStepSaveHandler?.(1, async () => true);
-  }, [setStepSaveHandler]);
-
   const onResetToDefaults = async () => {
     if (!assignmentId) return;
     setSaving(true);
@@ -137,96 +129,109 @@ const StepConfig = () => {
     }
   };
 
-  const onSave = async (advance = false) => {
-    if (!assignmentId || !config) return;
-    try {
+  const persistConfig = useCallback(
+    async ({ skipRefresh = false }: { skipRefresh?: boolean } = {}) => {
+      if (!assignmentId || !config) return false;
       setSaving(true);
-      const v = await form.validateFields();
+      try {
+        const v = await form.validateFields();
 
-      // Normalize lists from multi-selects
-      const dissalowed_code: string[] = (v.dissalowed_code || [])
-        .map((s: any) => String(s).trim())
-        .filter(Boolean);
+        // Normalize lists from multi-selects
+        const dissalowed_code: string[] = (v.dissalowed_code || [])
+          .map((s: any) => String(s).trim())
+          .filter(Boolean);
 
-      const allowed_cidrs: string[] = (v.allowed_cidrs || [])
-        .map((s: any) => String(s).trim())
-        .filter(Boolean);
+        const allowed_cidrs: string[] = (v.allowed_cidrs || [])
+          .map((s: any) => String(s).trim())
+          .filter(Boolean);
 
-      const code_coverage_whitelist: string[] = (v.code_coverage_whitelist || [])
-        .map((s: any) => String(s).trim())
-        .filter(Boolean);
+        const code_coverage_whitelist: string[] = (v.code_coverage_whitelist || [])
+          .map((s: any) => String(s).trim())
+          .filter(Boolean);
 
-      const c = config; // use current server-backed object as base
+        const c = config; // use current server-backed object as base
 
-      const updated: AssignmentConfig = {
-        ...c,
-        project: { ...c.project, language: v.language, submission_mode: v.submission_mode },
-        execution: {
-          ...c.execution,
-          timeout_secs: v.timeout_secs,
-          max_memory: v.max_memory,
-          max_cpus: v.max_cpus,
-          max_uncompressed_size: v.max_uncompressed_size,
-          max_processes: v.max_processes,
-        },
-        marking: {
-          ...c.marking,
-          marking_scheme: v.marking_scheme,
-          feedback_scheme: v.feedback_scheme,
-          grading_policy: v.grading_policy,
-          deliminator: v.deliminator,
-          max_attempts: v.max_attempts,
-          limit_attempts: v.limit_attempts,
-          pass_mark: v.pass_mark,
-          allow_practice_submissions: v.allow_practice_submissions,
-          dissalowed_code,
-          late: {
-            allow_late_submissions: !!v.allow_late_submissions,
-            late_window_minutes: Number(v.late_window_minutes ?? 0),
-            late_max_percent: Number(v.late_max_percent ?? 100),
+        const updated: AssignmentConfig = {
+          ...c,
+          project: { ...c.project, language: v.language, submission_mode: v.submission_mode },
+          execution: {
+            ...c.execution,
+            timeout_secs: v.timeout_secs,
+            max_memory: v.max_memory,
+            max_cpus: v.max_cpus,
+            max_uncompressed_size: v.max_uncompressed_size,
+            max_processes: v.max_processes,
           },
-        },
-        output: { ...c.output, stdout: v.stdout, stderr: v.stderr, retcode: v.retcode },
-        security: {
-          ...c.security,
-          password_enabled: v.password_enabled,
-          password_pin: v.password_pin ? String(v.password_pin) : null,
-          cookie_ttl_minutes: v.cookie_ttl_minutes,
-          bind_cookie_to_user: v.bind_cookie_to_user,
-          allowed_cidrs,
-        },
-        gatlam: {
-          ...c.gatlam,
-          population_size: v.population_size,
-          number_of_generations: v.number_of_generations,
-          selection_size: v.selection_size,
-          reproduction_probability: v.reproduction_probability,
-          crossover_probability: v.crossover_probability,
-          mutation_probability: v.mutation_probability,
-          crossover_type: v.crossover_type,
-          mutation_type: v.mutation_type,
-          omega1: v.omega1,
-          omega2: v.omega2,
-          omega3: v.omega3,
-          task_spec: { ...c.gatlam.task_spec }, // unchanged here
-          verbose: v.verbose,
-          max_parallel_chromosomes: v.max_parallel_chromosomes,
-        },
-        code_coverage: {
-          ...c.code_coverage,
-          code_coverage_weight: v.code_coverage_required,
-          whitelist: code_coverage_whitelist,
-        },
-      };
+          marking: {
+            ...c.marking,
+            marking_scheme: v.marking_scheme,
+            feedback_scheme: v.feedback_scheme,
+            grading_policy: v.grading_policy,
+            deliminator: v.deliminator,
+            max_attempts: v.max_attempts,
+            limit_attempts: v.limit_attempts,
+            pass_mark: v.pass_mark,
+            allow_practice_submissions: v.allow_practice_submissions,
+            dissalowed_code,
+            late: {
+              allow_late_submissions: !!v.allow_late_submissions,
+              late_window_minutes: Number(v.late_window_minutes ?? 0),
+              late_max_percent: Number(v.late_max_percent ?? 100),
+            },
+          },
+          security: {
+            ...c.security,
+            password_enabled: v.password_enabled,
+            password_pin: v.password_pin ? String(v.password_pin) : null,
+            cookie_ttl_minutes: v.cookie_ttl_minutes,
+            bind_cookie_to_user: v.bind_cookie_to_user,
+            allowed_cidrs,
+          },
+          gatlam: {
+            ...c.gatlam,
+            population_size: v.population_size,
+            number_of_generations: v.number_of_generations,
+            selection_size: v.selection_size,
+            reproduction_probability: v.reproduction_probability,
+            crossover_probability: v.crossover_probability,
+            mutation_probability: v.mutation_probability,
+            crossover_type: v.crossover_type,
+            mutation_type: v.mutation_type,
+            omega1: v.omega1,
+            omega2: v.omega2,
+            omega3: v.omega3,
+            task_spec: { ...c.gatlam.task_spec }, // unchanged here
+            verbose: v.verbose,
+            max_parallel_chromosomes: v.max_parallel_chromosomes,
+          },
+          code_coverage: {
+            ...c.code_coverage,
+            code_coverage_weight: v.code_coverage_required,
+            whitelist: code_coverage_whitelist,
+          },
+        };
 
-      const res = await setAssignmentConfig(module.id, assignmentId, updated);
-      setConfig(res.data ?? updated);
-      await refreshAssignment?.();
-      if (advance) await next?.();
-    } finally {
-      setSaving(false);
-    }
-  };
+        const res = await setAssignmentConfig(module.id, assignmentId, updated);
+        setConfig(res.data ?? updated);
+        if (!skipRefresh) await refreshAssignment?.();
+        return true;
+      } catch (err) {
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [assignmentId, config, form, module.id, refreshAssignment, setConfig],
+  );
+
+  const onSave = useCallback(async () => persistConfig({ skipRefresh: false }), [persistConfig]);
+
+  const stepSaveHandler = useCallback(() => persistConfig({ skipRefresh: true }), [persistConfig]);
+
+  useEffect(() => {
+    if (!setStepSaveHandler) return;
+    setStepSaveHandler(1, stepSaveHandler);
+  }, []);
 
   // Helper to render a section label with a subtle help icon
   const sectionLabel = (title: string, helpHref: string, tipText: string) => (
@@ -400,28 +405,6 @@ const StepConfig = () => {
             </Space>
           </Space>
         </>
-      ),
-    },
-    {
-      key: 'output',
-      label: sectionLabel('Execution Output', '/help/assignments/config/output', 'Output help'),
-      children: (
-        <Space direction="vertical" size="large" className="w-full">
-          <Typography.Paragraph type="secondary" className="!mb-0">
-            Choose which streams to capture and compare against Memo Output.
-          </Typography.Paragraph>
-          <Space wrap size="large">
-            <Form.Item name="stdout" label="Capture stdout" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item name="stderr" label="Capture stderr" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item name="retcode" label="Include return code" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </Space>
-        </Space>
       ),
     },
     {
@@ -602,8 +585,8 @@ const StepConfig = () => {
         <Tip iconOnly newTab to="/help/assignments/config/overview" text="Config help" />
       </div>
       <Paragraph type="secondary" className="!mb-2">
-        Defaults are applied on the server. Tweak any section below. Save in place or{' '}
-        <b>Save &amp; Continue</b> to move on.
+        Defaults are applied on the server. Tweak any section below. Save in place or use{' '}
+        <b>Next</b> to save and continue.
       </Paragraph>
 
       <Form form={form} layout="vertical">
@@ -617,11 +600,8 @@ const StepConfig = () => {
           <Button onClick={onResetToDefaults} disabled={saving}>
             Reset to Defaults
           </Button>
-          <Button type="default" onClick={() => onSave(false)} loading={saving}>
+          <Button type="default" onClick={() => void onSave()} loading={saving}>
             Save
-          </Button>
-          <Button type="primary" onClick={() => onSave(true)} loading={saving}>
-            Save &amp; Continue
           </Button>
         </div>
       </Form>

@@ -34,6 +34,7 @@ const StepFilesResources = () => {
   // interpreter UI state
   const [command, setCommand] = useState('');
   const [interpreterInfo, setInterpreterInfo] = useState<InterpreterInfo | null>(null);
+  const [uploading, setUploading] = useState<RowKey | null>(null);
   useEffect(() => {
     (async () => {
       if (!assignmentId) return;
@@ -136,22 +137,36 @@ const StepFilesResources = () => {
   const handleUploadZip = async (key: RowKey, file: File) => {
     if (!assignmentId) return false;
     if (key === 'interpreter') return false; // handled elsewhere
-    const res = await uploadAssignmentFile(module.id, assignmentId, key as any, file);
-    if (res.success) {
-      await refreshAssignment?.();
+    if (uploading) return false;
+
+    setUploading(key);
+    try {
+      const res = await uploadAssignmentFile(module.id, assignmentId, key as any, file);
+      if (res.success) {
+        await refreshAssignment?.();
+      }
+    } finally {
+      setUploading(null);
     }
     return false;
   };
 
   const handleUploadInterpreter = async (file: File) => {
     if (!assignmentId || !command.trim()) return false;
-    const res = await uploadInterpreter(module.id, assignmentId, file, command.trim());
-    if (res.success) {
-      setCommand('');
-      await refreshAssignment?.();
-      const info = await getInterpreterInfo(module.id, assignmentId);
-      if (info.success) setInterpreterInfo(info.data);
-      return true;
+    if (uploading) return false;
+
+    setUploading('interpreter');
+    try {
+      const res = await uploadInterpreter(module.id, assignmentId, file, command.trim());
+      if (res.success) {
+        setCommand('');
+        await refreshAssignment?.();
+        const info = await getInterpreterInfo(module.id, assignmentId);
+        if (info.success) setInterpreterInfo(info.data);
+        return true;
+      }
+    } finally {
+      setUploading(null);
     }
     return false;
   };
@@ -212,8 +227,11 @@ const StepFilesResources = () => {
                       beforeUpload={handleUploadInterpreter}
                       showUploadList={false}
                       accept="*/*"
+                      disabled={uploading === 'interpreter'}
                     >
-                      <Button icon={<UploadOutlined />}>Upload</Button>
+                      <Button icon={<UploadOutlined />} loading={uploading === 'interpreter'}>
+                        Upload
+                      </Button>
                     </Upload>
                     {interpreterInfo && (
                       <>
@@ -244,8 +262,11 @@ const StepFilesResources = () => {
                       accept=".zip"
                       beforeUpload={(file) => handleUploadZip(key, file)}
                       showUploadList={false}
+                      disabled={uploading === key}
                     >
-                      <Button icon={<UploadOutlined />}>Upload</Button>
+                      <Button icon={<UploadOutlined />} loading={uploading === key}>
+                        Upload
+                      </Button>
                     </Upload>
                     {uploaded.length === 1 && (
                       <Button

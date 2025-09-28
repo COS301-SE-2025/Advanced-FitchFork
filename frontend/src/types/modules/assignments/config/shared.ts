@@ -156,16 +156,6 @@ export interface AssignmentMarkingConfig {
   late: LateOptions;
 }
 
-/** Options for execution output capture (ExecutionOutputOptions). */
-export interface AssignmentOutputConfig {
-  /** Whether to capture stdout. */
-  stdout: boolean;
-  /** Whether to capture stderr. */
-  stderr: boolean;
-  /** Whether to include return code. */
-  retcode: boolean;
-}
-
 /**
  * ---- GATLAM-related config (mirrors Rust GATLAM & TaskSpecConfig) ----
  */
@@ -234,7 +224,6 @@ export interface AssignmentConfig {
   execution: AssignmentExecutionConfig;
   marking: AssignmentMarkingConfig;     // ← includes .late now
   project: AssignmentProjectConfig;
-  output: AssignmentOutputConfig;
   gatlam: GatlamConfig;
   security: AssignmentSecurityConfig;
   code_coverage: CodeCoverage;
