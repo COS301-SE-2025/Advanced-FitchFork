@@ -16,6 +16,7 @@ import UsersList from './pages/users/UsersList';
 import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
 import CalendarPage from './pages/shared/CalendarPage';
+import ActivityPage from './pages/Activity';
 
 import AppLayout from './layouts/AppLayout';
 import ModuleLayout from './layouts/ModuleLayout';
@@ -167,6 +168,7 @@ export default function App() {
             </Route>
 
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
 
             {/* Admin-only routes */}
             <Route element={<ProtectedAdminRoute />}>

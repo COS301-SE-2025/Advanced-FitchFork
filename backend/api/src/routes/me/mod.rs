@@ -16,6 +16,7 @@
 use axum::{Router, routing::get};
 use util::state::AppState;
 
+pub mod activity;
 pub mod announcements;
 pub mod assignments;
 pub mod events;
@@ -34,6 +35,7 @@ pub mod tickets;
 /// - `GET /me/submissions`   → fetch submissions for the logged-in user
 /// - `GET /me/events`        → fetch events for the logged-in user
 /// - `GET /me/plagiarism`    → fetch plagiarism cases for lecturer/assistant lecturer roles
+/// - `GET /me/activity`      → aggregated, paginated activity feed for the logged-in user
 ///
 /// All routes operate on the currently authenticated user and require the application state.
 pub fn me_routes() -> Router<AppState> {
@@ -45,4 +47,5 @@ pub fn me_routes() -> Router<AppState> {
         .route("/submissions", get(submissions::get_my_submissions))
         .route("/events", get(events::get_my_events))
         .route("/plagiarism", get(plagiarism::get_my_plagiarism_cases))
+        .route("/activity", get(activity::get_my_activity))
 }

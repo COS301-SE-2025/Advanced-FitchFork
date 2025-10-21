@@ -5,6 +5,7 @@ import {
   UserOutlined,
   AppstoreOutlined,
   CalendarOutlined,
+  HistoryOutlined,
   QuestionCircleOutlined,
 } from '@ant-design/icons';
 import React from 'react';
@@ -38,6 +39,11 @@ export const useTopMenuItems = (): MenuItem[] => {
       key: '/calendar',
       icon: React.createElement(CalendarOutlined),
       label: 'Calendar',
+    },
+    {
+      key: '/activity',
+      icon: React.createElement(HistoryOutlined),
+      label: 'Activity',
     },
   ];
 
@@ -90,7 +96,7 @@ export const BOTTOM_MENU_ITEMS: MenuItem[] = [
     icon: React.createElement(LogoutOutlined),
     label: 'Logout',
   },
-    {
+  {
     key: '/help',
     label: 'Help',
     icon: React.createElement(QuestionCircleOutlined),

@@ -184,3 +184,14 @@ body,
     @apply dark:!bg-black/60 backdrop-blur-sm;
   }
 }
+
+/* Kill the white square behind custom dots */
+.activity-timeline .ant-timeline-item-head {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Optional: also ensure the head when 'custom' has no default padding fill */
+.activity-timeline .ant-timeline-item-head-custom {
+  background: transparent !important;
+}
