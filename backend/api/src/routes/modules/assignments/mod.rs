@@ -187,10 +187,7 @@ pub fn assignment_routes(app_state: AppState) -> Router<AppState> {
         )
         .nest(
             "/{assignment_id}/memo_output",
-            memo_output_routes().layer(from_fn_with_state(
-                app_state.clone(),
-                allow_assistant_lecturer,
-            )),
+            memo_output_routes(app_state.clone()),
         )
         .nest(
             "/{assignment_id}/mark_allocator",
