@@ -1,11 +1,10 @@
 import { useRef, useState, type CSSProperties, type MouseEventHandler } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BulbFilled, BulbOutlined, GithubOutlined, LinkedinOutlined } from '@ant-design/icons';
+import { GithubOutlined, LinkedinOutlined } from '@ant-design/icons';
 import { Avatar, Button, Col, Row, Tag, Tooltip, Typography } from 'antd';
 
 import type { TeamMember } from './teamData';
 import { heroSummary, teamMembers } from './teamData';
-import { useTheme } from '@/context/ThemeContext';
+import MarketingHeader from '@/components/marketing/MarketingHeader';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -105,50 +104,13 @@ const TeamMemberCard = ({ member }: TeamMemberCardProps) => {
 };
 
 const TeamOverview = () => {
-  const navigate = useNavigate();
-  const { isDarkMode, setMode } = useTheme();
-
-  const toggleTheme = () => setMode(isDarkMode ? 'light' : 'dark');
-
   return (
     <div
       className="h-screen overflow-y-auto overscroll-contain bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-100"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <div className="min-h-full flex flex-col">
-        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur dark:bg-gray-950/80 w-full">
-          <div className="max-w-7xl mx-auto flex items-center justify-between py-6 px-6 min-w-0">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 sm:gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 rounded-md"
-            >
-              <img
-                src={isDarkMode ? '/ff_logo_dark.svg' : '/ff_logo_light.svg'}
-                alt="FitchFork logo"
-                className="h-8 w-8 shrink-0"
-              />
-              <Title
-                level={3}
-                className="!m-0 text-gray-900 dark:text-white whitespace-nowrap truncate max-w-[48vw] sm:max-w-none"
-              >
-                FitchFork
-              </Title>
-            </button>
-            <div className="flex items-center gap-2 sm:gap-3 flex-nowrap shrink-0">
-              <Button icon={isDarkMode ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} />
-              <Button type="text" onClick={() => navigate('/team')}>
-                Team
-              </Button>
-              <Button type="text" onClick={() => navigate('/login')}>
-                Login
-              </Button>
-              <Button type="primary" onClick={() => navigate('/signup')}>
-                Sign Up
-              </Button>
-            </div>
-          </div>
-        </header>
+        <MarketingHeader />
 
         <main className="flex-1 bg-gray-50 dark:bg-gray-950">
           <div className="mx-auto flex max-w-6xl flex-col px-6 py-16">

@@ -2,8 +2,6 @@ import type { ReactNode } from 'react';
 import { Button, Typography, Row, Col, Card, Carousel, Space, Tag, Steps } from 'antd';
 import {
   CheckCircleOutlined,
-  BulbFilled,
-  BulbOutlined,
   RocketOutlined,
   SafetyCertificateOutlined,
   LineChartOutlined,
@@ -19,6 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/context/ThemeContext';
 import TiltScreenshot from '@/components/TiltScreenshot';
+import MarketingHeader from '@/components/marketing/MarketingHeader';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -69,9 +68,7 @@ const sectionImages: Record<string, { light: string; dark: string }> = {
 
 const Landing = () => {
   const navigate = useNavigate();
-  const { isDarkMode, setMode } = useTheme();
-
-  const toggleTheme = () => setMode(isDarkMode ? 'light' : 'dark');
+  const { isDarkMode } = useTheme();
   const carouselImages = isDarkMode ? darkImages : lightImages;
 
   type ImagePlaceholderProps = { label: string };
@@ -402,39 +399,7 @@ const Landing = () => {
     >
       <div className="min-h-full flex flex-col">
         {/* Header */}
-        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur dark:bg-gray-950/80 w-full">
-          <div className="max-w-7xl mx-auto flex items-center justify-between py-6 px-6 min-w-0">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 sm:gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 rounded-md"
-            >
-              <img
-                src={isDarkMode ? '/ff_logo_dark.svg' : '/ff_logo_light.svg'}
-                alt="FitchFork logo"
-                className="h-8 w-8 shrink-0"
-              />
-              <Title
-                level={3}
-                className="!m-0 text-gray-900 dark:text-white whitespace-nowrap truncate max-w-[48vw] sm:max-w-none"
-              >
-                FitchFork
-              </Title>
-            </button>
-            <div className="flex items-center gap-2 sm:gap-3 flex-nowrap shrink-0">
-              <Button icon={isDarkMode ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} />
-              <Button type="text" onClick={() => navigate('/team')}>
-                Team
-              </Button>
-              <Button type="text" onClick={() => navigate('/login')}>
-                Login
-              </Button>
-              <Button type="primary" onClick={() => navigate('/signup')}>
-                Sign Up
-              </Button>
-            </div>
-          </div>
-        </header>
+        <MarketingHeader />
 
         {/* Main */}
         <main className="flex-1">
@@ -459,7 +424,12 @@ const Landing = () => {
                   <Button size="large" onClick={() => navigate('/login')}>
                     Explore the demo
                   </Button>
-                  <Button size="large" ghost onClick={() => navigate('/team')}>
+                  <Button
+                    size="large"
+                    type="default"
+                    className="!bg-white !text-gray-700 !border-gray-300 hover:!bg-gray-50 dark:!bg-gray-900 dark:!text-gray-100 dark:!border-gray-700 dark:hover:!bg-gray-800"
+                    onClick={() => navigate('/team')}
+                  >
                     Meet the team
                   </Button>
                 </div>
