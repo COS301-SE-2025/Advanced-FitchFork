@@ -16,6 +16,7 @@ import UsersList from './pages/users/UsersList';
 import UserView from './pages/users/UserView';
 import UnderConstruction from './pages/shared/status/UnderConstruction';
 import CalendarPage from './pages/shared/CalendarPage';
+import ActivityPage from './pages/Activity';
 
 import AppLayout from './layouts/AppLayout';
 import ModuleLayout from './layouts/ModuleLayout';
@@ -28,6 +29,7 @@ import HelpPageLayout from './layouts/HelpPageLayout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import AuthLayout from './layouts/AuthLayout';
+import TeamOverview from './pages/team/TeamOverview';
 
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
@@ -127,6 +129,7 @@ export default function App() {
           path="/"
           element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
+        <Route path="/team" element={<TeamOverview />} />
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -167,6 +170,7 @@ export default function App() {
             </Route>
 
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
 
             {/* Admin-only routes */}
             <Route element={<ProtectedAdminRoute />}>

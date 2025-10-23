@@ -142,6 +142,12 @@ impl Related<user::Entity> for Entity {
     }
 }
 
+impl Related<assignment::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Assignment.def()
+    }
+}
+
 impl Model {
     /// Computes the absolute path to the stored file on disk.
     ///
