@@ -29,6 +29,7 @@ import HelpPageLayout from './layouts/HelpPageLayout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import AuthLayout from './layouts/AuthLayout';
+import TeamOverview from './pages/team/TeamOverview';
 
 import ProtectedAuthRoute from './components/routes/ProtectedAuthRoute';
 import ProtectedAdminRoute from './components/routes/ProtectedAdminRoute';
@@ -128,6 +129,7 @@ export default function App() {
           path="/"
           element={user && !isExpired() ? <Navigate to="/dashboard" replace /> : <Landing />}
         />
+        <Route path="/team" element={<TeamOverview />} />
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

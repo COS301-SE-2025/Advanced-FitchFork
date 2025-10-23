@@ -404,7 +404,11 @@ const Landing = () => {
         {/* Header */}
         <header className="sticky top-0 z-50 bg-white/80 backdrop-blur dark:bg-gray-950/80 w-full">
           <div className="max-w-7xl mx-auto flex items-center justify-between py-6 px-6 min-w-0">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 sm:gap-3 min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 rounded-md"
+            >
               <img
                 src={isDarkMode ? '/ff_logo_dark.svg' : '/ff_logo_light.svg'}
                 alt="FitchFork logo"
@@ -416,9 +420,12 @@ const Landing = () => {
               >
                 FitchFork
               </Title>
-            </div>
+            </button>
             <div className="flex items-center gap-2 sm:gap-3 flex-nowrap shrink-0">
               <Button icon={isDarkMode ? <BulbFilled /> : <BulbOutlined />} onClick={toggleTheme} />
+              <Button type="text" onClick={() => navigate('/team')}>
+                Team
+              </Button>
               <Button type="text" onClick={() => navigate('/login')}>
                 Login
               </Button>
@@ -451,6 +458,9 @@ const Landing = () => {
                   </Button>
                   <Button size="large" onClick={() => navigate('/login')}>
                     Explore the demo
+                  </Button>
+                  <Button size="large" ghost onClick={() => navigate('/team')}>
+                    Meet the team
                   </Button>
                 </div>
               </div>
