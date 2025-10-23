@@ -520,10 +520,11 @@ const AssignmentLayout = () => {
                         (isUnlimitedAttempts ? (
                           <Tag
                             color="blue"
-                            className="!text-xs !font-medium !h-6 !px-2 !flex items-center"
+                            className="!text-xs !font-medium !h-6 !px-2 !flex !items-center !gap-1"
                             title="Unlimited attempts"
                           >
-                            Unlimited Attempts
+                            <span>Attempts</span>
+                            <span className=" text-xl">∞</span>
                           </Tag>
                         ) : attempts ? (
                           <Tag
