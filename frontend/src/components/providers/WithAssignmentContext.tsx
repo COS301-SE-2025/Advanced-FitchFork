@@ -70,7 +70,8 @@ export default function WithAssignmentContext() {
 
   const isLecturerLike =
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
-  const isStaffLike = isLecturerLike || auth.isTutor(module.id);
+  const isTutor = auth.isTutor(module.id);
+  const isStaffLike = isLecturerLike || isTutor;
 
   const refreshAssignmentStats = useCallback(async () => {
     if (!isStaffLike || Number.isNaN(assignmentIdNum)) {
@@ -116,8 +117,64 @@ export default function WithAssignmentContext() {
         if (memoRes.success && memoRes.data) setMemoOutput(memoRes.data);
         if (allocatorRes.success && allocatorRes.data) setMarkAllocator(allocatorRes.data);
         setConfig(configRes.success ? (configRes.data ?? null) : null);
+      } else if (isTutor) {
+        // tutors → include memo output visibility
+        const [detailsRes, readinessRes, memoRes] = await Promise.all([
+          getAssignmentDetails(module.id, assignmentIdNum),
+          getAssignmentReadiness(module.id, assignmentIdNum),
+          getMemoOutput(module.id, assignmentIdNum),
+        ]);
+
+        if (!detailsRes.success) {
+          const msg = (detailsRes.message || '').toLowerCase();
+
+          // hard network/IP block → go to access denied page
+          if (msg.includes('ip') || msg.includes('not allowed') || msg.includes('forbidden')) {
+            navigate(`/modules/${module.id}/assignments/${assignmentIdNum}/access-denied`, {
+              replace: true,
+              state: { message: detailsRes.message },
+            });
+            return;
+          }
+
+          // password required/invalid → go to verify page
+          if (msg.includes('password') || msg.includes('pin')) {
+            const next = encodeURIComponent(window.location.pathname);
+            navigate(`/modules/${module.id}/assignments/${assignmentIdNum}/verify?next=${next}`, {
+              replace: true,
+            });
+            return;
+          }
+
+          // default fallback
+          navigate('/forbidden', { replace: true });
+          return;
+        }
+
+        if (detailsRes.success && detailsRes.data) {
+          const details = detailsRes.data;
+          setAssignment(details.assignment);
+          setAssignmentFiles(details.files);
+          setAttempts(details.attempts ?? null);
+          setBestMark(details.best_mark ?? null);
+          setPolicy(details.policy ?? null);
+
+          setBreadcrumbLabel(
+            `modules/${module.id}/assignments/${details.assignment.id}`,
+            details.assignment.name,
+          );
+        }
+
+        if (readinessRes.success) setReadiness(readinessRes.data);
+        if (memoRes.success && memoRes.data) {
+          setMemoOutput(memoRes.data);
+        } else {
+          setMemoOutput([]);
+        }
+        setMarkAllocator(null);
+        setConfig(null);
       } else {
-        // students / tutors → safe subset
+        // students → safe subset
         const [detailsRes, readinessRes] = await Promise.all([
           getAssignmentDetails(module.id, assignmentIdNum),
           getAssignmentReadiness(module.id, assignmentIdNum),
@@ -173,7 +230,7 @@ export default function WithAssignmentContext() {
     } finally {
       setLoading(false);
     }
-  }, [assignmentIdNum, module.id, isLecturerLike, refreshAssignmentStats]);
+  }, [assignmentIdNum, module.id, isLecturerLike, isTutor, refreshAssignmentStats]);
 
   useEffect(() => {
     if (!Number.isNaN(assignmentIdNum)) {
