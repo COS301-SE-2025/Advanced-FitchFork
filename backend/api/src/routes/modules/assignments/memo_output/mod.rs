@@ -28,9 +28,6 @@ pub fn memo_output_routes(app_state: AppState) -> Router<AppState> {
         )
         .route(
             "/",
-            get(get_all_memo_outputs).route_layer(from_fn_with_state(
-                app_state,
-                allow_tutor,
-            )),
+            get(get_all_memo_outputs).route_layer(from_fn_with_state(app_state, allow_tutor)),
         )
 }
