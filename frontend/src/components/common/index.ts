@@ -10,3 +10,4 @@ export { default as ListPanel } from './ListPanel';
 export { default as IdTag } from "./IdTag";
 export { default as DateTime } from "./DateTime";
 export { default as PercentageTag } from "./PercentageTag";
+export { default as GatlamLink, GATLAM_PAPER_URL } from './GatlamLink';

@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react';
 import { Typography, Card, Space, Collapse, Table, Alert, Tag } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -205,7 +205,12 @@ export default function ConceptGATLAM() {
     extra: (
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
-          <li>GATLAM = Genetic Algorithm + task interpreter.</li>
+          <li>
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>{' '}
+            = Genetic Algorithm + task interpreter.
+          </li>
           <li>
             Interpreter checks safety, termination, time, exceptions, illegal output, and labeled
             matches.
@@ -232,7 +237,10 @@ export default function ConceptGATLAM() {
       <section id="what" className="scroll-mt-24" />
       <Title level={3}>What is GATLAM?</Title>
       <Paragraph className="mb-0">
-        <b>GATLAM</b> lets the grader explore a space of candidate inputs or parameters using a
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        lets the grader explore a space of candidate inputs or parameters using a
         <b> genetic algorithm (GA)</b>. Each candidate is run through the <b>interpreter</b>, which
         parses program output and checks a set of properties. The results are turned into a fitness
         signal that guides the GA to better candidates over several generations.

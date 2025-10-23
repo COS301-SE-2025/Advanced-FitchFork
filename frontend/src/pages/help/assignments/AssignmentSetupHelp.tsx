@@ -1,9 +1,10 @@
 // src/pages/help/assignments/setup/AssignmentSetupHelp.tsx
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Typography, Card, Alert, Space, Collapse, Table, Descriptions, Tag, Steps } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -20,7 +21,13 @@ const toc = [
   { key: 'trouble', href: '#trouble', title: 'Troubleshooting' },
 ];
 
-type Row = { key: string; item: string; purpose: string; required: string; where: string };
+type Row = {
+  key: string;
+  item: ReactNode;
+  purpose: ReactNode;
+  required: ReactNode;
+  where: ReactNode;
+};
 
 const filesCols = [
   { title: 'Item', dataIndex: 'item', key: 'item', width: 220 },
@@ -50,17 +57,57 @@ const filesRows: Row[] = [
     item: 'Main file',
     purpose:
       'Entry point your build/run uses. Prints labeled sections for each subsection using your delimiter (default: ###).',
-    required: 'Yes (except GATLAM mode)',
+    required: (
+      <>
+        Yes (except{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        mode)
+      </>
+    ),
     where: 'Assignments → Files → Main File',
   },
   {
     key: 'interp',
-    item: 'Interpreter (GATLAM mode)',
-    purpose:
-      'Runner that executes candidates and emits outputs for properties/labels. Replaces the need for a Main in GATLAM.',
-    required: 'Yes (GATLAM mode)',
-    where:
-      'Assignments → Files → Memo Files (see: Help → Assignments → Concepts → GATLAM & Interpreter)',
+    item: (
+      <>
+        Interpreter (
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        mode)
+      </>
+    ),
+    purpose: (
+      <>
+        Runner that executes candidates and emits outputs for properties/labels. Replaces the need
+        for a Main in{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        .
+      </>
+    ),
+    required: (
+      <>
+        Yes (
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        mode)
+      </>
+    ),
+    where: (
+      <>
+        Assignments → Files → Memo Files (see: Help → Assignments → Concepts →{' '}
+        <a href="/help/assignments/gatlam">Interpreter guide</a> ·{' '}
+        <GatlamLink tone="inherit" icon={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        paper)
+      </>
+    ),
   },
   {
     key: 'memo',
@@ -79,7 +126,12 @@ const filesRows: Row[] = [
   },
 ];
 
-type ReadinessRow = { key: string; item: string; why: string; how: string };
+type ReadinessRow = {
+  key: string;
+  item: ReactNode;
+  why: ReactNode;
+  how: ReactNode;
+};
 
 const readinessCols = [
   { title: 'Item', dataIndex: 'item', key: 'item', width: 220 },
@@ -97,7 +149,15 @@ const readinessRows: ReadinessRow[] = [
   {
     key: 'files',
     item: 'Files',
-    why: 'Grader needs a Makefile plus either Main (manual) or Interpreter (GATLAM), and your memo archive.',
+    why: (
+      <>
+        Grader needs a Makefile plus either Main (manual) or Interpreter (
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        ), and your memo archive.
+      </>
+    ),
     how: 'Assignments → Files. Upload Makefile (+ Main) or Interpreter, and Memo files. Optional: flat Specification.',
   },
   {
@@ -153,8 +213,13 @@ export default function AssignmentSetupHelp() {
             generated Memo Output, and set Mark Allocation.
           </li>
           <li>
-            Manual submissions need a <b>Main</b>; <Tag color="purple">gatlam</Tag> needs an{' '}
-            <b>Interpreter</b> instead.
+            Manual submissions need a <b>Main</b>;{' '}
+            <Tag color="purple">
+              <GatlamLink tone="inherit" icon={false} underline={false}>
+                gatlam
+              </GatlamLink>
+            </Tag>{' '}
+            needs an <b>Interpreter</b> instead.
           </li>
           <li>
             Specification ZIPs must be flat (no nested folders); memo generation and MOSS rely on
@@ -267,7 +332,13 @@ export default function AssignmentSetupHelp() {
         description={
           <>
             <div className="mb-1">
-              <Tag>manual</Tag>: requires <b>Main</b>. <Tag>gatlam</Tag>: requires{' '}
+              <Tag>manual</Tag>: requires <b>Main</b>.{' '}
+              <Tag>
+                <GatlamLink tone="inherit" icon={false} underline={false}>
+                  gatlam
+                </GatlamLink>
+              </Tag>{' '}
+              : requires{' '}
               <b>Interpreter</b> (no Main required).
             </div>
             <div>
@@ -281,8 +352,11 @@ export default function AssignmentSetupHelp() {
       <section id="files" className="scroll-mt-24" />
       <Title level={3}>Files you need</Title>
       <Paragraph className="mb-2">
-        Upload these under <b>Assignments → Files</b>. Manual mode needs Makefile + Main + Memo;
-        GATLAM replaces Main with an Interpreter. The Specification archive is optional but strongly
+        Upload these under <b>Assignments → Files</b>. Manual mode needs Makefile + Main + Memo;{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        replaces Main with an Interpreter. The Specification archive is optional but strongly
         recommended as the starter pack and plagiarism base files.
       </Paragraph>
       {/* md+ : normal table */}
@@ -355,8 +429,11 @@ export default function AssignmentSetupHelp() {
           prints.
         </li>
         <li>
-          Names should match the labels printed by your Main (or Interpreter in GATLAM) using{' '}
-          <Text code>###</Text>.
+          Names should match the labels printed by your Main (or Interpreter in{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>
+          ) using <Text code>###</Text>.
         </li>
         <li>
           Need per-task fixtures? Upload an <b>overwrite</b> archive on the task; those files are
@@ -375,9 +452,12 @@ export default function AssignmentSetupHelp() {
           Open the assignment and use the <b>Generate Memo Output</b> button in the top-right.
         </Descriptions.Item>
         <Descriptions.Item label="What happens">
-          The platform builds and runs your <Tag>Memo files</Tag> (or Interpreter in GATLAM) to
-          produce the expected output for each task. Each task’s memo output is saved as a separate
-          text file alongside the assignment.
+          The platform builds and runs your <Tag>Memo files</Tag> (or Interpreter in{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>
+          ) to produce the expected output for each task. Each task’s memo output is saved as a
+          separate text file alongside the assignment.
         </Descriptions.Item>
         <Descriptions.Item label="How to view">
           Go to <b>Tasks</b> → choose a <b>task</b> → choose a <b>subsection</b> to view the memo
@@ -406,8 +486,15 @@ export default function AssignmentSetupHelp() {
           <ul className="list-disc pl-5 mt-1">
             <li>Config (saved)</li>
             <li>
-              Files uploaded: Makefile, Main <i>(manual)</i> or Interpreter <i>(gatlam)</i>, Memo
-              files
+              Files uploaded: Makefile, Main <i>(manual)</i> or Interpreter{' '}
+              <i>
+                (
+                <GatlamLink tone="inherit" icon={false} underline={false}>
+                  gatlam
+                </GatlamLink>
+                )
+              </i>
+              , Memo files
             </li>
             <li>Tasks & Subsections (labels match program output)</li>
             <li>Memo Output (generated for all tasks)</li>
@@ -457,9 +544,12 @@ export default function AssignmentSetupHelp() {
           grader expects that shape.
         </li>
         <li>
-          If you’re using GATLAM, review <a href="/help/assignments/gatlam">GATLAM & Interpreter</a>{' '}
-          and
-          <a href="/help/assignments/config/gatlam">GATLAM Config</a> so the generated programs
+          If you’re using{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>
+          , review <a href="/help/assignments/gatlam">Interpreter help</a> and{' '}
+          <a href="/help/assignments/config/gatlam">Config guide</a> so the generated programs
           print the labels you need.
         </li>
         <li>
@@ -483,7 +573,11 @@ export default function AssignmentSetupHelp() {
                   uploaded, tasks/subsections defined, memo output generated, marks set.
                 </li>
                 <li>
-                  In GATLAM mode, ensure the <b>Interpreter</b> is uploaded (Main is not required).
+                  In{' '}
+                  <GatlamLink tone="inherit" icon={false} underline={false}>
+                    GATLAM
+                  </GatlamLink>{' '}
+                  mode, ensure the <b>Interpreter</b> is uploaded (Main is not required).
                 </li>
                 <li>
                   If using <b>rng</b> or <b>codecoverage</b> modes, Main/Interpreter are not

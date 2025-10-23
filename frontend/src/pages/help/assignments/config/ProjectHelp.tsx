@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react';
 import { Typography, Card, Space, Collapse, Table } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -52,7 +52,15 @@ const optionRows = [
     setting: 'Submission mode',
     meaning:
       'Controls how students submit or how runs are produced. Manual is the normal mode. Others are advanced.',
-    options: 'Manual • GATLAM • RNG • Code Coverage',
+    options: (
+      <>
+        Manual •{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        • RNG • Code Coverage
+      </>
+    ),
     def: 'Manual',
   },
 ];
@@ -165,7 +173,10 @@ export default function ProjectHelp() {
           <a href="/help/assignments/code-coverage">Code Coverage</a>).
         </li>
         <li>
-          <b>GATLAM</b> and <b>RNG</b> are advanced/experimental. Only enable them if your
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          and <b>RNG</b> are advanced/experimental. Only enable them if your
           assignment has been set up to use those workflows.
         </li>
       </ul>
@@ -237,7 +248,10 @@ export default function ProjectHelp() {
                   <a href="/help/assignments/code-coverage">Code Coverage</a>.
                 </li>
                 <li>
-                  <b>GATLAM / RNG</b>: ensure the rest of the config is prepared for these advanced
+                  <GatlamLink tone="inherit" icon={false} underline={false}>
+                    GATLAM
+                  </GatlamLink>{' '}
+                  / RNG: ensure the rest of the config is prepared for these advanced
                   flows.
                 </li>
               </ul>

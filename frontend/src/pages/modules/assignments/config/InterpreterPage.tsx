@@ -32,6 +32,7 @@ import {
 } from '@/services/modules/assignments/interpreter';
 import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
 import Tip from '@/components/common/Tip';
+import { GatlamLink } from '@/components/common';
 import useConfigBackTo from '@/hooks/useConfigBackTo';
 
 const { Text } = Typography;
@@ -169,6 +170,13 @@ export default function InterpreterPage() {
           <div className="space-y-2">
             <p className="text-gray-600 dark:text-gray-400">
               Upload, download, or remove the interpreter binary/script and specify its run command.
+            </p>
+            <p className="text-gray-600 dark:text-gray-400">
+              Required when submission mode is{' '}
+              <GatlamLink tone="inherit" icon={false} underline={false}>
+                GATLAM
+              </GatlamLink>
+              ; it executes generated candidates safely inside your checks.
             </p>
             {!hasInterpreter && (
               <Alert

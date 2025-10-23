@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/context/ThemeContext';
 import TiltScreenshot from '@/components/TiltScreenshot';
 import MarketingHeader from '@/components/marketing/MarketingHeader';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -124,7 +125,7 @@ const Landing = () => {
     { name: 'Python', icon: '/languages/python.svg' },
   ];
 
-  const gatlamSteps = [
+  const gatlamSteps: { title: string; description: ReactNode; icon: ReactNode }[] = [
     {
       title: 'Seed the rubric',
       description: 'Set mark weights and sample outputs with the allocator.',
@@ -132,8 +133,14 @@ const Landing = () => {
     },
     {
       title: 'Stress test code',
-      description:
-        'GATLAM mutates the runner executing the code before weak submissions slip through.',
+      description: (
+        <>
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          mutates the runner executing the code before weak submissions slip through.
+        </>
+      ),
       icon: <ExperimentOutlined />,
     },
     {
@@ -182,7 +189,11 @@ const Landing = () => {
       className="h-full bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-blue-500/10 dark:from-purple-500/20 dark:via-purple-500/10 dark:to-blue-500/20 border border-purple-300/40 dark:border-purple-500/30 shadow-sm"
     >
       <Title level={4} className="!mt-0 !mb-3 !text-purple-700 dark:!text-purple-200">
-        How GATLAM adapts your marking
+        How{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        adapts your marking
       </Title>
       <Steps
         direction="vertical"
@@ -256,9 +267,9 @@ const Landing = () => {
     key: string;
     icon: ReactNode;
     eyebrow: string;
-    title: string;
-    description: string;
-    bullets: string[];
+    title: ReactNode;
+    description: ReactNode;
+    bullets: ReactNode[];
     imageLabel: string;
     imageAlign: 'left' | 'right';
     visual?: ReactNode;
@@ -297,10 +308,31 @@ const Landing = () => {
       key: 'automation',
       icon: <RobotOutlined />,
       eyebrow: 'Automated marking and AI feedback',
-      title: 'Let GATLAM grade and explain every attempt',
-      description: 'GATLAM stresses code and pairs it with Gemini feedback your markers can trust.',
+      title: (
+        <>
+          Let{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          grade and explain every attempt
+        </>
+      ),
+      description: (
+        <>
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          stresses code and pairs it with Gemini feedback your markers can trust.
+        </>
+      ),
       bullets: [
-        'Seed the allocator once and let GATLAM evolve the rubric safely.',
+        <>
+          Seed the allocator once and let{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          evolve the rubric safely.
+        </>,
         'Genetic trials try to break code before submissions slip through.',
         'Gemini responses are prompt-hardened for fast, student-ready hints.',
       ],
@@ -513,8 +545,11 @@ const Landing = () => {
                         {section.description}
                       </Paragraph>
                       <ul className="mt-6 space-y-3 w-full max-w-3xl text-gray-600 dark:text-gray-300 text-center list-none p-0">
-                        {section.bullets.map((bullet) => (
-                          <li key={bullet} className="flex items-center justify-center gap-3">
+                        {section.bullets.map((bullet, bulletIndex) => (
+                          <li
+                            key={`${section.key}-process-bullet-${bulletIndex}`}
+                            className="flex items-center justify-center gap-3"
+                          >
                             <CheckCircleOutlined className="text-blue-500 dark:text-blue-400" />
                             <span className="max-w-xl">{bullet}</span>
                           </li>
@@ -560,9 +595,9 @@ const Landing = () => {
                         {section.description}
                       </Paragraph>
                       <ul className="mt-6 space-y-3 text-left">
-                        {section.bullets.map((bullet) => (
+                        {section.bullets.map((bullet, bulletIndex) => (
                           <li
-                            key={bullet}
+                            key={`${section.key}-bullet-${bulletIndex}`}
                             className="flex items-start gap-3 text-gray-600 dark:text-gray-300"
                           >
                             <CheckCircleOutlined className="mt-0.5 text-blue-500 dark:text-blue-400" />

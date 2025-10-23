@@ -2,7 +2,7 @@
 import { useEffect, useMemo } from 'react';
 import { Typography, Card, Space, Collapse, Table, Alert } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -190,7 +190,10 @@ export default function GATLAMHelp() {
       <Card className="mt-4" size="small" title="Quick facts" bordered>
         <ul className="list-disc pl-5">
           <li>
-            GATLAM is a <b>genetic algorithm</b> search mode for your assignment.
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>{' '}
+            is a <b>genetic algorithm</b> search mode for your assignment.
           </li>
           <li>
             It evaluates runs using <b>return codes</b>, optional <b>time bounds</b>,{' '}
@@ -214,7 +217,10 @@ export default function GATLAMHelp() {
       <section id="what" className="scroll-mt-24" />
       <Title level={3}>What is GATLAM mode?</Title>
       <Paragraph className="mb-0">
-        GATLAM runs a small genetic algorithm over your defined <b>genes</b> (ranges) to explore
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        runs a small genetic algorithm over your defined <b>genes</b> (ranges) to explore
         inputs/configs. Each candidate is judged using your <b>Task checks</b> (valid return codes,
         optional time bound, forbidden outputs) and by comparing labeled sections of stdout to the
         memo. Use this when you want the system to <i>search</i> for failures or improved solutions
@@ -228,8 +234,15 @@ export default function GATLAMHelp() {
         message="Enable the mode"
         description={
           <>
-            Set <b>Project → Submission mode</b> to <b>GATLAM</b>. Configuration below only applies
-            when GATLAM is enabled. See the full guide:{' '}
+            Set <b>Project → Submission mode</b> to{' '}
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>
+            . Configuration below only applies when{' '}
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>{' '}
+            is enabled. See the full guide:{' '}
             <a href="/help/assignments/gatlam">GATLAM help</a>.
           </>
         }

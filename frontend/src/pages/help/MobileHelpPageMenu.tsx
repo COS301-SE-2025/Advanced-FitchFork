@@ -23,16 +23,16 @@ function isSection(x: unknown): x is HelpMenuItem {
   return !!x && typeof x === 'object' && 'key' in (x as Record<string, unknown>);
 }
 
-/** Leaf guard */
-function isLeaf(x: unknown): x is Leaf {
-  return !!x && typeof (x as any).key === 'string' && typeof (x as any).label === 'string';
-}
-
 /** Convert arbitrary node to Leaf | null (for mapping) */
 function toLeaf(item: unknown): Leaf | null {
-  if (isLeaf(item)) return { key: item.key, label: item.label };
+  if (!item || typeof item !== 'object') return null;
+  const key = typeof (item as any).key === 'string' ? (item as any).key : null;
+  const label = typeof (item as any).label === 'string' ? (item as any).label : null;
+  if (key && label) return { key, label };
   return null;
 }
+
+const isLeaf = (value: Leaf | null): value is Leaf => !!value;
 
 function buildGroups(section: HelpMenuItem): MobileGroup[] {
   const groups: MobileGroup[] = [];

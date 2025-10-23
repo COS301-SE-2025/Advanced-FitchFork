@@ -4,6 +4,7 @@ import { Typography, Card, Space, Table, Alert, Tag, Descriptions } from 'antd';
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -26,7 +27,15 @@ const sectionsRows = [
   {
     key: 'project',
     area: 'Language & Mode',
-    what: 'Programming language and how students submit (Manual, RNG, Code Coverage, GATLAM).',
+    what: (
+      <>
+        Programming language and how students submit (Manual, RNG, Code Coverage,{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        ).
+      </>
+    ),
     link: <a href="/help/assignments/config/project">Open Language & Mode →</a>,
   },
   {
@@ -114,7 +123,11 @@ export default function ConfigOverviewHelp() {
         <Tag>Execution</Tag>
         <Tag>Marking</Tag>
         <Tag>Security</Tag>
-        <Tag>GATLAM</Tag>
+        <Tag>
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>
+        </Tag>
         <Tag>Code Coverage</Tag>
       </Paragraph>
 
@@ -169,7 +182,11 @@ export default function ConfigOverviewHelp() {
           Use <b>Security</b> (PIN, cookie binding, IP allowlist) for labs or invigilated sessions.
         </Descriptions.Item>
         <Descriptions.Item label="Search for edge cases">
-          Configure <b>GATLAM</b> and use labeled subsections (<Text code>###</Text>) in Main for
+          Configure{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>{' '}
+          and use labeled subsections (<Text code>###</Text>) in Main for
           precise comparisons.
         </Descriptions.Item>
       </Descriptions>

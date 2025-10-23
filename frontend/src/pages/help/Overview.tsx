@@ -14,6 +14,7 @@ import {
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -28,7 +29,7 @@ const toc = [
   { key: 'links', href: '#links', title: 'Where to next?' },
 ];
 
-type Row = { key: string; area: string; what: string; link?: React.JSX.Element };
+type Row = { key: string; area: string; what: React.ReactNode; link?: React.JSX.Element };
 
 const conceptCols = [
   { title: 'Area', dataIndex: 'area', key: 'area', width: 220 },
@@ -46,7 +47,15 @@ const conceptRows: Row[] = [
   {
     key: 'config',
     area: 'Assignment Config',
-    what: 'Language & Mode, Execution limits, Output capture, Marking rules, Security, GATLAM, Code Coverage.',
+    what: (
+      <>
+        Language &amp; Mode, Execution limits, Output capture, Marking rules, Security,{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        , Code Coverage.
+      </>
+    ),
     link: <a href="/help/assignments/config">Config Overview →</a>,
   },
   {
@@ -96,7 +105,11 @@ const modeRows = [
   },
   {
     key: 'gatlam',
-    mode: 'gatlam',
+    mode: (
+      <GatlamLink tone="inherit" icon={false} underline={false}>
+        gatlam
+      </GatlamLink>
+    ),
     desc: 'Genetic-assisted runs via an Interpreter; can regenerate allocator/memo as needed.',
     req: 'Interpreter (+ Memo recommended)',
   },

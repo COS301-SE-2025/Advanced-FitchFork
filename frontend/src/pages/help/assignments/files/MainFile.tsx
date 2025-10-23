@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -186,7 +186,11 @@ export default function MainFile() {
       <Paragraph className="mt-3 mb-0">
         Upload Main under <Text code>Assignments → Config → Files</Text>. Lecturers (or assistant
         lecturers) own this archive; students never see or submit it. In Manual submission mode Main
-        is required. If you switch the assignment to GATLAM, the <strong>Interpreter</strong>{' '}
+        is required. If you switch the assignment to{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        , the <strong>Interpreter</strong>{' '}
         replaces Main and this archive can stay empty.
       </Paragraph>
 
