@@ -85,6 +85,12 @@ const AssignmentLayout = () => {
   const needsInterpreter = requiresInterpreterForMode(effectiveMode);
   const showMemoAllocator = showMemoAllocatorForMode(effectiveMode);
 
+  const normalizedStatus = (assignment.status ?? '').toLowerCase();
+  const isAssignmentOpen = normalizedStatus === 'open';
+  const studentCanSubmit =
+    auth.isStudent(module.id) && isAssignmentOpen && (attempts?.can_submit ?? true);
+  const tutorCanSubmit = auth.isTutor(module.id) && !isSetupStage;
+
   const isOnSubmissions =
     location.pathname.startsWith(`${basePath}/submissions`) || location.pathname === `${basePath}`;
   const isUnlimitedAttempts = !!policy && !policy.limit_attempts;
@@ -361,8 +367,9 @@ const AssignmentLayout = () => {
 
   const canGenerateMemoOutput = shouldOfferMemoAction && !readiness?.memo_output_present;
   const canGenerateMarkAllocator = shouldOfferMarkAction && !readiness?.mark_allocator_present;
-  const canSubmitAssignment =
-    assignment.status !== 'setup' || (isTeachingStaff && setupArtifactsReady);
+  const canSubmitAssignment = isTeachingStaff
+    ? assignment.status !== 'setup' || setupArtifactsReady
+    : studentCanSubmit || tutorCanSubmit;
 
   const primaryAction: PrimaryAction | null = canGenerateMemoOutput
     ? { key: 'memo', label: 'Generate Memo Output', onClick: handleGenerateMemoOutput }

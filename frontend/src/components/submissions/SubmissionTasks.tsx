@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Collapse, Tag, Typography, Modal, Button, Tooltip } from 'antd';
+import { Collapse, Tag, Typography, Modal, Button, Tooltip, Spin } from 'antd';
 import type { CollapseProps } from 'antd';
 import type {
   CodeCoverage,
@@ -10,6 +10,7 @@ import CodeDiffEditor from '@/components/common/CodeDiffEditor';
 import { useAuth } from '@/context/AuthContext';
 import { useModule } from '@/context/ModuleContext';
 import type { MemoTaskOutput } from '@/types/modules/assignments/memo-output';
+import { message } from '@/utils/message';
 
 const { Text } = Typography;
 
@@ -21,6 +22,7 @@ type Props = {
   memoOutput: MemoTaskOutput[];
   submisisonOutput: SubmissionTaskOutput[];
   codeCoverage?: CodeCoverage;
+  ensureOutput?: (taskNumber: number) => Promise<string | null | undefined>;
 };
 
 const getScoreTagColor = (earned: number, total: number): string => {
@@ -36,6 +38,7 @@ const SubmissionTasks: React.FC<Props> = ({
   memoOutput,
   submisisonOutput,
   codeCoverage,
+  ensureOutput,
 }) => {
   const [visible, setVisible] = useState(false);
   const [currentTask, setCurrentTask] = useState<{
@@ -43,6 +46,7 @@ const SubmissionTasks: React.FC<Props> = ({
     expected: string;
     actual: string;
   } | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   // which subsection feedbacks are expanded (for full marks & 0/0)
   const [expandedFeedback, setExpandedFeedback] = useState<Set<string>>(new Set());
@@ -59,11 +63,28 @@ const SubmissionTasks: React.FC<Props> = ({
   const module = useModule();
   const isStudent = auth.isStudent(module.id);
 
-  const handleViewDiff = (taskName: string, taskNumber: number) => {
+  const handleViewDiff = async (taskName: string, taskNumber: number) => {
     const expected = memoOutput.find((m) => m.task_number === taskNumber)?.raw ?? '';
-    const actual = submisisonOutput.find((s) => s.task_number === taskNumber)?.raw ?? '';
+    let actual = submisisonOutput.find((s) => s.task_number === taskNumber)?.raw ?? '';
+
     setCurrentTask({ name: taskName, expected, actual });
     setVisible(true);
+
+    if ((!actual || actual.length === 0) && ensureOutput) {
+      setDiffLoading(true);
+      try {
+        const fetched = await ensureOutput(taskNumber);
+        if (typeof fetched === 'string') {
+          actual = fetched;
+          setCurrentTask({ name: taskName, expected, actual });
+        }
+      } catch (err) {
+        console.error(err);
+        message.error('Failed to load student output');
+      } finally {
+        setDiffLoading(false);
+      }
+    }
   };
 
   // Coverage panel: now uses summary.coverage_percent, total_lines, covered_lines
@@ -208,7 +229,7 @@ const SubmissionTasks: React.FC<Props> = ({
           size="small"
           onClick={(e) => {
             e.stopPropagation();
-            handleViewDiff(name, task_number);
+            void handleViewDiff(name, task_number);
           }}
         >
           View Diff
@@ -229,7 +250,10 @@ const SubmissionTasks: React.FC<Props> = ({
 
       <Modal
         open={visible}
-        onCancel={() => setVisible(false)}
+        onCancel={() => {
+          setVisible(false);
+          setDiffLoading(false);
+        }}
         footer={null}
         centered={false}
         width="calc(100vw - 48px)"
@@ -255,14 +279,20 @@ const SubmissionTasks: React.FC<Props> = ({
         }}
       >
         <div className="flex-1 min-h-0">
-          <CodeDiffEditor
-            original={currentTask?.actual ?? ''}
-            modified={currentTask?.expected ?? ''}
-            language="plaintext"
-            className="h-full"
-            leftTitle={<Text strong>Student Output</Text>}
-            rightTitle={<Text strong>Memo Output</Text>}
-          />
+          {diffLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Spin />
+            </div>
+          ) : (
+            <CodeDiffEditor
+              original={currentTask?.actual ?? ''}
+              modified={currentTask?.expected ?? ''}
+              language="plaintext"
+              className="h-full"
+              leftTitle={<Text strong>Student Output</Text>}
+              rightTitle={<Text strong>Memo Output</Text>}
+            />
+          )}
         </div>
       </Modal>
     </>

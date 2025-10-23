@@ -8,6 +8,8 @@ type Props = {
   isAssignmentOpen?: boolean;
   onSubmit?: () => void;
   onRefresh?: () => void;
+  canSubmit?: boolean;
+  submitDisabledReason?: string;
 };
 
 const SubmissionsEmptyState = ({
@@ -15,6 +17,8 @@ const SubmissionsEmptyState = ({
   isAssignmentOpen = true,
   onSubmit,
   onRefresh,
+  canSubmit = true,
+  submitDisabledReason,
 }: Props) => {
   const module = useModule();
   const auth = useAuth();
@@ -56,7 +60,7 @@ const SubmissionsEmptyState = ({
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
             {isAssignmentOpen ? (
               <>
-                {onSubmit ? (
+                {isStudent && onSubmit && canSubmit ? (
                   <Button
                     type="primary"
                     icon={<CloudUploadOutlined />}
@@ -65,8 +69,12 @@ const SubmissionsEmptyState = ({
                   >
                     Submit now
                   </Button>
-                ) : // No submit button for staff/tutors
-                null}
+                ) : null}
+                {isStudent && (!canSubmit || !onSubmit) && submitDisabledReason ? (
+                  <Tag color="gold" className="!text-sm">
+                    {submitDisabledReason}
+                  </Tag>
+                ) : null}
                 {onRefresh && (
                   <Button icon={<ReloadOutlined />} onClick={onRefresh}>
                     Refresh
@@ -75,7 +83,7 @@ const SubmissionsEmptyState = ({
               </>
             ) : (
               <Tag color="red" className="!text-sm">
-                Assignment closed — submissions disabled
+                {submitDisabledReason ?? 'Assignment closed — submissions disabled'}
               </Tag>
             )}
           </div>

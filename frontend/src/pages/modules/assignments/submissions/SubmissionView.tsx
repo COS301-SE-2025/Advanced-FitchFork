@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 import SubmissionTasks from '@/components/submissions/SubmissionTasks';
 import { useAssignment } from '@/context/AssignmentContext';
 import { useModule } from '@/context/ModuleContext';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   downloadSubmissionFile,
@@ -28,6 +28,7 @@ import { message } from '@/utils/message';
 import { useAuth } from '@/context/AuthContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 import { zipToVFiles } from '@/utils/zipToVFiles';
+import EventBus from '@/utils/EventBus';
 
 const { Text, Title } = Typography;
 
@@ -141,6 +142,7 @@ const SubmissionView = () => {
 
   const module = useModule();
   const { assignment, memoOutput, policy, config } = useAssignment();
+  const isStudent = auth.isStudent(module.id);
 
   const { submission_id } = useParams();
   const submissionId = Number(submission_id);
@@ -156,7 +158,7 @@ const SubmissionView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submission?.id]);
 
-  const fetchSubmission = async () => {
+  const fetchSubmission = useCallback(async () => {
     if (!module.id || !assignment.id || !submission_id) return;
     setLoading(true);
     try {
@@ -173,17 +175,24 @@ const SubmissionView = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [module.id, assignment.id, submission_id, setBreadcrumbLabel]);
 
-  const fetchSubmisisonOutput = async () => {
+  const fetchSubmissionOutput = useCallback(async () => {
+    if (isStudent || !module.id || !assignment.id || !submissionId) return null;
     try {
       const res = await getSubmissionOutput(module.id, assignment.id, submissionId);
-      if (res.success && res.data) setSubmissionOutput(res.data);
-      else message.error(res.message);
-    } catch {
+      if (res.success) {
+        const outputs = res.data ?? [];
+        setSubmissionOutput(outputs);
+        return outputs;
+      }
+      return null;
+    } catch (err) {
+      console.error('Failed to fetch submission output', err);
       message.error('Failed to fetch submission output');
+      return null;
     }
-  };
+  }, [isStudent, module.id, assignment.id, submissionId]);
 
   const handleViewInIDE = async () => {
     if (!module.id || !assignment.id || !submissionId) return;
@@ -211,10 +220,33 @@ const SubmissionView = () => {
   };
 
   useEffect(() => {
-    fetchSubmission();
-    if (!auth.isStudent(module.id)) fetchSubmisisonOutput();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [module.id, assignment.id, submissionId]);
+    void fetchSubmission();
+    if (!isStudent) void fetchSubmissionOutput();
+  }, [isStudent]);
+
+  useEffect(() => {
+    const listener = () => {
+      void fetchSubmission();
+      if (!isStudent) void fetchSubmissionOutput();
+    };
+
+    EventBus.on('submission:updated', listener);
+    return () => {
+      EventBus.off('submission:updated', listener);
+    };
+  }, [fetchSubmission, fetchSubmissionOutput, isStudent]);
+
+  const ensureSubmissionOutput = useCallback(
+    async (taskNumber: number) => {
+      if (isStudent) return '';
+      const existing = submissionOutput.find((s) => s.task_number === taskNumber);
+      if (existing?.raw) return existing.raw;
+      const refreshed = await fetchSubmissionOutput();
+      const match = refreshed?.find((s) => s.task_number === taskNumber);
+      return match?.raw ?? '';
+    },
+    [isStudent, submissionOutput, fetchSubmissionOutput],
+  );
 
   // derived late info (used only for non-failed)
   const lateDelta = useMemo(
@@ -469,6 +501,7 @@ const SubmissionView = () => {
               memoOutput={memoOutput}
               submisisonOutput={submissionOutput}
               codeCoverage={submission.code_coverage}
+              ensureOutput={ensureSubmissionOutput}
             />
           </>
         )}

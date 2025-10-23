@@ -132,7 +132,7 @@ export default function SubmissionsList() {
   const { isLg } = useUI();
   const { setValue } = useViewSlot();
   const { modal, message } = useApp();
-  const { assignment, policy, refreshAssignment, refreshAssignmentStats } = useAssignment();
+  const { assignment, policy, attempts, refreshAssignment, refreshAssignmentStats } = useAssignment();
   const auth = useAuth();
   const canToggleIgnored =
     auth.isLecturer(module.id) || auth.isAssistantLecturer(module.id) || auth.isAdmin;
@@ -148,8 +148,23 @@ export default function SubmissionsList() {
   const [activeSubmissionId, setActiveSubmissionId] = useState<number | null>(null);
   const [deferredSubmit, setDeferredSubmit] = useState<null | (() => Promise<number | null>)>(null);
 
-  const isAssignmentOpen = assignment.status === 'open';
+  const assignmentStatus = (assignment.status ?? '').toLowerCase();
+  const isAssignmentOpen = assignmentStatus === 'open';
   const isStudent = auth.isStudent(module.id);
+  const studentCanSubmit =
+    isStudent && isAssignmentOpen && (attempts?.can_submit ?? true);
+
+  let submitDisabledReason: string | undefined;
+  if (!isAssignmentOpen) {
+    submitDisabledReason = 'Assignment closed — submissions disabled';
+  } else if (isStudent && attempts?.can_submit === false) {
+    submitDisabledReason = attempts.limit_attempts
+      ? 'Attempt limit reached'
+      : 'Submissions are currently disabled';
+    if (attempts.limit_attempts && (attempts.remaining ?? 0) <= 0) {
+      submitDisabledReason = 'Attempt limit reached';
+    }
+  }
 
   const entityListRef = useRef<EntityListHandle>(null);
 
@@ -741,8 +756,10 @@ export default function SubmissionsList() {
           <SubmissionsEmptyState
             assignmentName={assignment.name}
             isAssignmentOpen={isAssignmentOpen}
-            onSubmit={isAssignmentOpen && isStudent ? handleOpenSubmit : undefined}
+            onSubmit={studentCanSubmit ? handleOpenSubmit : undefined}
             onRefresh={() => entityListRef.current?.refresh()}
+            canSubmit={studentCanSubmit}
+            submitDisabledReason={submitDisabledReason}
           />
         }
         onRefreshClick={() => {
