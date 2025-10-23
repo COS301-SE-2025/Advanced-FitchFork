@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Typography, Steps, Button } from 'antd';
+import { Typography, Steps, Button, Alert } from 'antd';
 import { useModule } from '@/context/ModuleContext';
 import { useAssignmentSetup } from '@/context/AssignmentSetupContext';
 import { generateMemoOutput } from '@/services/modules/assignments/memo-output';
 import { generateMarkAllocator } from '@/services/modules/assignments/mark-allocator';
 import Tip from '@/components/common/Tip';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 const { Step } = Steps;
@@ -66,6 +67,22 @@ const StepMemoAndAllocator = () => {
         </Title>
       </div>
       <Paragraph type="secondary">Run both stages sequentially. Status is shown below.</Paragraph>
+      {gated && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Interpreter required"
+          description={
+            <>
+              Upload the interpreter before generating memo output or mark allocation in{' '}
+              <GatlamLink tone="inherit" icon={false} underline={false}>
+                GATLAM
+              </GatlamLink>{' '}
+              mode.
+            </>
+          }
+        />
+      )}
 
       <Steps
         direction="vertical"

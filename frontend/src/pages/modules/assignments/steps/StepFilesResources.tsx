@@ -1,5 +1,5 @@
 // StepFilesResources.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Typography, Upload, Button, List, Space, Input, Tag, Dropdown } from 'antd';
 import { UploadOutlined, DownloadOutlined, CodeOutlined, DeleteOutlined } from '@ant-design/icons';
 
@@ -17,6 +17,7 @@ import type { InterpreterInfo } from '@/types/modules/assignments/interpreter';
 import Tip from '@/components/common/Tip';
 import { requiresInterpreterForMode } from '@/policies/submission';
 import type { SubmissionMode } from '@/types/modules/assignments/config';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph } = Typography;
 
@@ -52,7 +53,7 @@ const StepFilesResources = () => {
     key: RowKey;
     title: string;
     present: boolean;
-    desc: string;
+    desc: ReactNode;
     fileType?: string;
   };
 
@@ -63,7 +64,15 @@ const StepFilesResources = () => {
             key: 'interpreter',
             title: 'Interpreter',
             present: !!(readiness as any)?.interpreter_present,
-            desc: 'Upload the interpreter archive and command used to execute generated programs.',
+            desc: (
+              <>
+                Upload the interpreter archive and command used to execute generated programs in{' '}
+                <GatlamLink tone="inherit" icon={false} underline={false}>
+                  GATLAM
+                </GatlamLink>{' '}
+                mode.
+              </>
+            ),
           },
           {
             key: 'memo',
@@ -85,7 +94,16 @@ const StepFilesResources = () => {
             key: 'main',
             title: 'Main Files',
             present: !!readiness?.main_present,
-            desc: 'Zipped entry file at archive root; orchestrates execution & prints labels.',
+            desc: (
+              <>
+                Zipped entry file at archive root; orchestrates execution & prints labels. Not used
+                when{' '}
+                <GatlamLink tone="inherit" icon={false} underline={false}>
+                  GATLAM
+                </GatlamLink>{' '}
+                mode is enabled.
+              </>
+            ),
             fileType: '.zip',
           },
           {

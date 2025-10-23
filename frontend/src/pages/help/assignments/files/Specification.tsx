@@ -1,7 +1,7 @@
 import { Typography, Card, Descriptions, Tag, Collapse, Tabs, Space, Table, Alert } from 'antd';
 import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -130,7 +130,11 @@ export default function Specification() {
       </Paragraph>
       <Paragraph className="mt-3 mb-0">
         Upload the archive under <Text code>Assignments → Config → Files</Text>. Lecturers/assistant
-        lecturers own the upload. Manual submissions require it; in GATLAM or interpreter workflows
+        lecturers own the upload. Manual submissions require it; in{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        or interpreter workflows
         it still serves as the canonical starter pack and base-file input.
       </Paragraph>
 

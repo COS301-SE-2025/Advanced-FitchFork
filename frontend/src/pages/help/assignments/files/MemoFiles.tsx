@@ -3,7 +3,7 @@ import { Typography, Card, Descriptions, Tag, Collapse, Tabs, Timeline, Space, A
 import { FileZipOutlined, PlayCircleOutlined, DiffOutlined } from '@ant-design/icons';
 import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -124,7 +124,11 @@ export default function MemoFiles() {
       </Paragraph>
       <Paragraph className="mt-3 mb-0">
         Upload memo files under <Text code>Assignments → Config → Files</Text>. Lecturers (or
-        assistant lecturers) own this upload. In Manual mode it is required; in GATLAM mode memo
+        assistant lecturers) own this upload. In Manual mode it is required; in{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
+        mode memo
         files still provide reference behaviour even though the Interpreter handles code generation.
       </Paragraph>
 

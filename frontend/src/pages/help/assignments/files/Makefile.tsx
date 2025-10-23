@@ -22,7 +22,7 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useMemo } from 'react';
 import { useHelpToc } from '@/context/HelpContext';
-import { CodeEditor } from '@/components/common';
+import { CodeEditor, GatlamLink } from '@/components/common';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
 
@@ -185,7 +185,10 @@ export default function MakefileHelp() {
       </Paragraph>
       <Paragraph className="mt-3 mb-0">
         Upload the Makefile archive under <Text code>Assignments → Config → Files</Text>. Lecturers
-        or assistant lecturers own this upload. In Manual submission mode it is required; in GATLAM
+        or assistant lecturers own this upload. In Manual submission mode it is required; in{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>{' '}
         mode the Interpreter is responsible for compiling/running, so the Makefile can be left
         empty.
       </Paragraph>

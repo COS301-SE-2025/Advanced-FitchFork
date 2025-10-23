@@ -27,6 +27,7 @@ import {
 } from '@/types/modules/assignments/config';
 import type { AssignmentConfig } from '@/types/modules/assignments/config';
 import Tip from '@/components/common/Tip';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -249,8 +250,11 @@ const StepConfig = () => {
       children: (
         <Space direction="vertical" size="large" className="w-full">
           <Typography.Paragraph type="secondary" className="!mb-0">
-            Choose your language and how students submit. Manual expects Main files; GATLAM expects
-            an Interpreter.
+            Choose your language and how students submit. Manual expects Main files;{' '}
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>{' '}
+            expects an Interpreter.
           </Typography.Paragraph>
           <Form.Item name="language" label="Language" rules={[{ required: true }]}>
             <Select
@@ -279,7 +283,11 @@ const StepConfig = () => {
           </Form.Item>
 
           <Text type="secondary" className="text-xs">
-            Tip: <b>manual</b> expects Main files; <b>gatlam</b> expects an Interpreter.
+            Tip: <b>manual</b> expects Main files;{' '}
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              gatlam
+            </GatlamLink>{' '}
+            expects an Interpreter.
           </Text>
         </Space>
       ),
@@ -454,7 +462,11 @@ const StepConfig = () => {
       children: (
         <Space direction="vertical" size="large" className="w-full">
           <Typography.Paragraph type="secondary" className="!mb-0">
-            Configure the genetic algorithm used for automated evaluation in GATLAM mode.
+            Configure the genetic algorithm used for automated evaluation in{' '}
+            <GatlamLink tone="inherit" icon={false} underline={false}>
+              GATLAM
+            </GatlamLink>{' '}
+            mode.
           </Typography.Paragraph>
           <Space wrap size="large">
             <Form.Item name="population_size" label="Population" rules={[{ required: true }]}>

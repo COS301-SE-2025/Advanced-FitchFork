@@ -4,6 +4,7 @@ import { Typography, Card, Alert, Space, Collapse, Table, Descriptions, Tag } fr
 import { useHelpToc } from '@/context/HelpContext';
 import { useBreadcrumbContext } from '@/context/BreadcrumbContext';
 import { useViewSlot } from '@/context/ViewSlotContext';
+import { GatlamLink } from '@/components/common';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -194,7 +195,11 @@ export default function TasksHelp() {
       <ol className="list-decimal pl-5">
         <li>
           Ensure required files are uploaded: <b>Makefile</b> and <b>Main</b> (or <b>Interpreter</b>{' '}
-          in GATLAM), plus <b>Memo files</b>.
+          in{' '}
+          <GatlamLink tone="inherit" icon={false} underline={false}>
+            GATLAM
+          </GatlamLink>
+          ), plus <b>Memo files</b>.
         </li>
         <li>
           Open the assignment’s <b>Tasks</b> page and choose <b>Add Task</b>.
@@ -232,7 +237,11 @@ export default function TasksHelp() {
       <Title level={3}>Subsections (labels)</Title>
       <Paragraph className="mb-0">
         Inside a task, create subsections that mirror the labels your program prints. In your{' '}
-        <b>Main</b> (or <b>Interpreter</b> for GATLAM), print the delimiter <Text code>###</Text>{' '}
+        <b>Main</b> (or <b>Interpreter</b> for{' '}
+        <GatlamLink tone="inherit" icon={false} underline={false}>
+          GATLAM
+        </GatlamLink>
+        ), print the delimiter <Text code>###</Text>{' '}
         followed by the subsection name on its own line, then the lines that belong to that label.
         These labeled blocks are what get compared to the task’s Memo Output. See{' '}
         <a href="/help/assignments/memo-output">Memo Output</a> for examples and{' '}
